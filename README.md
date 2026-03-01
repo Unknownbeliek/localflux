@@ -15,12 +15,9 @@ Cloud-dependent multiplayer platforms such as Kahoot, Mentimeter, and Jackbox ar
 
 The root cause is architectural: these platforms route every packet through a remote cloud server, introducing unnecessary round-trip latency and making the local network a single point of failure.
 
-<<<<<<< HEAD
-=======
 ##  The Solution: An Infrastructure-Agnostic Engine
 
 CineGnosis is not just a game; it is an open-source, self-hosted multiplayer framework. It decouples gameplay from ISP stability by treating the **Local Area Network (LAN)** as a first-class citizen, delivering 0ms latency gameplay entirely offline, while utilizing smart tunneling to prevent router hardware crashes.
->>>>>>> 2b00e294b824b541da0f3e7d3851854ba836af97
 ---
 
 ## The Solution
