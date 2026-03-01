@@ -17,7 +17,7 @@ The root cause is architectural: these platforms route every packet through a re
 
 ##  The Solution: An Infrastructure-Agnostic Engine
 
-CineGnosis is not just a game; it is an open-source, self-hosted multiplayer framework. It decouples gameplay from ISP stability by treating the **Local Area Network (LAN)** as a first-class citizen, delivering 0ms latency gameplay entirely offline, while utilizing smart tunneling to prevent router hardware crashes.
+LocalFlux is not just a game; it is an open-source, self-hosted multiplayer framework. It decouples gameplay from ISP stability by treating the **Local Area Network (LAN)** as a first-class citizen, delivering 0ms latency gameplay entirely offline, while utilizing smart tunneling to prevent router hardware crashes.
 ---
 
 ## The Solution
