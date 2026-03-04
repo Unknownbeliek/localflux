@@ -1,11 +1,8 @@
 import React from 'react'
+import Home from './pages/Home'
 
 function App() {
-  return (
-    <div>
-      <h1>Welcome to the LocalFlux App</h1>
-    </div>
-  )
+  return <Home />
 }
 
 export default App
