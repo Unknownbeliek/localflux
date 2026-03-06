@@ -1,82 +1,72 @@
 ---
-# VitePress Hero / Home Page
-# https://vitepress.dev/reference/default-theme-home-page
 layout: home
 
 hero:
   name: "LocalFlux"
   text: "Zero-Latency LAN Events."
   tagline: >
-    A bare-metal, self-hosted multiplayer trivia framework. No cloud.
-    No spinning wheels of death. Just raw LAN speed — from the host's
-    laptop to every player in the room.
-  image:
-    src: /hero-illustration.svg
-    alt: LocalFlux network diagram
+    A bare-metal, self-hosted multiplayer trivia engine. No cloud.
+    No spinning wheels of death. Just raw LAN speed - from the host laptop
+    to every player in the room.
   actions:
     - theme: brand
-      text: Get Started →
-      link: /guide/getting-started
+      text: What is LocalFlux?
+      link: /guide/what-is-localflux
     - theme: alt
       text: View on GitHub
       link: https://github.com/Unknownbeliek/foss-hack-quiz-engine
 
 features:
-  - 
-    title: Dumb Client Security
+  -
+    title: Works Offline
     details: >
-      Players never see the question bank. Correct answers live
-      exclusively in server RAM and are only broadcast at the exact
-      millisecond a round ends — making pre-game scraping structurally
+      The host machine is the server. Players connect over Wi-Fi directly
+      to it - no internet uplink required. Traffic never leaves the local
+      subnet, so latency is measured in single-digit milliseconds.
+  -
+    title: Server-Authoritative
+    details: >
+      Correct answers live exclusively in server RAM and are only
+      broadcast at the exact moment a round ends. Players never see
+      the question bank - making pre-game answer scraping structurally
       impossible.
-
-  - 
-    title: The VIP Bouncer
+  -
+    title: Drop-In Decks
     details: >
-      A two-tier admission system (soft cap 40 / hard cap 50) prevents
-      your cheap consumer router from choking under a flood of simultaneous
-      WebSocket handshakes. Latecomers queue in purgatory and are
-      drained in order as slots open.
-
-  - 
-    title: Deck Studio
-    details: >
-      A browser-based question forge built into the Host Dashboard.
-      Import a CSV or paste raw data, attach WebP image assets from
-      the local vault, and export a validated .json deck — no external
-      tooling required.
+      Any .json deck placed in data/decks/ is immediately playable.
+      The schema supports text questions, image rounds, per-question time
+      limits, and fuzzy-match allowances for spelling variants.
 ---
 
-## Why LocalFlux?
-
-Commercial trivia platforms (Kahoot, Mentimeter, Jackbox) assume a stable
-cloud uplink. In high-density venues — college hackathons, rural classrooms,
-basement LAN parties — the local router is the first bottleneck to collapse.
-
-**LocalFlux treats the LAN as infrastructure**, not an afterthought.
+## How it works
 
 ```
-Player A ──┐
-Player B ──┤──► Wi-Fi Router ──► Node.js Server  (localhost:3001)
-Player C ──┘         ↑                  │
+Player A --+
+Player B --+--> Wi-Fi Router --> Node.js Server  (localhost:3000)
+Player C --+         ^                  |
                   NO internet      Socket.io WS
-                  required!        ↓ ↓ ↓ ↓ ↓
+                  required!        v v v v v
                               All game state
                               served from RAM
 ```
 
-The server auto-discovers its own LAN IP on boot and prints a scannable
-address so the host can share it as a QR code in seconds.
+The server binds to `0.0.0.0` and prints its LAN address on boot.
+Share it with players - they open a browser, enter their name and the
+room PIN, and the game begins.
 
-## Accolades Engine
+## What is built
 
-Every match ends with auto-computed post-game badges that reward more than
-just the top score:
-
-| Badge | Trigger |
+| Feature | Status |
 |---|---|
-|  **Ironclad** | Every single answer correct |
-|  **Speed Demon** | Fastest average answer time |
-|  **Comeback Kid** | Dead last at halftime → top 3 finish |
-|  **Underdog Champion** | Triggered 3× bounty multiplier AND finished top 3 |
-|  **Ghost** | Never answered a single question |
+| Room create / join with 4-digit PIN | Done |
+| Host lobby with live player list | Done |
+| Full quiz loop (questions - answers - scores - game over) | Done |
+| Server-side answer validation + scoring | Done |
+| LAN play (any device on the same Wi-Fi) | Done |
+| Structured deck format (text + image types) | Done |
+| Unit test suite (44 tests, Jest) | Done |
+| VIP Bouncer (connection queue) | Planned |
+| Difficulty Engine | Planned |
+| Accolades / post-game badges | Planned |
+| Deck Studio (browser-based editor) | Planned |
+| In-room chat | Planned |
