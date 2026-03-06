@@ -1,19 +1,29 @@
 {
-  "name": "server",
+  "name": "localflux-server",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "LocalFlux game server",
+  "main": "server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon server.js",
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/tests/**/*.test.js"]
+  },
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.2.1",
     "fuse.js": "^7.1.0",
     "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "jest": "^30.2.0"
   }
 }
