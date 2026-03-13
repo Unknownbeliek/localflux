@@ -13,6 +13,8 @@
 
 const leoProfanity = require('leo-profanity');
 const { z } = require('zod');
+const fs = require('fs');
+const path = require('path');
 
 const DEFAULT_ALLOWED = [
   { id: 'shout_yes', text: 'Nice one! 🎉' },
@@ -32,6 +34,7 @@ class ChatManager {
     this.allowed = opts.allowedMessages || DEFAULT_ALLOWED;
     this.rateMap = new Map(); // socketId -> { tokens, last }
     this.warns = new Map();
+    this.muted = new Set(); // socketId set for manual mutes
 
     this.MAX_WARN = opts.maxWarnings || 3;
     this.TOKEN_REFILL_MS = opts.tokenRefillMs || 2000; // refill interval
@@ -42,6 +45,15 @@ class ChatManager {
 
     this.freeSchema = z.object({ roomPin: z.string(), text: z.string().min(1).max(300) });
     this.preSchema = z.object({ roomPin: z.string(), id: z.string() });
+
+    // per-IP throttling
+    this.ipMap = new Map(); // ip -> { count, windowStart }
+    this.IP_WINDOW_MS = opts.ipWindowMs || 60_000; // 1 minute
+    this.IP_LIMIT = opts.ipLimit || 120; // messages per IP per window
+
+    // logging
+    this.logPath = path.resolve(process.cwd(), 'logs', 'chat.log');
+    try { fs.mkdirSync(path.dirname(this.logPath), { recursive: true }); } catch (e) {}
 
     // load profanity dictionary
     leoProfanity.loadDictionary();
@@ -80,7 +92,51 @@ class ChatManager {
     return leoProfanity.clean(text);
   }
 
+  isMuted(socketId) {
+    return this.muted.has(socketId);
+  }
+
+  mute(socketId) {
+    this.muted.add(socketId);
+    this.writeLog({ action: 'mute', target: socketId, ts: Date.now() });
+    try { this.io.to(socketId).emit('chat:muted', { reason: 'by_host' }); } catch (e) {}
+  }
+
+  unmute(socketId) {
+    this.muted.delete(socketId);
+    this.writeLog({ action: 'unmute', target: socketId, ts: Date.now() });
+    try { this.io.to(socketId).emit('chat:unmuted', { reason: 'by_host' }); } catch (e) {}
+  }
+
+  ipAllow(socket) {
+    const ip = socket?.handshake?.address || 'unknown';
+    const now = Date.now();
+    let entry = this.ipMap.get(ip);
+    if (!entry) { entry = { count: 0, windowStart: now }; this.ipMap.set(ip, entry); }
+    if (now - entry.windowStart > this.IP_WINDOW_MS) {
+      entry.count = 0; entry.windowStart = now;
+    }
+    entry.count += 1;
+    if (entry.count > this.IP_LIMIT) return false;
+    return true;
+  }
+
+  writeLog(obj) {
+    try {
+      fs.appendFileSync(this.logPath, JSON.stringify(obj) + '\n');
+    } catch (e) {
+      // best-effort logging
+      console.error('[ChatManager] failed to write log', e.message);
+    }
+  }
+
   handleFreeMessage(socket, payload, ack) {
+    // check global mute
+    if (this.isMuted(socket.id)) return ack?.({ ok: false, reason: 'muted' });
+
+    // per-IP throttling
+    if (!this.ipAllow(socket)) return ack?.({ ok: false, reason: 'ip_throttled' });
+
     const valid = this.freeSchema.safeParse(payload);
     if (!valid.success) return ack?.({ ok: false, reason: 'invalid_payload' });
     if (!this.allowSend(socket.id)) return ack?.({ ok: false, reason: 'rate_limited' });
@@ -88,24 +144,30 @@ class ChatManager {
     if (!clean) {
       const w = (this.warns.get(socket.id) || 0) + 1;
       this.warns.set(socket.id, w);
+      this.writeLog({ action: 'profanity_block', socket: socket.id, text: valid.data.text, warnings: w, ts: Date.now() });
       if (w >= this.MAX_WARN) {
-        // notify host for moderation; we don't disconnect forcibly
+        this.mute(socket.id);
         this.io.to(socket.id).emit('chat:muted', { reason: 'profanity' });
       }
       return ack?.({ ok: false, reason: 'profanity' });
     }
     const msg = { from: socket.id, name: socket.playerName || 'Player', text: clean, ts: Date.now() };
+    this.writeLog({ action: 'message', socket: socket.id, ip: socket?.handshake?.address || 'unknown', text: clean, ts: Date.now() });
     this.io.to(valid.data.roomPin).emit('chat:message', msg);
     ack?.({ ok: true });
   }
 
   handlePreCanned(socket, payload, ack) {
+    // check global mute
+    if (this.isMuted(socket.id)) return ack?.({ ok: false, reason: 'muted' });
+
     const valid = this.preSchema.safeParse(payload);
     if (!valid.success) return ack?.({ ok: false, reason: 'invalid' });
     if (this.mode !== 'RESTRICTED') return ack?.({ ok: false, reason: 'wrong_mode' });
     const allowed = this.allowed.find((a) => a.id === valid.data.id);
     if (!allowed) return ack?.({ ok: false, reason: 'not_allowed' });
     const msg = { from: socket.id, name: socket.playerName || 'Player', text: allowed.text, cannedId: allowed.id, ts: Date.now() };
+    this.writeLog({ action: 'canned_message', socket: socket.id, id: allowed.id, ts: Date.now() });
     this.io.to(valid.data.roomPin).emit('chat:message', msg);
     ack?.({ ok: true });
   }

@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import Chat from './Chat';
+import HostModeration from './HostModeration';
 
 export default function Host({ onBack }) {
   const socketRef = useRef(null);
@@ -17,6 +18,7 @@ export default function Host({ onBack }) {
   const [answerCount, setAnswerCount] = useState(0);
   const [resultData, setResultData] = useState(null);
   const [finalScores, setFinalScores] = useState([]);
+  const [mutedSet, setMutedSet] = useState(new Set());
 
   useEffect(() => {
     const socket = io(`http://${window.location.hostname}:3000`, { transports: ['websocket'] });
@@ -37,6 +39,17 @@ export default function Host({ onBack }) {
     socket.on('answer_count', ({ count }) => setAnswerCount(count));
     socket.on('question_result', (data) => { setResultData(data); setPhase('result'); });
     socket.on('game_over', ({ scores }) => { setFinalScores(scores); setPhase('gameover'); });
+    socket.on('chat:muted', () => {});
+    socket.on('chat:unmuted', () => {});
+    // listen for moderator updates if server emits them
+    socket.on('chat:moderation', ({ action, target }) => {
+      setMutedSet((s) => {
+        const next = new Set(Array.from(s));
+        if (action === 'mute') next.add(target);
+        if (action === 'unmute') next.delete(target);
+        return next;
+      });
+    });
     return () => socket.disconnect();
   }, []);
 
@@ -60,6 +73,18 @@ export default function Host({ onBack }) {
 
   const handleNext = () => {
     socketRef.current.emit('next_question', { pin });
+  };
+
+  const handleMute = (socketId) => {
+    socketRef.current.emit('chat:host_mute', { target: socketId }, (ack) => {
+      if (ack?.ok) setMutedSet((s) => new Set([...s, socketId]));
+    });
+  };
+
+  const handleUnmute = (socketId) => {
+    socketRef.current.emit('chat:host_unmute', { target: socketId }, (ack) => {
+      if (ack?.ok) setMutedSet((s) => { const n = new Set([...s]); n.delete(socketId); return n; });
+    });
   };
 
   if (phase === 'gameover') {
@@ -161,6 +186,10 @@ export default function Host({ onBack }) {
 
         <div className="mb-4">
           <Chat socket={socketRef.current} roomPin={pin} />
+        </div>
+
+        <div className="mb-4">
+          <HostModeration players={players} onMute={handleMute} onUnmute={handleUnmute} mutedSet={mutedSet} />
         </div>
 
         {error && <p className="text-red-500 text-xs mb-3 font-mono">{error}</p>}

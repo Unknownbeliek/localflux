@@ -130,6 +130,31 @@ function registerHandlers(socket, io, questions) {
   socket.on('chat:free', (payload, ack) => chatInstance.handleEvent(socket, 'chat:free', payload, ack));
   socket.on('chat:pre', (payload, ack) => chatInstance.handleEvent(socket, 'chat:pre', payload, ack));
 
+  // host moderation events
+  socket.on('chat:host_mute', ({ target }, callback) => {
+    const pin = findHostPin(socket.id);
+    if (!pin) return callback?.({ ok: false, reason: 'not_host' });
+    const room = getRoom(pin);
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (!chatInstance) return callback?.({ ok: false });
+    chatInstance.mute(target);
+    io.to(pin).emit('chat:moderation', { action: 'mute', target });
+    callback?.({ ok: true });
+  });
+
+  socket.on('chat:host_unmute', ({ target }, callback) => {
+    const pin = findHostPin(socket.id);
+    if (!pin) return callback?.({ ok: false, reason: 'not_host' });
+    const room = getRoom(pin);
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (!chatInstance) return callback?.({ ok: false });
+    chatInstance.unmute(target);
+    io.to(pin).emit('chat:moderation', { action: 'unmute', target });
+    callback?.({ ok: true });
+  });
+
   // ── disconnect ───────────────────────────────────────────────────────────
   socket.on('disconnect', () => {
     console.log(`[-] Disconnected: ${socket.id}`);
