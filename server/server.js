@@ -16,6 +16,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const { loadDeck, DEFAULT_DECK_PATH } = require('./core/deckLoader');
 const { registerHandlers } = require('./network/handlers');
@@ -44,6 +45,20 @@ console.log(`[Deck] Loaded ${QUESTIONS.length} question(s) from ${path.basename(
 io.on('connection', (socket) => {
   console.log(`[+] Connected: ${socket.id}`);
   registerHandlers(socket, io, QUESTIONS);
+});
+
+//  Log downloading endpoint
+
+app.get('/logs/chat', (req, res) => {
+  const pin = req.query.pin;
+  const hostSocketId = req.query.hostId; // host must pass socket id for verification
+  if (!pin || !hostSocketId) return res.status(400).send('pin+hostId required');
+  const room = require('./core/roomStore').getRoom(pin);
+  if (!room) return res.status(404).send('room not found');
+  if (room.hostId !== hostSocketId) return res.status(403).send('only host');
+  const logPath = path.resolve(process.cwd(), 'logs', 'chat.log');
+  if (!fs.existsSync(logPath)) return res.status(404).send('no logs');
+  res.download(logPath, 'chat.log');
 });
 
 //  Start 
