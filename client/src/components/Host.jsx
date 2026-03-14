@@ -20,6 +20,8 @@ export default function Host({ onBack }) {
   const [finalScores, setFinalScores] = useState([]);
   const [mutedSet, setMutedSet] = useState(new Set());
   const [chatMode, setChatMode] = useState('OFF');
+  const [allowedList, setAllowedList] = useState([]);
+  const [newAllowedText, setNewAllowedText] = useState('');
 
   useEffect(() => {
     const socket = io(`http://${window.location.hostname}:3000`, { transports: ['websocket'] });
@@ -27,7 +29,7 @@ export default function Host({ onBack }) {
     socket.on('connect', () => setConnected(true));
     socket.on('disconnect', () => setConnected(false));
     // keep host view of chat mode in sync
-    socket.on('chat:mode', ({ mode }) => setChatMode(mode));
+    socket.on('chat:mode', ({ mode, allowed }) => { setChatMode(mode); if (allowed) setAllowedList(allowed); });
     
     socket.on('player_joined', ({ players }) => setPlayers(players));
     socket.on('room_closed', ({ message }) => { setError(message); setPhase('setup'); setPin(null); });
@@ -94,7 +96,11 @@ export default function Host({ onBack }) {
   const applyChatMode = (mode) => {
     if (!socketRef.current?.connected) return setError('Not connected');
     setError('');
-    socketRef.current.emit('chat:host_set_mode', { pin, mode }, (ack) => {
+    // confirmation
+    if (!window.confirm(`Set chat mode to ${mode}?`)) return;
+    const payload = { pin };
+    if (mode === 'RESTRICTED') payload.allowed = allowedList;
+    socketRef.current.emit('chat:host_set_mode', payload, (ack) => {
       if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
     });
   };
@@ -168,6 +174,27 @@ export default function Host({ onBack }) {
           </select>
           <button onClick={() => applyChatMode(chatMode)} className="bg-yellow-400 px-3 py-2 rounded-xl font-black">Set Chat</button>
         </div>
+        {chatMode === 'RESTRICTED' && (
+          <div className="mb-4">
+            <p className="text-xs text-zinc-400 mb-2">Pre-canned messages (visible to players)</p>
+            <div className="flex gap-2 mb-2">
+              <input value={newAllowedText} onChange={(e) => setNewAllowedText(e.target.value)} placeholder="Add message" className="flex-1 bg-zinc-900 rounded-xl px-3 py-2 text-white text-sm" />
+              <button onClick={() => {
+                const t = newAllowedText.trim(); if (!t) return; const id = `c_${Date.now().toString(36)}`;
+                setAllowedList((s) => [...s.slice(0, 11), { id, text: t }]); // limit to 12 items in UI
+                setNewAllowedText('');
+              }} className="bg-zinc-700 px-3 py-2 rounded-xl">Add</button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {allowedList.map((a) => (
+                <div key={a.id} className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-sm flex items-center gap-2">
+                  <span className="text-zinc-300">{a.text}</span>
+                  <button onClick={() => setAllowedList((s) => s.filter(x => x.id !== a.id))} className="text-red-400 text-xs">Remove</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mb-4">
           <Chat socket={socketRef.current} roomPin={pin} />

@@ -165,8 +165,18 @@ function registerHandlers(socket, io, questions) {
     if (!chatInstance) return callback?.({ ok: false });
     try {
       if (mode === 'RESTRICTED' && Array.isArray(allowed)) {
-        // basic validation of allowed shape
-        chatInstance.allowed = allowed.map(a => ({ id: String(a.id), text: String(a.text) }));
+        // server-side validation: limit count and text length
+        const MAX_ALLOWED = 24;
+        const MAX_TEXT_LEN = 120;
+        const validated = [];
+        for (const a of allowed.slice(0, MAX_ALLOWED)) {
+          const tid = String(a.id || `c_${Date.now().toString(36)}`);
+          const txt = String(a.text || '').trim().slice(0, MAX_TEXT_LEN);
+          if (txt.length === 0) continue;
+          validated.push({ id: tid, text: txt });
+        }
+        if (validated.length === 0) return callback?.({ ok: false, reason: 'no_valid_allowed' });
+        chatInstance.allowed = validated;
       }
       chatInstance.setMode(mode);
       io.to(pin).emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
