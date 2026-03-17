@@ -1,6 +1,23 @@
 # Get Started
 
-This guide gets LocalFlux running locally in about 5 minutes.
+## Quickstart in 60 seconds
+
+Already have Node 20+ and npm 9+? Copy and paste this block into your terminal:
+
+```bash
+git clone https://github.com/Unknownbeliek/localflux.git
+cd localflux
+npm install --prefix server && npm install --prefix client
+cp client/.env.example client/.env   # edit VITE_BACKEND_URL if needed
+npm run dev --prefix server &
+npm run dev --prefix client
+```
+
+Open the Vite URL, click **Host**, create a room, and join from another tab with the PIN. Done.
+
+For a detailed walkthrough, keep reading.
+
+---
 
 ## Prerequisites
 
@@ -78,6 +95,22 @@ Open the printed Vite URL in your browser.
 - Join from another tab/device with room PIN
 - Start game and answer at least one question
 
+### Host flow at a glance
+
+![Host creates a room, lobby shows joining players, game runs with live score updates](/screenshots/host-flow-placeholder.png)
+
+::: tip Screenshots coming soon
+Host flow screenshots and GIFs will be added here. The flow is: **Home → Host → Lobby (share PIN) → Question screen → Score reveal → Game over**.
+:::
+
+### Deck Studio flow
+
+![Deck Studio editor with card list, CSV import button, and export control](/screenshots/deck-studio-placeholder.png)
+
+::: tip Screenshots coming soon
+Deck Studio screenshots will be added here. The flow is: **Home → Deck Studio → New deck → Add/import cards → Validate → Export .flux**.
+:::
+
 ## 7) Run tests (server)
 
 From repository root:
@@ -119,6 +152,9 @@ Use this only when needed.
 
 ## Next steps
 
+- Configure env vars in detail: [Configuration](/guide/configuration)
+- Deploy to a LAN event: [Deployment](/guide/deployment)
 - Learn architecture: [Architecture](/guide/architecture)
 - Understand deck format: [Deck Schema](/guide/deck-schema)
 - Validate quality gates: [Testing](/guide/testing)
+- Troubleshoot common problems: [Troubleshooting](/guide/troubleshooting)

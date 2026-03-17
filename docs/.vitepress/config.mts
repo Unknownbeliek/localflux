@@ -21,11 +21,26 @@ export default defineConfig({
         ]
       },
       {
+        text: 'Setup & Deployment',
+        items: [
+          { text: 'Configuration', link: '/guide/configuration' },
+          { text: 'Deployment', link: '/guide/deployment' },
+          { text: 'Troubleshooting', link: '/guide/troubleshooting' },
+        ]
+      },
+      {
         text: 'Reference',
         items: [
           { text: 'Architecture', link: '/guide/architecture' },
           { text: 'Deck Schema', link: '/guide/deck-schema' },
           { text: 'Testing', link: '/guide/testing' },
+        ]
+      },
+      {
+        text: 'Project',
+        items: [
+          { text: 'Contributing', link: '/guide/contributing' },
+          { text: 'Release Notes', link: '/guide/release-notes' },
         ]
       },
       {
