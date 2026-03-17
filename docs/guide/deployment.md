@@ -1,20 +1,30 @@
 # Deployment
 
-How to run LocalFlux for a real event — whether on your local machine or as a
-LAN server that 50+ people connect to simultaneously.
+This page explains how to run LocalFlux for a real event — whether on your local development machine or as a shared LAN server for 50+ simultaneous players.
 
 ## Local development (single machine)
 
-This is covered in the [Get Started](/guide/get-started) guide. Use this mode
-for building decks, testing flows, and solo development.
+This mode is covered in the [Get Started](/guide/get-started) guide. Use it for building decks, testing game flows, and solo development.
 
-```bash
-# Terminal 1
+::: code-group
+
+```bash [macOS / Linux]
+# Terminal 1 — backend
 cd server && npm run dev
 
-# Terminal 2
+# Terminal 2 — frontend
 cd client && npm run dev
 ```
+
+```powershell [Windows]
+# Terminal 1 — backend
+cd server; npm run dev
+
+# Terminal 2 — frontend
+cd client; npm run dev
+```
+
+:::
 
 Open `http://localhost:5173` in your browser.
 
@@ -27,17 +37,27 @@ server; all other devices (phones, tablets, laptops) connect to it over Wi-Fi.
 
 ### Step 1 — Find your LAN IP
 
-```bash
-# Linux
+::: code-group
+
+```bash [macOS]
+ipconfig getifaddr en0
+# or, for all active interfaces:
+ifconfig | grep "inet " | grep -v 127.0.0.1
+```
+
+```bash [Linux]
 ip route get 1 | awk '{print $7; exit}'
 # or
 hostname -I | awk '{print $1}'
-
-# macOS
-ipconfig getifaddr en0
 ```
 
-Note this IP — you will use it in every URL below. Example: `192.168.1.42`.
+```powershell [Windows]
+ipconfig | findstr /i "IPv4"
+```
+
+:::
+
+Note the IP address shown (e.g. `192.168.1.42`). You will use it in every URL in the steps below.
 
 ### Step 2 — Configure the client
 
@@ -51,27 +71,42 @@ Rebuild or restart the Vite dev server after saving.
 
 ### Step 3 — Open the firewall {#firewall}
 
-The backend needs inbound access on its port (default 3000) and the Vite dev
-server needs access on its port (default 5173).
+The backend and Vite dev server each need an inbound port open on your OS firewall.
 
-**Linux (ufw):**
+::: code-group
 
-```bash
+```bash [macOS]
+# macOS does not block outbound connections by default.
+# If Application Firewall is enabled:
+# System Settings → Network → Firewall → Options…
+# Add Node.js to the allowed apps list.
+# For a quick event, you can temporarily disable the firewall.
+```
+
+```bash [Linux (ufw)]
 sudo ufw allow 3000/tcp
 sudo ufw allow 5173/tcp
+sudo ufw reload
 ```
 
-**macOS:**
-
-Go to **System Settings → Network → Firewall** and add Node.js to the allowed
-apps, or temporarily disable the firewall for the event.
-
-**Windows (PowerShell, run as administrator):**
-
-```powershell
-New-NetFirewallRule -DisplayName "LocalFlux Backend" -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
-New-NetFirewallRule -DisplayName "LocalFlux Frontend" -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow
+```bash [Linux (firewalld)]
+sudo firewall-cmd --permanent --add-port=3000/tcp
+sudo firewall-cmd --permanent --add-port=5173/tcp
+sudo firewall-cmd --reload
 ```
+
+```powershell [Windows (run as Administrator)]
+New-NetFirewallRule -DisplayName "LocalFlux Backend" `
+  -Direction Inbound -Protocol TCP -LocalPort 3000 -Action Allow
+New-NetFirewallRule -DisplayName "LocalFlux Frontend" `
+  -Direction Inbound -Protocol TCP -LocalPort 5173 -Action Allow
+```
+
+:::
+
+::: tip Reverting after the event
+Remove the rules once the event is over to restore your default firewall configuration.
+:::
 
 ### Step 4 — Share the URL with players
 

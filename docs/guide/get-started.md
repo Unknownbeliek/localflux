@@ -2,18 +2,33 @@
 
 ## Quickstart in 60 seconds
 
-Already have Node 20+ and npm 9+? Copy and paste this block into your terminal:
+Already have Node.js 20+ and npm 9+? Copy the block for your platform, run it, then open the Vite URL in your browser.
 
-```bash
+::: code-group
+
+```bash [macOS / Linux]
 git clone https://github.com/Unknownbeliek/localflux.git
 cd localflux
 npm install --prefix server && npm install --prefix client
-cp client/.env.example client/.env   # edit VITE_BACKEND_URL if needed
+cp client/.env.example client/.env
 npm run dev --prefix server &
 npm run dev --prefix client
 ```
 
-Open the Vite URL, click **Host**, create a room, and join from another tab with the PIN. Done.
+```powershell [Windows (PowerShell)]
+git clone https://github.com/Unknownbeliek/localflux.git
+cd localflux
+npm install --prefix server; npm install --prefix client
+copy client\.env.example client\.env
+Start-Process -NoNewWindow -FilePath npm -ArgumentList "run","dev","--prefix","server"
+npm run dev --prefix client
+```
+
+:::
+
+Click **Host**, create a room, and join from another tab with the PIN. That is all.
+
+For a step-by-step walkthrough of each stage, continue reading.
 
 For a detailed walkthrough, keep reading.
 
@@ -21,15 +36,59 @@ For a detailed walkthrough, keep reading.
 
 ## Prerequisites
 
-- Node.js 20+ (recommended) or 18+
-- npm 9+
-- A terminal with two tabs/windows
+| Tool | Minimum | Recommended | Notes |
+|------|---------|-------------|-------|
+| **Node.js** | 18.x LTS | 20.x LTS | Runs the server and builds the client |
+| **npm** | 9.x | latest | Bundled with Node.js — no separate install needed |
+| **Git** | any | latest | Required to clone the repository |
+| **Terminal** | — | — | Two separate tabs or windows (one for server, one for client) |
 
-Check your versions:
+### Installing Node.js
+
+The recommended approach on all platforms is **nvm** (Node Version Manager), which lets you switch Node.js versions without affecting other projects.
+
+::: code-group
+
+```bash [macOS (nvm)]
+# Install nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.zshrc   # or ~/.bashrc if you use bash
+
+# Install and activate Node.js 20
+nvm install 20
+nvm use 20
+```
+
+```bash [Linux (nvm)]
+# Install nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
+
+# Install and activate Node.js 20
+nvm install 20
+nvm use 20
+```
+
+```powershell [Windows (nvm-windows)]
+# Download and install nvm-windows from:
+# https://github.com/coreybutler/nvm-windows/releases
+# Then open a new PowerShell window and run:
+
+nvm install 20
+nvm use 20
+```
+
+:::
+
+::: tip Prefer a GUI installer?
+Download the LTS installer directly from [nodejs.org](https://nodejs.org/). This bundles Node.js and npm for all platforms.
+:::
+
+Verify your installation:
 
 ```bash
-node -v
-npm -v
+node -v   # expected: v20.x.x or higher
+npm -v    # expected: 9.x.x or higher
 ```
 
 ## 1) Clone the repository
@@ -55,15 +114,31 @@ cd ../client
 npm install
 ```
 
-## 3) Configure frontend backend URL (optional but recommended)
+## 3) Configure the frontend backend URL (optional but recommended)
 
-Create a frontend env file at `client/.env`:
+Create `client/.env` from the provided example file:
+
+::: code-group
+
+```bash [macOS / Linux]
+cp client/.env.example client/.env
+```
+
+```powershell [Windows]
+copy client\.env.example client\.env
+```
+
+:::
+
+Open `client/.env` in a text editor and set the backend URL:
 
 ```env
 VITE_BACKEND_URL=http://localhost:3000
 ```
 
-If you are running in Codespaces, use your forwarded backend URL instead.
+::: info GitHub Codespaces
+Replace `http://localhost:3000` with the forwarded port URL shown in the **Ports** tab of your Codespace. See [Troubleshooting → Codespaces](/guide/troubleshooting#failed-to-connect-in-github-codespaces) for details.
+:::
 
 ## 4) Start the backend
 
@@ -131,14 +206,41 @@ Expected result: all test suites pass.
 
 ### Address already in use (EADDRINUSE)
 
-A previous server process may still be running.
+A previous server process is still holding port 3000. Find and stop it:
 
-```bash
-# Linux/macOS
+::: code-group
+
+```bash [macOS / Linux]
+# Find the process using port 3000
 lsof -i :3000
-# Then stop the process by PID
+
+# Stop it by PID (replace <PID> with the number shown above)
 kill <PID>
 ```
+
+```powershell [Windows]
+# Find the process using port 3000
+netstat -ano | findstr :3000
+
+# Stop it by PID (replace <PID> with the number in the last column)
+taskkill /PID <PID> /F
+```
+
+:::
+
+Alternatively, start the server on a different port and update `VITE_BACKEND_URL` to match:
+
+::: code-group
+
+```bash [macOS / Linux]
+PORT=3001 npm run dev
+```
+
+```powershell [Windows]
+$env:PORT=3001; npm run dev
+```
+
+:::
 
 ### Cannot install dependencies due to peer dependency resolution
 

@@ -1,7 +1,6 @@
 # Troubleshooting
 
-Common problems and their solutions. If something is not listed here, open an
-issue on [GitHub](https://github.com/Unknownbeliek/localflux/issues).
+This page covers the most common problems encountered when setting up or running LocalFlux, grouped by category. If your issue is not listed here, [open a GitHub issue](https://github.com/Unknownbeliek/localflux/issues) with the details described at the bottom of this page.
 
 ## Connection problems
 
@@ -25,23 +24,43 @@ The client cannot reach the backend WebSocket server.
    vars at build time and does not hot-reload them.
 4. Open browser DevTools → Network tab → look for a failing WebSocket handshake.
 
-### Players on other devices can't connect (LAN)
+### Players on other devices cannot connect (LAN)
 
-The backend must be reachable on the network IP, not `localhost`.
+The backend binds to `0.0.0.0`, so it is reachable on all network interfaces. However, `localhost` in `VITE_BACKEND_URL` resolves only to the host machine itself. Players on other devices need the LAN IP address.
 
-1. Find your machine's local IP:
-   ```bash
-   # Linux / macOS
-   ip route get 1 | awk '{print $7; exit}'
-   # or
-   hostname -I | awk '{print $1}'
-   ```
-2. Set `VITE_BACKEND_URL` in `client/.env` to that IP:
-   ```env
-   VITE_BACKEND_URL=http://192.168.1.42:3000
-   ```
-3. Make sure your OS firewall allows inbound connections on port 3000.  
-   See [Deployment → Firewall](/guide/deployment#firewall) for platform-specific steps.
+**Step 1 — Find your machine’s LAN IP:**
+
+::: code-group
+
+```bash [macOS]
+ipconfig getifaddr en0
+# or, for all active interfaces:
+ifconfig | grep "inet " | grep -v 127.0.0.1
+```
+
+```bash [Linux]
+ip route get 1 | awk '{print $7; exit}'
+# or
+hostname -I | awk '{print $1}'
+```
+
+```powershell [Windows]
+ipconfig | findstr /i "IPv4"
+```
+
+:::
+
+The output will be something like `192.168.1.42`. Use that IP in the next step.
+
+**Step 2 — Update `client/.env`:**
+
+```env
+VITE_BACKEND_URL=http://192.168.1.42:3000
+```
+
+**Step 3 — Restart the Vite dev server** after saving `.env`.
+
+**Step 4 — Allow the port through your OS firewall.** See [Deployment → Firewall](/guide/deployment#firewall) for platform-specific steps.
 
 ### "Failed to connect" in GitHub Codespaces
 
@@ -63,22 +82,41 @@ server container directly.
 
 ### Address already in use (EADDRINUSE :3000)
 
-A previous server process is still holding the port.
+A previous server process is still holding the port. Find and terminate it:
 
-```bash
-# Find the PID
-lsof -i :3000        # Linux / macOS
-netstat -ano | findstr :3000   # Windows
+::: code-group
 
-# Kill it (Linux / macOS)
+```bash [macOS / Linux]
+# Identify the process
+lsof -i :3000
+
+# Terminate it (replace <PID> with the number shown)
 kill <PID>
 ```
 
-Or change the port via env var and update `VITE_BACKEND_URL` to match:
+```powershell [Windows]
+# Identify the process
+netstat -ano | findstr :3000
 
-```bash
+# Terminate it (replace <PID> with the number in the last column)
+taskkill /PID <PID> /F
+```
+
+:::
+
+Alternatively, start the server on a different port and update `VITE_BACKEND_URL` to match:
+
+::: code-group
+
+```bash [macOS / Linux]
 PORT=3001 npm run dev
 ```
+
+```powershell [Windows]
+$env:PORT=3001; npm run dev
+```
+
+:::
 
 ### Deck not loading — "Cannot read file"
 
@@ -120,13 +158,12 @@ thoroughly afterwards.
 
 ### Vite hot-reload not working
 
-Vite's HMR needs the browser to be able to open a WebSocket back to the Vite
-dev server. In Codespaces or behind a proxy:
+Vite’s HMR requires the browser to open a WebSocket back to the Vite dev server. In Codespaces or behind a proxy:
 
-1. Open the **Ports** tab and make sure the Vite port (default `5173`) is
-   forwarded.
-2. If the page loads but HMR is broken, a hard refresh (`Ctrl+Shift+R`) usually
-   restores it.
+1. Open the **Ports** tab and confirm the Vite port (default `5173`) is forwarded.
+2. If the page loads but HMR is still broken, a hard refresh usually resolves it:
+   - **Windows / Linux:** `Ctrl + Shift + R`
+   - **macOS:** `Cmd + Shift + R`
 
 ### Environment variable shows as `undefined` in the browser
 
@@ -155,10 +192,10 @@ previous rounds are kept.
 
 ## Still stuck?
 
-[Open an issue](https://github.com/Unknownbeliek/localflux/issues/new) and
-include:
+[Open an issue](https://github.com/Unknownbeliek/localflux/issues/new) and include the following information so we can reproduce the problem:
 
-- Node.js version (`node -v`)
-- npm version (`npm -v`)
-- Operating system
-- Any error messages from the browser console or server terminal
+- Node.js version: `node -v`
+- npm version: `npm -v`
+- Operating system and version
+- The full error message from the browser console or server terminal
+- Steps to reproduce the issue

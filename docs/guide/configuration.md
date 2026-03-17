@@ -1,13 +1,10 @@
 # Configuration
 
-All configuration is done through environment variables. There is no config
-file at runtime — just `.env` files that are loaded by Node.js (`server/`) and
-Vite (`client/`).
+All runtime configuration is provided through environment variables. There is no configuration file to edit at runtime — only `.env` files loaded by Node.js (`server/`) and Vite (`client/`). This page documents every supported variable, its default value, and when to change it.
 
 ## Server environment variables
 
-Set these in `server/.env` or export them in your shell before starting the
-server.
+Set these in `server/.env`, or pass them inline when starting the server. Values in `server/.env` take effect automatically when the server starts.
 
 ### `PORT`
 
@@ -19,10 +16,25 @@ server.
 
 The TCP port the HTTP + WebSocket server listens on.
 
-```bash
-# Start on a custom port
+::: code-group
+
+```bash [macOS / Linux]
+# Pass inline
 PORT=8080 npm run dev
+
+# Or add to server/.env
+echo "PORT=8080" >> server/.env
 ```
+
+```powershell [Windows]
+# Pass inline (current session only)
+$env:PORT=8080; npm run dev
+
+# Or add to server/.env
+Add-Content server\.env "PORT=8080"
+```
+
+:::
 
 ::: warning Update the client too
 If you change `PORT`, update `VITE_BACKEND_URL` in `client/.env` to match —
@@ -39,16 +51,27 @@ otherwise the client will still try to connect on 3000.
 | **Type** | file path (absolute or relative to the repo root) |
 | **Scope** | server |
 
-Path to the deck JSON file that gets loaded on server start. The file must
-conform to the [Deck Schema](/guide/deck-schema).
+Path to the deck JSON file that gets loaded on server start. The file must conform to the [Deck Schema](/guide/deck-schema).
 
-```bash
+::: code-group
+
+```bash [macOS / Linux]
 # Absolute path
-DECK_PATH=/home/user/my-events/quiz-night.json npm run dev
+DECK_PATH=/home/user/events/quiz-night.json npm run dev
 
-# Relative path (relative to repo root, not server/)
+# Path relative to the repo root
 DECK_PATH=data/decks/pub-trivia.json npm run dev
 ```
+
+```powershell [Windows]
+# Absolute path
+$env:DECK_PATH="C:\Users\User\events\quiz-night.json"; npm run dev
+
+# Path relative to the repo root
+$env:DECK_PATH="data\decks\pub-trivia.json"; npm run dev
+```
+
+:::
 
 ::: tip Multiple decks
 Only one deck is loaded per server instance. To switch decks, restart the
@@ -112,12 +135,19 @@ DECK_PATH=data/decks/movie.json
 VITE_BACKEND_URL=http://localhost:3000
 ```
 
-A `client/.env.example` file is included in the repository. Copy it on first
-setup:
+A `client/.env.example` file is included in the repository. Copy it on first setup:
 
-```bash
+::: code-group
+
+```bash [macOS / Linux]
 cp client/.env.example client/.env
 ```
+
+```powershell [Windows]
+copy client\.env.example client\.env
+```
+
+:::
 
 ---
 
