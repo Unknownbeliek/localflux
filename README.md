@@ -1,8 +1,8 @@
   # LocalFlux
 
-**Version 1.0 | FOSS Hack 2026**
+**Version 1.0.0 | FOSS Hack 2026**
 
-![Status](https://img.shields.io/badge/Status-Active_Development-green)
+![Status](https://img.shields.io/badge/Status-v1.0.0_Released-brightgreen)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 ![Stack](https://img.shields.io/badge/Stack-Node.js_%2B_React_%2B_Socket.io-yellow)
 ![FOSS](https://img.shields.io/badge/Event-FOSS_Hack_2026-ff69b4)
@@ -116,8 +116,8 @@ At the conclusion of every match, the Node.js server writes a structured JSON lo
 **1. Clone the repository**
 
 ```bash
-git clone https://github.com/Unknownbeliek/foss-hack-quiz-engine.git
-cd foss-hack-quiz-engine
+git clone https://github.com/Unknownbeliek/localflux.git
+cd localflux
 ```
 
 **2. Install server dependencies**

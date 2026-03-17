@@ -38,8 +38,9 @@ features:
       limits, and fuzzy-match allowances for spelling variants.
 ---
 
-::: warning 🚧 Pre-Release — V1 Launches March 20, 2026
-The **full V1 release** is not yet published. The working quiz engine (room creation, live lobby, full quiz loop, 44-test suite) is already available in the [`main` branch on GitHub](https://github.com/Unknownbeliek/foss-hack-quiz-engine) and can be run locally today. The official tagged release drops **March 15, 2026**.
+::: tip ✅ Released — LocalFlux v1.0.0
+LocalFlux **v1.0.0 is now live** on the `main` branch and tagged as `v1.0.0`: [github.com/Unknownbeliek/localflux](https://github.com/Unknownbeliek/localflux).
+Core gameplay is production-ready: room creation, live lobby, full quiz loop, real-time chat controls, Deck Studio, and host/player reconnect recovery.
 :::
 
 ## How it works
@@ -68,9 +69,9 @@ room PIN, and the game begins.
 | Server-side answer validation + scoring | Done |
 | LAN play (any device on the same Wi-Fi) | Done |
 | Structured deck format (text + image types) | Done |
-| Unit test suite (44 tests, Jest) | Done |
+| Unit test suite (48 tests, Jest) | Done |
 | VIP Bouncer (connection queue) | Planned |
 | Difficulty Engine | Planned |
 | Accolades / post-game badges | Planned |
-| Deck Studio (browser-based editor) | Planned |
-| In-room chat | Planned |
+| Deck Studio (browser-based editor) | Done |
+| In-room chat | Done |
