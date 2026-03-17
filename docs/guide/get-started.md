@@ -172,7 +172,7 @@ Open the printed Vite URL in your browser.
 
 ### Host flow at a glance
 
-![Host creates a room, lobby shows joining players, game runs with live score updates](/screenshots/host-flow-placeholder.png)
+![Host creates a room, lobby shows joining players, game runs with live score updates](/screenshots/host-flow-placeholder.svg)
 
 ::: tip Screenshots coming soon
 Host flow screenshots and GIFs will be added here. The flow is: **Home → Host → Lobby (share PIN) → Question screen → Score reveal → Game over**.
@@ -180,7 +180,7 @@ Host flow screenshots and GIFs will be added here. The flow is: **Home → Host 
 
 ### Deck Studio flow
 
-![Deck Studio editor with card list, CSV import button, and export control](/screenshots/deck-studio-placeholder.png)
+![Deck Studio editor with card list, CSV import button, and export control](/screenshots/deck-studio-placeholder.svg)
 
 ::: tip Screenshots coming soon
 Deck Studio screenshots will be added here. The flow is: **Home → Deck Studio → New deck → Add/import cards → Validate → Export .flux**.

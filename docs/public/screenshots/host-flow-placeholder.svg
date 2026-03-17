@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-labelledby="title desc">
+  <title id="title">Host flow placeholder</title>
+  <desc id="desc">Placeholder graphic for LocalFlux host flow screenshot.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f172a"/>
+      <stop offset="100%" stop-color="#1e293b"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#bg)"/>
+  <rect x="70" y="70" width="1060" height="535" rx="18" fill="#0b1220" stroke="#334155" stroke-width="2"/>
+  <text x="600" y="190" fill="#f8fafc" font-size="48" text-anchor="middle" font-family="Arial, sans-serif">Host Flow Screenshot</text>
+  <text x="600" y="250" fill="#94a3b8" font-size="26" text-anchor="middle" font-family="Arial, sans-serif">Placeholder asset for documentation</text>
+  <text x="600" y="340" fill="#cbd5e1" font-size="24" text-anchor="middle" font-family="Arial, sans-serif">Home → Host → Lobby → Questions → Scores</text>
+  <text x="600" y="390" fill="#64748b" font-size="20" text-anchor="middle" font-family="Arial, sans-serif">Replace with real screenshot or GIF</text>
+</svg>
