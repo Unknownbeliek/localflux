@@ -3,18 +3,23 @@ import Chat from './Chat';
 import { createGameSocket } from '../backendUrl';
 import { Rocket, Shield, Zap, Flame } from 'lucide-react';
 
+const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
 const PLAYER_STATE_KEY = 'lf_player_state';
 const PRESET_AVATARS = [
-  '1.avf',
   '1.jpg',
-  '11.avf',
   '2.jpg',
   '4.jpg',
   '5.jpg',
-  '6.avf',
+  '11.jpg',
+  '15.jpg',
+  '16.jpg',
+  '18.jpg',
+  '19.jpg',
+  '21.jpg',
+  '22.jpg',
+  '23.jpg',
   '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
-  '8.avf',
   'e55afb4aea57bced165fb55ad92addf5.jpg',
 ];
 const GRADIENT_AVATARS = [
@@ -75,29 +80,22 @@ function clearPlayerState() {
   window.localStorage.removeItem(PLAYER_STATE_KEY);
 }
 
-function getPinFromUrl() {
-  if (typeof window === 'undefined') return '';
-  const raw = new URLSearchParams(window.location.search).get('pin') || '';
-  return raw.replace(/\D/g, '').slice(0, 4);
-}
-
 export default function Player({ onBack }) {
   const savedPlayerState = readPlayerState();
   const playerSessionIdRef = useRef(getOrCreatePlayerSessionId());
   const resumeAttemptedRef = useRef(false);
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
-  const [name, setName] = useState(savedPlayerState?.name || '');
+  const [name, setName] = useState(savedPlayerState?.name || 'Guest');
   const [avatarObject, setAvatarObject] = useState(normalizeAvatarObject(savedPlayerState?.avatarObject));
   const [avatarTab, setAvatarTab] = useState(savedPlayerState?.avatarObject?.type || 'preset');
   const [isEditingName, setIsEditingName] = useState(false);
   const [hiddenPresetPaths, setHiddenPresetPaths] = useState(() => new Set());
-  const [pin, setPin] = useState(getPinFromUrl() || savedPlayerState?.pin || '');
   const [error, setError] = useState('');
   const [roomName, setRoomName] = useState(savedPlayerState?.roomName || '');
   const [profileSaved, setProfileSaved] = useState(false);
 
-  const [phase, setPhase] = useState(savedPlayerState?.pin ? 'waiting' : 'join');
+  const [phase, setPhase] = useState('joining');
   const [question, setQuestion] = useState(null);
   const [selected, setSelected] = useState(null);
   const [myScore, setMyScore] = useState(0);
@@ -112,15 +110,14 @@ export default function Player({ onBack }) {
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
 
   useEffect(() => {
-    if (!name.trim() && !pin.trim() && !roomName.trim()) return;
+    if (!name.trim() && !roomName.trim()) return;
     persistPlayerState({
       name: name.trim(),
       avatarObject,
-      pin: pin.trim(),
       roomName: roomName.trim(),
       updatedAt: Date.now(),
     });
-  }, [name, avatarObject, pin, roomName]);
+  }, [name, avatarObject, roomName]);
 
   useEffect(() => {
     const socket = createGameSocket();
@@ -128,52 +125,25 @@ export default function Player({ onBack }) {
     socket.on('connect', () => {
       setConnected(true);
 
-      const saved = readPlayerState();
-      if (resumeAttemptedRef.current || !saved?.pin || !saved?.name) return;
-
-      resumeAttemptedRef.current = true;
+      // Auto-join to LAN room on connect
       socket.emit(
-        'player:resume',
+        'join',
         {
-          pin: saved.pin,
+          playerName: name || 'Guest',
           playerSessionId: playerSessionIdRef.current,
         },
         (res) => {
           if (!res?.success) {
-            setPhase('join');
-            setError('Previous player session was not recoverable. Rejoin with PIN.');
+            setError(res?.error || 'Could not join game.');
             return;
           }
 
           setError('');
-          setPin(saved.pin);
-          setName(saved.name);
-          setAvatarObject(normalizeAvatarObject(saved.avatarObject));
-          setAvatarTab(normalizeAvatarObject(saved.avatarObject).type);
-          setRoomName(res.roomName || saved.roomName || '');
+          setRoomName(res.roomName || 'LocalFlux Game');
           if (res.chatMode) setChatMode(res.chatMode);
           if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
           setMyScore(Number(res.myScore) || 0);
-
-          if (res.status === 'started' && res.activeQuestion) {
-            const { question, durationMs, endsAt } = res.activeQuestion;
-            setQuestion(question);
-            const normalizedMs = Number.isFinite(Number(durationMs)) && Number(durationMs) > 0 ? Number(durationMs) : 20000;
-            const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
-            setTimeTotal(Math.ceil(normalizedMs / 1000));
-            setQuestionEndsAt(targetEndsAt);
-            setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
-
-            if (res.alreadyAnswered) {
-              setSelected(res.answeredValue || null);
-              setPhase('answered');
-            } else {
-              setSelected(null);
-              setPhase('question');
-            }
-          } else {
-            setPhase('waiting');
-          }
+          setPhase('waiting');
         }
       );
     });
@@ -233,22 +203,6 @@ export default function Player({ onBack }) {
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
 
-  const handleJoin = () => {
-    if (!name.trim()) return setError('Enter your name.');
-    if (pin.length < 4) return setError('Enter the 4-digit PIN.');
-    if (!socketRef.current?.connected) return setError('Not connected.');
-    setError('');
-    socketRef.current.emit('join_room', { pin, playerName: name.trim(), playerSessionId: playerSessionIdRef.current }, (res) => {
-      if (res.success) {
-        setRoomName(res.roomName);
-        if (res.chatMode) setChatMode(res.chatMode);
-        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
-        setPhase('waiting');
-      }
-      else setError(res.error || 'Could not join.');
-    });
-  };
-
   const handleBack = () => {
     clearPlayerState();
     onBack?.();
@@ -265,7 +219,7 @@ export default function Player({ onBack }) {
     setSelected(opt);
     setChatDrawerOpen(false);
     setPhase('answered');
-    socketRef.current.emit('submit_answer', { pin, answer: opt });
+    socketRef.current.emit('submit_answer', { answer: opt });
   };
 
   const handleSaveProfile = () => {
@@ -441,7 +395,7 @@ export default function Player({ onBack }) {
         </div>
 
         <div className="mt-5 hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-3 md:block">
-          <Chat socket={socketRef.current} roomPin={pin} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+          <Chat socket={socketRef.current} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
         </div>
 
         <button
@@ -469,7 +423,7 @@ export default function Player({ onBack }) {
                 </button>
               </div>
               <div className="min-h-0 flex-1">
-                <Chat socket={socketRef.current} roomPin={pin} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+                <Chat socket={socketRef.current} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
               </div>
             </div>
           </>
@@ -631,7 +585,7 @@ export default function Player({ onBack }) {
         </section>
 
         <div className="w-full max-w-md mt-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-          <Chat socket={socketRef.current} roomPin={pin} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+          <Chat socket={socketRef.current} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
         </div>
       </div>
     );
@@ -642,33 +596,11 @@ export default function Player({ onBack }) {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
       <button onClick={handleBack} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm transition-colors">back</button>
       <div className="z-10 w-full max-w-sm animate-phase-in rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-black/30">
-        <h1 className="text-5xl font-black tracking-tight mb-8">Join Game</h1>
-        <div className="w-full flex flex-col gap-3">
-        <input
-          type="text"
-          placeholder="Your name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
-        />
-        <input
-          type="text"
-          inputMode="numeric"
-          placeholder="Room PIN"
-          value={pin}
-          onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-          onKeyDown={(e) => e.key === 'Enter' && handleJoin()}
-          className="w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-lg font-semibold tracking-[0.35em] text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
-        />
-        {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300">{error}</p>}
-        <button
-          onClick={handleJoin}
-          disabled={!connected}
-          className="w-full rounded-2xl bg-emerald-400 py-5 text-xl font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-        >
-          JOIN
-        </button>
-          <div className={`mt-1 flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
+        <h1 className="text-5xl font-black tracking-tight mb-8">Joining Game</h1>
+        <div className="w-full flex flex-col gap-3 items-center justify-center">
+          <p className="text-slate-400 mb-4">One moment...</p>
+          {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 w-full text-center">{error}</p>}
+          <div className={`flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
             {connected ? (
               <span>connected</span>
             ) : (

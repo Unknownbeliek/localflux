@@ -20,6 +20,7 @@ const fs = require('fs');
 
 const { loadDeck, DEFAULT_DECK_PATH } = require('./core/deckLoader');
 const { registerHandlers } = require('./network/handlers');
+const { HostTokenManager } = require('./core/hostTokenManager');
 
 //  HTTP + Socket.IO setup 
 
@@ -40,11 +41,18 @@ const deck = loadDeck(deckPath);
 const QUESTIONS = deck.questions;
 console.log(`[Deck] Loaded ${QUESTIONS.length} question(s) from ${path.basename(deckPath)}`);
 
+//  Token management 
+
+const tokenManager = new HostTokenManager({
+  tokenTtl: 10 * 60 * 1000, // 10 minutes
+  cleanupInterval: 60 * 1000, // cleanup every minute
+});
+
 //  Socket connections 
 
 io.on('connection', (socket) => {
   console.log(`[+] Connected: ${socket.id}`);
-  registerHandlers(socket, io, QUESTIONS);
+  registerHandlers(socket, io, QUESTIONS, tokenManager);
 });
 
 //  API endpoints

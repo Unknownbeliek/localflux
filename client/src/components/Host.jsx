@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import Chat from './Chat';
 import { createGameSocket, getBackendUrl } from '../backendUrl';
+import { useHostToken } from '../context/HostTokenProvider';
 import { QRCodeSVG } from 'qrcode.react';
 import { Rocket, Shield, Zap, Flame } from 'lucide-react';
 import PingIndicator from './PingIndicator';
@@ -67,6 +68,7 @@ function clearHostState() {
 }
 
 export default function Host({ onBack, studioQuestions = null }) {
+  const { token: hostToken } = useHostToken();
   const savedHostState = readHostState();
   const hostSessionIdRef = useRef(getOrCreateHostSessionId());
   const resumeAttemptedRef = useRef(false);
@@ -258,8 +260,9 @@ export default function Host({ onBack, studioQuestions = null }) {
   const handleCreate = () => {
     if (!roomName.trim()) return setError('Enter a room name.');
     if (!socketRef.current?.connected) return setError('Not connected.');
+    if (!hostToken) return setError('Host token invalid. Restart the application.');
     setError('');
-    const payload = { roomName, hostSessionId: hostSessionIdRef.current };
+    const payload = { roomName, hostSessionId: hostSessionIdRef.current, hostToken };
     if (Array.isArray(studioQuestions) && studioQuestions.length > 0) {
       payload.deckQuestions = studioQuestions;
     }
@@ -268,7 +271,7 @@ export default function Host({ onBack, studioQuestions = null }) {
       if (res.success) { setPin(res.pin); setPhase('lobby');
         // apply the selected chat mode immediately for the new room
         if (chatMode) {
-          const payload = { pin: res.pin, mode: chatMode };
+          const payload = { pin: res.pin, mode: chatMode, hostToken };
           if (chatMode === 'RESTRICTED' && allowedList.length > 0) payload.allowed = allowedList;
           socketRef.current.emit('chat:host_set_mode', payload, (ack) => {
             if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
@@ -304,7 +307,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   };
 
   const handleKick = (socketId) => {
-    socketRef.current.emit('host:kick_player', { target: socketId }, (ack) => {
+    socketRef.current.emit('host:kick_player', { target: socketId, hostToken }, (ack) => {
       if (!ack?.ok) setError('Failed to remove player.');
       setMutedSet((s) => {
         const n = new Set([...s]);
@@ -551,7 +554,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   }
 
   if (phase === 'lobby') {
-    const joinUrl = `${window.location.origin}/?pin=${pin}`;
+    const joinUrl = `${window.location.origin}/play`;
     const copyLink = async () => {
       try {
         await navigator.clipboard.writeText(joinUrl);
