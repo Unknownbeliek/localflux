@@ -7,15 +7,19 @@ const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
 const PLAYER_STATE_KEY = 'lf_player_state';
 const PRESET_AVATARS = [
-  '1.avf',
   '1.jpg',
-  '11.avf',
   '2.jpg',
   '4.jpg',
   '5.jpg',
-  '6.avf',
+  '11.jpg',
+  '15.jpg',
+  '16.jpg',
+  '18.jpg',
+  '19.jpg',
+  '21.jpg',
+  '22.jpg',
+  '23.jpg',
   '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
-  '8.avf',
   'e55afb4aea57bced165fb55ad92addf5.jpg',
 ];
 const GRADIENT_AVATARS = [
