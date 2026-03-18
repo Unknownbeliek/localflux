@@ -207,6 +207,9 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
+  const [isStartConfirmArmed, setIsStartConfirmArmed] = useState(false);
+  const [isStartingGame, setIsStartingGame] = useState(false);
+  const startConfirmTimerRef = useRef(null);
   const profilePulseTimersRef = useRef(new Map());
   const modeOptions = ['FREE', 'RESTRICTED', 'OFF'];
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
@@ -305,8 +308,19 @@ export default function Host({ onBack, studioQuestions = null }) {
 
       profilePulseTimersRef.current.set(player.id, timer);
     });
-    socket.on('room_closed', ({ message }) => { setError(message); setPhase('setup'); setRoomId(null); clearHostState(); });
-    socket.on('game_started', () => setPhase('question'));
+    socket.on('room_closed', ({ message }) => {
+      setError(message);
+      setPhase('setup');
+      setRoomId(null);
+      setIsStartingGame(false);
+      setIsStartConfirmArmed(false);
+      clearHostState();
+    });
+    socket.on('game_started', () => {
+      setIsStartingGame(false);
+      setIsStartConfirmArmed(false);
+      setPhase('question');
+    });
     socket.on('next_question', ({ question, index, total, durationMs, endsAt }) => {
       setQuestion(question);
       setQIndex(index);
@@ -345,6 +359,10 @@ export default function Host({ onBack, studioQuestions = null }) {
       });
     });
     return () => {
+      if (startConfirmTimerRef.current) {
+        window.clearTimeout(startConfirmTimerRef.current);
+        startConfirmTimerRef.current = null;
+      }
       profilePulseTimersRef.current.forEach((timer) => window.clearTimeout(timer));
       profilePulseTimersRef.current.clear();
       setHostSocket(null);
@@ -750,11 +768,46 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
   };
 
+  const startReady = players.length > 0 && isDeckReady;
+  const startStatusText =
+    players.length === 0
+      ? 'Need at least 1 player'
+      : !isDeckReady
+        ? 'Need a deck selected'
+        : isStartConfirmArmed
+          ? 'Press again to confirm'
+          : 'Ready to launch';
+  const startButtonLabel = isStartingGame ? 'LAUNCHING...' : isStartConfirmArmed ? 'CONFIRM START' : 'START GAME';
+
   const handleStart = () => {
+    if (!startReady || isStartingGame) return;
     if (!socketRef.current?.connected) return setError('Lost connection.');
+    if (!isStartConfirmArmed) {
+      setError('');
+      setIsStartConfirmArmed(true);
+      if (startConfirmTimerRef.current) {
+        window.clearTimeout(startConfirmTimerRef.current);
+      }
+      startConfirmTimerRef.current = window.setTimeout(() => {
+        setIsStartConfirmArmed(false);
+        startConfirmTimerRef.current = null;
+      }, 3000);
+      return;
+    }
+
+    if (startConfirmTimerRef.current) {
+      window.clearTimeout(startConfirmTimerRef.current);
+      startConfirmTimerRef.current = null;
+    }
+
+    setIsStartConfirmArmed(false);
+    setIsStartingGame(true);
     setError('');
     socketRef.current.emit('start_game', {}, (res) => {
-      if (!res?.success) setError(res?.error || 'Could not start.');
+      if (!res?.success) {
+        setIsStartingGame(false);
+        setError(res?.error || 'Could not start.');
+      }
     });
   };
 
@@ -1355,17 +1408,21 @@ export default function Host({ onBack, studioQuestions = null }) {
                 <div>
                   <button
                     onClick={handleStart}
-                    disabled={players.length === 0 || !isDeckReady}
+                    disabled={!startReady || isStartingGame}
                     className={`rounded-2xl px-8 py-4 text-lg font-black transition-all duration-150 ${
-                      players.length === 0 || !isDeckReady
+                      !startReady
                         ? 'cursor-not-allowed bg-slate-700 text-slate-500'
-                        : 'bg-emerald-400 text-black hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95'
+                        : isStartConfirmArmed
+                          ? 'bg-amber-300 text-black shadow-[0_0_22px_rgba(252,211,77,0.35)] hover:-translate-y-0.5 hover:bg-amber-200 active:translate-y-0 active:scale-95'
+                          : 'bg-emerald-400 text-black shadow-[0_0_18px_rgba(16,185,129,0.28)] hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95'
                     }`}
                   >
-                    START GAME
+                    <span className="inline-flex items-center gap-2">
+                      {isStartingGame && <span className="h-3 w-3 animate-spin rounded-full border-2 border-black/40 border-t-black" />}
+                      {startButtonLabel}
+                    </span>
                   </button>
-                  {players.length === 0 && <p className="mt-2 text-xs text-slate-500">Waiting for at least 1 player.</p>}
-                  {players.length > 0 && !isDeckReady && <p className="mt-2 text-xs text-amber-300">Select a deck before starting.</p>}
+                  <p className={`mt-2 text-xs ${startReady ? 'text-emerald-300' : 'text-amber-300'}`}>{startStatusText}</p>
                 </div>
                 <p className="text-sm text-slate-400">Room ready. Once started, players enter timed questions instantly.</p>
               </div>
