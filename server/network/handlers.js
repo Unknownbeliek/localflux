@@ -661,6 +661,29 @@ function registerHandlers(socket, io, questions, tokenManager) {
     }
   });
 
+  // host explicitly closes the room when leaving host view
+  socket.on('host:close_room', ({ hostToken }, callback) => {
+    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+
+    const room = getRoom();
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+
+    io.to(LAN_ROOM_ID).emit('room_closed', { message: 'Host ended the room.' });
+    markRoomClosed('host_disconnected');
+    deleteRoom();
+
+    const existingTimer = hostDisconnectTimers.get(LAN_ROOM_ID);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      hostDisconnectTimers.delete(LAN_ROOM_ID);
+    }
+
+    return callback?.({ ok: true });
+  });
+
   // ── disconnect ───────────────────────────────────────────────────────────
   socket.on('disconnect', () => {
     console.log(`[-] Disconnected: ${socket.id}`);

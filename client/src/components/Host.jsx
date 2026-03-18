@@ -865,6 +865,10 @@ export default function Host({ onBack, studioQuestions = null }) {
     if (hasActiveRoom) {
       const confirmed = window.confirm('Leave host view? This can disrupt players in the room.');
       if (!confirmed) return;
+
+      if (socketRef.current?.connected && hostToken) {
+        socketRef.current.emit('host:close_room', { hostToken }, () => {});
+      }
     }
     clearHostState();
     onBack?.();

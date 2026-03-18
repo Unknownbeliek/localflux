@@ -104,8 +104,46 @@ export default function Player({ onBack }) {
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
+  const [joinRetryIn, setJoinRetryIn] = useState(0);
   const roomDisplayName = displayRoomName(roomName);
   const latestNameRef = useRef(name);
+
+  const attemptJoinRoom = () => {
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      setError('Connecting to server...');
+      return;
+    }
+
+    socket.emit(
+      'join',
+      {
+        playerName: latestNameRef.current || 'Guest',
+        playerSessionId: playerSessionIdRef.current,
+      },
+      (res) => {
+        if (!res?.success) {
+          setError(res?.error || 'Could not join game.');
+          return;
+        }
+
+        setError('');
+        setJoinRetryIn(0);
+        if (typeof res.playerName === 'string' && res.playerName.trim()) {
+          setName(res.playerName.trim());
+        }
+        if (res.avatarObject && typeof res.avatarObject === 'object') {
+          setAvatarObject(normalizeAvatarObject(res.avatarObject));
+        }
+        setRoomName(res.roomName || 'LocalFlux Game');
+        if (res.chatMode) setChatMode(res.chatMode);
+        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+        setIsLobbyDeckReady(Boolean(res.deckSelected));
+        setMyScore(Number(res.myScore) || 0);
+        setPhase('waiting');
+      }
+    );
+  };
 
   useEffect(() => {
     latestNameRef.current = name;
@@ -130,37 +168,12 @@ export default function Player({ onBack }) {
     socket.on('connect', () => {
       setConnected(true);
       setSelfPlayerId(socket.id || '');
-
-      // Auto-join to LAN room on connect
-      socket.emit(
-        'join',
-        {
-          playerName: latestNameRef.current || 'Guest',
-          playerSessionId: playerSessionIdRef.current,
-        },
-        (res) => {
-          if (!res?.success) {
-            setError(res?.error || 'Could not join game.');
-            return;
-          }
-
-          setError('');
-          if (typeof res.playerName === 'string' && res.playerName.trim()) {
-            setName(res.playerName.trim());
-          }
-          if (res.avatarObject && typeof res.avatarObject === 'object') {
-            setAvatarObject(normalizeAvatarObject(res.avatarObject));
-          }
-          setRoomName(res.roomName || 'LocalFlux Game');
-          if (res.chatMode) setChatMode(res.chatMode);
-          if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
-          setIsLobbyDeckReady(Boolean(res.deckSelected));
-          setMyScore(Number(res.myScore) || 0);
-          setPhase('waiting');
-        }
-      );
+      attemptJoinRoom();
     });
-    socket.on('disconnect', () => setConnected(false));
+    socket.on('disconnect', () => {
+      setConnected(false);
+      setJoinRetryIn(0);
+    });
     socket.on('player:profileUpdated', ({ player }) => {
       if (!player || player.id !== socket.id) return;
       if (typeof player.name === 'string') setName(player.name);
@@ -214,6 +227,30 @@ export default function Player({ onBack }) {
       socket.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'joining' || !connected) return undefined;
+
+    let remaining = 3;
+    const kickoffTimer = window.setTimeout(() => {
+      attemptJoinRoom();
+      setJoinRetryIn(remaining);
+    }, 0);
+
+    const retryTimer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        attemptJoinRoom();
+        remaining = 3;
+      }
+      setJoinRetryIn(remaining);
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(kickoffTimer);
+      window.clearInterval(retryTimer);
+    };
+  }, [phase, connected]);
 
   useEffect(() => {
     if (!(phase === 'question' || phase === 'answered') || !questionEndsAt) return undefined;
@@ -634,6 +671,19 @@ export default function Player({ onBack }) {
         <div className="w-full flex flex-col gap-3 items-center justify-center">
           <p className="text-slate-400 mb-4">One moment...</p>
           {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 w-full text-center">{error}</p>}
+          {connected && phase === 'joining' && (
+            <p className="text-xs font-mono text-slate-400">Auto retry in {joinRetryIn || 1}s</p>
+          )}
+          <button
+            onClick={() => {
+              attemptJoinRoom();
+              setJoinRetryIn(3);
+            }}
+            disabled={!connected}
+            className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-black text-slate-100 transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            RETRY NOW
+          </button>
           <div className={`flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
             {connected ? (
               <span>connected</span>
