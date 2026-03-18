@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useHostToken } from '../context/HostTokenProvider'
 import { createGameSocket } from '../backendUrl'
 import { deckStudioDB } from '../deckStudio/db'
+import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog'
 
 const LIBRARY_GRADIENTS = [
   'from-emerald-400 to-blue-500',
@@ -15,7 +16,7 @@ const LIBRARY_GRADIENTS = [
 
 function DeckCard({ deck, index, buttonLabel, onAction }) {
   const gradient = LIBRARY_GRADIENTS[index % LIBRARY_GRADIENTS.length]
-  const questionCount = Array.isArray(deck?.slides) ? deck.slides.length : 0
+  const questionCount = typeof deck?.questionCount === 'number' ? deck.questionCount : Array.isArray(deck?.slides) ? deck.slides.length : 0
 
   return (
     <article className="group snap-start min-w-[260px] max-w-[260px] rounded-2xl border border-slate-700 bg-slate-900/70 p-3 transition-all duration-200 hover:-translate-y-1 hover:border-slate-500 hover:shadow-xl hover:shadow-black/35">
@@ -46,6 +47,9 @@ export default function AdminDashboard() {
   const [cloudDecks, setCloudDecks] = useState([])
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
   const [isLoadingCloud, setIsLoadingCloud] = useState(false)
+  const [cloudError, setCloudError] = useState('')
+  const [hasFetchedCloud, setHasFetchedCloud] = useState(false)
+  const [downloadingCloudDeckId, setDownloadingCloudDeckId] = useState('')
 
   useEffect(() => {
     let active = true
@@ -170,6 +174,54 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleLoadCloudDecks = async () => {
+    if (!isOnline || isLoadingCloud) return
+
+    setIsLoadingCloud(true)
+    setCloudError('')
+
+    try {
+      const fetchedDecks = await fetchCloudDecks()
+      setCloudDecks((prev) => {
+        const byId = new Map(prev.map((deck) => [deck.id, deck]))
+        fetchedDecks.forEach((deck) => byId.set(deck.id, deck))
+        return Array.from(byId.values())
+      })
+      setHasFetchedCloud(true)
+    } catch {
+      setCloudError('Failed to reach cloud catalog.')
+      setHasFetchedCloud(true)
+    } finally {
+      setIsLoadingCloud(false)
+    }
+  }
+
+  const handleDownloadAndHost = async (cloudDeck) => {
+    if (!cloudDeck?.deckUrl || !cloudDeck?.id || downloadingCloudDeckId) return
+
+    setDownloadingCloudDeckId(cloudDeck.id)
+    setIsGeneratingToken(true)
+    setTokenError('')
+
+    try {
+      const savedDeck = await downloadDeckToLocal(cloudDeck.deckUrl)
+      setLocalDecks((prev) => {
+        const remaining = prev.filter((deck) => deck.id !== savedDeck.id)
+        return [savedDeck, ...remaining]
+      })
+
+      const tokenRes = await requestHostToken()
+      setHostToken(tokenRes.token, tokenRes.ttlMs)
+      navigate(`/host?token=${encodeURIComponent(tokenRes.token)}&deckId=${encodeURIComponent(savedDeck.id)}`)
+    } catch (err) {
+      console.error('[AdminDashboard] Download and host error:', err)
+      setTokenError(err.message || 'Failed to download and host cloud deck. Try again.')
+      setIsGeneratingToken(false)
+    } finally {
+      setDownloadingCloudDeckId('')
+    }
+  }
+
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 select-none">
       {/* Background blur effects */}
@@ -245,6 +297,56 @@ export default function AdminDashboard() {
                   index={index}
                   buttonLabel="Host This"
                   onAction={() => handleHostDeck(deck.id)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="mt-10">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-xl font-black tracking-tight text-white">Discover (Cloud)</h2>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-400">Progressive loading</p>
+          </div>
+
+          {!hasFetchedCloud && isOnline && (
+            <button
+              onClick={handleLoadCloudDecks}
+              disabled={isLoadingCloud}
+              className="mb-4 inline-flex items-center gap-2 rounded-xl border border-sky-400/40 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-200 transition hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isLoadingCloud && <Loader className="h-4 w-4 animate-spin" strokeWidth={2} />}
+              {isLoadingCloud ? 'Loading Cloud Decks...' : '☁️ Load More from Cloud'}
+            </button>
+          )}
+
+          {!isOnline && (
+            <div className="mb-4 rounded-xl border border-slate-700 bg-slate-900/50 px-4 py-3 text-sm text-slate-400">
+              Offline: cloud catalog is unavailable.
+            </div>
+          )}
+
+          {cloudError && (
+            <div className="mb-4 rounded-xl border border-rose-500/40 bg-rose-950/30 px-4 py-3 text-sm text-rose-200">
+              {cloudError}
+            </div>
+          )}
+
+          {hasFetchedCloud && cloudDecks.length === 0 && !cloudError && (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-6 text-sm text-slate-400">
+              No cloud decks are available right now.
+            </div>
+          )}
+
+          {cloudDecks.length > 0 && (
+            <div className="flex snap-x overflow-x-auto gap-4 pb-4">
+              {cloudDecks.map((deck, index) => (
+                <DeckCard
+                  key={deck.id || `${deck.title}_${index}`}
+                  deck={deck}
+                  index={index}
+                  buttonLabel={downloadingCloudDeckId === deck.id ? 'Downloading...' : 'Download & Host'}
+                  onAction={() => handleDownloadAndHost(deck)}
                 />
               ))}
             </div>
