@@ -113,6 +113,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [selectedDeckSource, setSelectedDeckSource] = useState('server');
   const [selectedDeckCount, setSelectedDeckCount] = useState(null);
   const [deckLabel, setDeckLabel] = useState('Default');
+  const [isDragging, setIsDragging] = useState(false);
   const [recentlyUpdatedPlayerIds, setRecentlyUpdatedPlayerIds] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(0);
   const [timeTotal, setTimeTotal] = useState(0);
@@ -394,6 +395,22 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
 
     submitCreate(null);
+  };
+
+  const handleDragOver = (event) => {
+    event.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (event) => {
+    event.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleFileDrop = (event) => {
+    event.preventDefault();
+    setIsDragging(false);
+    setError('Drop parsing is coming next.');
   };
 
   const handleStart = () => {
@@ -729,7 +746,21 @@ export default function Host({ onBack, studioQuestions = null }) {
                 </button>
               </div>
 
-              <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
+              <div
+                className={`relative rounded-3xl border bg-slate-900/70 p-5 transition-all ${
+                  isDragging
+                    ? 'border-emerald-400/70 ring-4 ring-emerald-500/30 shadow-[0_0_30px_rgba(16,185,129,0.25)]'
+                    : 'border-slate-800'
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleFileDrop}
+              >
+                {isDragging && (
+                  <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-emerald-300/90 bg-emerald-500/10 px-4 text-center">
+                    <p className="text-sm font-black tracking-wide text-emerald-200">Drop .json, .flux, or .csv to load instantly</p>
+                  </div>
+                )}
                 <div className="mb-4 text-[11px] uppercase tracking-[0.26em] text-slate-500">Active Deck</div>
                 <div className="mb-4 flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-emerald-400" />
