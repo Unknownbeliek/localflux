@@ -4,12 +4,14 @@ import Host from './components/Host'
 import Player from './components/Player'
 import DeckStudio from './pages/DeckStudio'
 import { useState } from 'react'
+import { HostTokenProvider } from './context/HostTokenProvider'
 
 function App() {
   const [studioQuestions, setStudioQuestions] = useState(null)
 
   return (
-    <BrowserRouter>
+    <HostTokenProvider>
+      <BrowserRouter>
       <Routes>
         <Route path="/" element={<AdminDashboard />} />
         <Route path="/host" element={<Host studioQuestions={studioQuestions} onBack={() => window.location.href = '/'} />} />
@@ -27,7 +29,8 @@ function App() {
           }
         />
       </Routes>
-    </BrowserRouter>
+      </BrowserRouter>
+    </HostTokenProvider>
   )
 }
 
