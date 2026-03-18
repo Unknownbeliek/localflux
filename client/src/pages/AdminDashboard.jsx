@@ -1,8 +1,71 @@
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, Gamepad2 } from 'lucide-react'
+import { BookOpen, Gamepad2, Loader } from 'lucide-react'
+import { useState } from 'react'
+import { useHostToken } from '../context/HostTokenProvider'
+import { createGameSocket } from '../backendUrl'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
+  const { setHostToken } = useHostToken()
+  const [isGeneratingToken, setIsGeneratingToken] = useState(false)
+  const [tokenError, setTokenError] = useState('')
+
+  /**
+   * Handle "Launch Game Screen" click.
+   * Generates a host token and navigates to /host with token in URL.
+   */
+  const handleLaunchGame = async () => {
+    setIsGeneratingToken(true)
+    setTokenError('')
+
+    try {
+      // Create a temporary socket for token generation
+      const socket = createGameSocket()
+
+      // Wait for connection before emitting event
+      if (!socket.connected) {
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            socket.disconnect()
+            reject(new Error('Connection timeout'))
+          }, 5000)
+
+          socket.on('connect', () => {
+            clearTimeout(timeout)
+            resolve()
+          })
+        })
+      }
+
+      // Request token with timeout
+      const tokenPromise = new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error('Token generation timeout'))
+        }, 5000)
+
+        socket.emit('admin:generate-host-token', {}, (res) => {
+          clearTimeout(timeout)
+          socket.disconnect()
+
+          if (res?.success && res?.token) {
+            resolve(res)
+          } else {
+            reject(new Error(res?.error || 'Failed to generate token'))
+          }
+        })
+      })
+
+      const tokenRes = await tokenPromise
+
+      // Store token in context and navigate to /host with token in URL
+      setHostToken(tokenRes.token, tokenRes.ttlMs)
+      navigate(`/host?token=${encodeURIComponent(tokenRes.token)}`)
+    } catch (err) {
+      console.error('[AdminDashboard] Token generation error:', err)
+      setTokenError(err.message || 'Failed to generate token. Try again.')
+      setIsGeneratingToken(false)
+    }
+  }
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 select-none">
@@ -42,8 +105,13 @@ export default function AdminDashboard() {
 
           {/* Launch Game button */}
           <button
-            onClick={() => navigate('/host')}
-            className="group relative overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-400/10 to-emerald-600/5 p-6 transition-all duration-150 hover:-translate-y-1 hover:border-emerald-400/60 hover:shadow-lg hover:shadow-emerald-500/20 active:translate-y-0 active:scale-95"
+            onClick={handleLaunchGame}
+            disabled={isGeneratingToken}
+            className={`group relative overflow-hidden rounded-2xl border border-emerald-400/40 bg-gradient-to-br from-emerald-400/10 to-emerald-600/5 p-6 transition-all duration-150 ${
+              isGeneratingToken
+                ? 'opacity-60 cursor-not-allowed'
+                : 'hover:-translate-y-1 hover:border-emerald-400/60 hover:shadow-lg hover:shadow-emerald-500/20 active:translate-y-0 active:scale-95'
+            }`}
           >
             {/* Background glow */}
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/0 to-transparent opacity-0 transition-opacity duration-150 group-hover:opacity-10" />
@@ -51,13 +119,26 @@ export default function AdminDashboard() {
             {/* Content */}
             <div className="relative flex flex-col items-center gap-3">
               <div className="rounded-full bg-emerald-400/20 p-3 group-hover:bg-emerald-400/30 transition-colors">
-                <Gamepad2 className="h-8 w-8 text-emerald-300" strokeWidth={2} />
+                {isGeneratingToken ? (
+                  <Loader className="h-8 w-8 text-emerald-300 animate-spin" strokeWidth={2} />
+                ) : (
+                  <Gamepad2 className="h-8 w-8 text-emerald-300" strokeWidth={2} />
+                )}
               </div>
-              <h2 className="text-2xl font-black tracking-tight text-emerald-200">Launch Game Screen</h2>
+              <h2 className="text-2xl font-black tracking-tight text-emerald-200">
+                {isGeneratingToken ? 'Generating Token...' : 'Launch Game Screen'}
+              </h2>
               <p className="text-sm text-emerald-200/60">Start hosting a game</p>
             </div>
           </button>
         </div>
+
+        {/* Error message */}
+        {tokenError && (
+          <div className="mt-6 rounded-lg border border-rose-400/50 bg-rose-950/30 p-4 backdrop-blur-sm">
+            <p className="text-center text-sm text-rose-200">{tokenError}</p>
+          </div>
+        )}
 
         {/* Optional: Info section */}
         <div className="mt-12 rounded-2xl border border-slate-700/50 bg-slate-900/30 p-6 backdrop-blur-sm">
