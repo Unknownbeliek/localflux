@@ -61,6 +61,19 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
   const isInputDisabled = readOnly || muted || mode !== 'FREE';
   const canSend = !isInputDisabled && input.trim().length > 0;
 
+  const groupedMessages = useMemo(() => {
+    return messages.map((message, index) => {
+      const prev = messages[index - 1];
+      const prevSender = prev ? `${prev.from || ''}|${prev.name || ''}` : '';
+      const currentSender = `${message.from || ''}|${message.name || ''}`;
+      const showSender = index === 0 || prevSender !== currentSender;
+      return {
+        ...message,
+        _showSender: showSender,
+      };
+    });
+  }, [messages]);
+
   const sendFree = () => {
     if (muted) {
       setFeedback('You are muted by the Host.');
@@ -125,28 +138,39 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                 No messages yet.
               </div>
             ) : (
-              messages.map((message, index) => (
-                <div key={`${message.ts}-${index}`} className="group rounded-xl border border-slate-800 bg-slate-900 px-3 py-3 transition-colors hover:border-slate-700">
-                  <div className="mb-1 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-emerald-300">{message.name}</span>
-                      {allowHostActions && readOnly && message.from && onHostMute && message.name !== 'Host' && (
-                        <button
-                          onClick={() => onHostMute(message.from)}
-                          className={`hidden rounded-md px-2 py-0.5 text-[10px] font-semibold transition group-hover:inline-flex ${
-                            mutedSet.has(message.from)
-                              ? 'border border-emerald-500/40 bg-emerald-500/20 text-emerald-200'
-                              : 'border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
-                          }`}
-                          disabled={mutedSet.has(message.from)}
-                        >
-                          {mutedSet.has(message.from) ? 'Muted' : 'Mute'}
-                        </button>
-                      )}
+              groupedMessages.map((message, index) => (
+                <div
+                  key={`${message.ts}-${index}`}
+                  className={`group rounded-xl px-3 py-2 transition-colors ${
+                    message._showSender
+                      ? 'border border-slate-800 bg-slate-900 hover:border-slate-700'
+                      : 'border border-transparent bg-slate-900/50'
+                  }`}
+                >
+                  {message._showSender ? (
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-start gap-2">
+                        <span className="text-sm font-semibold text-emerald-300">{message.name}</span>
+                        <p className="text-sm leading-6 text-slate-100 break-words">{message.text}</p>
+                        {allowHostActions && readOnly && message.from && onHostMute && message.name !== 'Host' && (
+                          <button
+                            onClick={() => onHostMute(message.from)}
+                            className={`hidden rounded-md px-2 py-0.5 text-[10px] font-semibold transition group-hover:inline-flex ${
+                              mutedSet.has(message.from)
+                                ? 'border border-emerald-500/40 bg-emerald-500/20 text-emerald-200'
+                                : 'border border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                            }`}
+                            disabled={mutedSet.has(message.from)}
+                          >
+                            {mutedSet.has(message.from) ? 'Muted' : 'Mute'}
+                          </button>
+                        )}
+                      </div>
+                      <span className="shrink-0 font-mono text-[11px] text-slate-500">{new Date(message.ts).toLocaleTimeString()}</span>
                     </div>
-                    <span className="font-mono text-[11px] text-slate-500">{new Date(message.ts).toLocaleTimeString()}</span>
-                  </div>
-                  <p className="text-sm leading-6 text-slate-100">{message.text}</p>
+                  ) : (
+                    <p className="pl-0.5 text-sm leading-6 text-slate-200 break-words">{message.text}</p>
+                  )}
                 </div>
               ))
             )}
