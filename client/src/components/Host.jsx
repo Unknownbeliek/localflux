@@ -197,7 +197,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [deckLabel, setDeckLabel] = useState('No deck selected');
   const [isDeckReady, setIsDeckReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const [pendingDroppedDeck, setPendingDroppedDeck] = useState(null);
+  const [_pendingDroppedDeck, setPendingDroppedDeck] = useState(null);
   const [dropNotice, setDropNotice] = useState('');
   const [cloudDecks, setCloudDecks] = useState([]);
   const [cloudStatus, setCloudStatus] = useState('loading');
@@ -358,13 +358,15 @@ export default function Host({ onBack, studioQuestions = null }) {
         return next;
       });
     });
+    const profilePulseTimers = profilePulseTimersRef.current;
+
     return () => {
       if (startConfirmTimerRef.current) {
         window.clearTimeout(startConfirmTimerRef.current);
         startConfirmTimerRef.current = null;
       }
-      profilePulseTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-      profilePulseTimersRef.current.clear();
+      profilePulseTimers.forEach((timer) => window.clearTimeout(timer));
+      profilePulseTimers.clear();
       setHostSocket(null);
       socket.disconnect();
     };
