@@ -24,6 +24,7 @@ const { sanitizeQuestion } = require('../core/deckLoader');
 
 let chatInstance = null;
 const DEFAULT_AVATAR_OBJECT = { type: 'gradient', value: 'emerald' };
+const LAN_ROOM = 'local_flux_main';
 const HOST_RECONNECT_GRACE_MS = 45000;
 const hostDisconnectTimers = new Map();
 const PLAYER_RECONNECT_GRACE_MS = 45000;
