@@ -5,6 +5,7 @@ import Player from './components/Player'
 import DeckStudio from './pages/DeckStudio'
 import { useState } from 'react'
 import { HostTokenProvider } from './context/HostTokenProvider'
+import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
   const [studioQuestions, setStudioQuestions] = useState(null)
@@ -14,18 +15,20 @@ function App() {
       <BrowserRouter>
       <Routes>
         <Route path="/" element={<AdminDashboard />} />
-        <Route path="/host" element={<Host studioQuestions={studioQuestions} onBack={() => window.location.href = '/'} />} />
+        <Route path="/host" element={<ProtectedRoute element={<Host studioQuestions={studioQuestions} onBack={() => window.location.href = '/'} />} />} />
         <Route path="/play" element={<Player onBack={() => window.location.href = '/'} />} />
         <Route
           path="/studio"
           element={
-            <DeckStudio
-              onBack={() => window.location.href = '/'}
-              onHostDeck={(questions) => {
-                setStudioQuestions(questions)
-                window.location.href = '/host'
-              }}
-            />
+            <ProtectedRoute element={
+              <DeckStudio
+                onBack={() => window.location.href = '/'}
+                onHostDeck={(questions) => {
+                  setStudioQuestions(questions)
+                  window.location.href = '/host'
+                }}
+              />
+            } />
           }
         />
       </Routes>
