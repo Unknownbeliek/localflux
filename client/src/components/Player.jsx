@@ -80,6 +80,14 @@ function clearPlayerState() {
   window.localStorage.removeItem(PLAYER_STATE_KEY);
 }
 
+function displayRoomName(name) {
+  const normalized = String(name || '').trim();
+  if (!normalized || normalized.toLowerCase() === LAN_ROOM) {
+    return 'LocalFlux Room';
+  }
+  return normalized;
+}
+
 export default function Player({ onBack }) {
   const savedPlayerState = readPlayerState();
   const playerSessionIdRef = useRef(getOrCreatePlayerSessionId());
@@ -109,6 +117,7 @@ export default function Player({ onBack }) {
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
+  const roomDisplayName = displayRoomName(roomName);
 
   useEffect(() => {
     if (!name.trim() && !roomName.trim()) return;
@@ -364,7 +373,7 @@ export default function Player({ onBack }) {
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <button onClick={handleLeaveRoom} className="mb-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomName}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-right">
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
@@ -445,7 +454,7 @@ export default function Player({ onBack }) {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-3 p-5 animate-phase-in">
         <button onClick={handleLeaveRoom} className="absolute top-5 left-5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
-        <p className="text-3xl font-black tracking-tight">{roomName || 'Lobby'}</p>
+        <p className="text-3xl font-black tracking-tight">{roomDisplayName}</p>
         <p className="text-slate-400 text-sm font-mono">Waiting for host to start...</p>
         <p className={`text-xs font-semibold ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
           {isLobbyDeckReady ? 'Deck locked in! Get ready.' : 'Waiting for host to choose a deck...'}
