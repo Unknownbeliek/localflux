@@ -42,7 +42,6 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   } = useDeckStudioStore();
 
   const [csvText, setCsvText] = useState('');
-  const [category, setCategory] = useState('General Knowledge');
   const [actionMessage, setActionMessage] = useState('');
   const [cloudDecks, setCloudDecks] = useState([]);
   const [cloudStatus, setCloudStatus] = useState('loading');
@@ -307,11 +306,163 @@ export default function DeckStudio({ onBack, onHostDeck }) {
 
       <aside className="w-80 bg-slate-800 border-l border-slate-700 flex flex-col">
         <div className="border-b border-slate-700 p-4">
-          <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">Settings</p>
-          <p className="text-xs text-emerald-300">Draft status: {saveState}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">Settings</p>
+            <button
+              onClick={onBack}
+              className="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 hover:border-slate-500"
+            >
+              Back
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-emerald-300">Draft status: {saveState}</p>
+          <div className="mt-3 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <span>Progress</span>
+            <span className="font-black text-emerald-300">{validCount}/{deck.slides.length}</span>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-700">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-300 transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 text-xs text-slate-400">
-          Settings placeholder
+
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">Deck Name</label>
+            <input
+              value={deck.title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="e.g. Eyes of Cinema - Season 1"
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+            />
+          </section>
+
+          <section className="grid grid-cols-2 gap-2">
+            <button
+              onClick={undo}
+              disabled={historyPast.length === 0}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-100 disabled:opacity-40"
+            >
+              Undo
+            </button>
+            <button
+              onClick={redo}
+              disabled={historyFuture.length === 0}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-100 disabled:opacity-40"
+            >
+              Redo
+            </button>
+            <button
+              onClick={onExport}
+              className="col-span-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-black uppercase tracking-wide text-slate-100 hover:border-emerald-500/60"
+            >
+              Export .flux Deck
+            </button>
+            <button
+              onClick={onHostDirectly}
+              className="col-span-2 rounded-xl bg-emerald-400 px-3 py-2.5 text-xs font-black uppercase tracking-wide text-black hover:bg-emerald-300"
+            >
+              Save and Launch
+            </button>
+            <button
+              onClick={onDeleteQuestion}
+              disabled={deck.slides.length <= 1}
+              className="col-span-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-rose-200 disabled:opacity-40"
+            >
+              Delete Current Question
+            </button>
+          </section>
+
+          <details className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-300">
+              CSV Pipeline
+            </summary>
+            <div className="mt-3 space-y-2">
+              <textarea
+                value={csvText}
+                onChange={(e) => setCsvText(e.target.value)}
+                rows={5}
+                placeholder="prompt,optionA,optionB,optionC,optionD,correct,imageUrl"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={onImportCsv}
+                  className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-emerald-500/60"
+                >
+                  Import Text
+                </button>
+                <button
+                  onClick={() => setCsvText(csvTemplate)}
+                  className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
+                >
+                  Template
+                </button>
+              </div>
+              <label className="block cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-center text-xs font-semibold text-slate-100 hover:border-emerald-500/60">
+                Import CSV File
+                <input type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
+              </label>
+              {csvError && <p className="text-xs text-rose-300">{csvError}</p>}
+            </div>
+          </details>
+
+          {(cloudStatus === 'loading' || cloudStatus === 'ready' || cloudStatus === 'offline' || cloudStatus === 'error') && (
+            <details className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-300">
+                Cloud Catalog
+              </summary>
+              <div className="mt-3 space-y-2">
+                <button
+                  onClick={loadCloudCatalog}
+                  disabled={cloudStatus === 'loading'}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-emerald-500/60 disabled:opacity-50"
+                >
+                  {cloudStatus === 'loading' ? 'Refreshing...' : 'Refresh Cloud Decks'}
+                </button>
+                {cloudStatus === 'loading' && <p className="text-xs text-slate-400">Checking cloud catalog...</p>}
+                {cloudStatus === 'error' && <p className="text-xs text-rose-300">{cloudError || 'Could not load cloud catalog.'}</p>}
+                {cloudStatus === 'offline' && <p className="text-xs text-amber-200">Cloud unavailable. Local editing continues.</p>}
+                {cloudStatus === 'ready' && cloudDecks.length === 0 && (
+                  <p className="text-xs text-slate-400">No cloud decks available.</p>
+                )}
+                {cloudStatus === 'ready' && cloudDecks.length > 0 && (
+                  <div className="space-y-2">
+                    {cloudDecks.map((deckMeta) => (
+                      <CloudDeckCard
+                        key={deckMeta.id}
+                        deck={deckMeta}
+                        downloading={downloadingDeckId === deckMeta.id}
+                        onDownload={onDownloadCloudDeck}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+
+          {validation.global.length > 0 && (
+            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              {validation.global.map((issue) => (
+                <p key={issue}>{issue}</p>
+              ))}
+            </div>
+          )}
+
+          {invalidSlideCount > 0 && (
+            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              {invalidSlideCount} question{invalidSlideCount > 1 ? 's' : ''} need fixes before export or launch.
+            </div>
+          )}
+
+          {actionMessage && (
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+              {actionMessage}
+            </div>
+          )}
         </div>
       </aside>
     </div>
