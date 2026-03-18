@@ -454,7 +454,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   }, []);
 
   const emitSelectedDeck = (deckName, deckSource, deckQuestions) => {
-    if (!roomId || !socketRef.current?.connected) {
+    if (!socketRef.current?.connected) {
       setError('Room is not connected yet. Try again.');
       return;
     }
@@ -870,6 +870,104 @@ export default function Host({ onBack, studioQuestions = null }) {
     onBack?.();
   };
 
+  const handleHostNewRoom = () => {
+    clearHostState();
+    setFinalScores([]);
+    setQuestion(null);
+    setResultData(null);
+    setQIndex(0);
+    setQTotal(0);
+    setAnswerCount(0);
+    setPlayers([]);
+    setRoomId(null);
+    setIsDeckReady(false);
+    setDeckLabel('No deck selected');
+    setSelectedDeckKey('');
+    setSelectedDeckSource('none');
+    setSelectedDeckCount(null);
+    setError('');
+    setPhase('setup');
+  };
+
+  const handleHostPlayAgainSameDeck = () => {
+    if (!selectedDeckKey) {
+      setError('No previous deck found. Choose a deck and start a new room.');
+      return;
+    }
+    if (!socketRef.current?.connected) {
+      setError('Not connected.');
+      return;
+    }
+    if (!hostToken) {
+      setError('Host token invalid. Restart the application.');
+      return;
+    }
+
+    const preservedDeckKey = selectedDeckKey;
+    const nextRoomName = roomName.trim() || 'LocalFlux Game';
+    setError('');
+
+    socketRef.current.emit('create_room', { roomName: nextRoomName, hostSessionId: hostSessionIdRef.current, hostToken }, async (res) => {
+      if (!res?.success) {
+        setError(res?.error || 'Failed to create room.');
+        return;
+      }
+
+      setRoomName(nextRoomName);
+      setRoomId(LAN_ROOM);
+      setPhase('lobby');
+      setFinalScores([]);
+      setQuestion(null);
+      setResultData(null);
+      setQIndex(0);
+      setQTotal(0);
+      setAnswerCount(0);
+      setIsDeckReady(false);
+      setError('');
+
+      if (chatMode) {
+        const modePayload = { mode: chatMode, hostToken };
+        if (chatMode === 'RESTRICTED' && allowedList.length > 0) modePayload.allowed = allowedList;
+        socketRef.current.emit('chat:host_set_mode', modePayload, (ack) => {
+          if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
+        });
+      }
+
+      try {
+        await handleDeckSelection({ target: { value: preservedDeckKey } });
+      } catch {
+        setError('Room created, but failed to re-apply the previous deck.');
+      }
+    });
+  };
+
+  const handleExportFinalScores = () => {
+    const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
+    if (rankedFinalScores.length === 0) {
+      setError('No scores available to export.');
+      return;
+    }
+
+    const csvRows = [
+      ['rank', 'name', 'score'],
+      ...rankedFinalScores.map((p, index) => [index + 1, String(p?.name || 'Player'), Number(p?.score || 0)]),
+    ];
+
+    const csv = csvRows
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `localflux-final-scores-${Date.now()}.csv`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const renderLobbyAvatar = (player) => {
     const avatarObject = normalizeAvatarObject(player?.avatarObject);
     return (
@@ -892,18 +990,75 @@ export default function Host({ onBack, studioQuestions = null }) {
   };
 
   if (phase === 'gameover') {
+    const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
+
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col p-6 pt-10 animate-phase-in">
         <p className="mb-5 text-[11px] uppercase tracking-[0.28em] text-slate-500">Final Scores</p>
         <h2 className="text-4xl font-black tracking-tight mb-8">Results</h2>
         <div className="flex flex-col gap-3 flex-1">
-          {finalScores.map((p, i) => (
-            <div key={p.name} className={`flex items-center justify-between rounded-2xl border px-4 py-4 ${i === 0 ? 'border-amber-300/50 bg-amber-300/15 text-amber-100' : 'border-slate-800 bg-slate-900/80 text-white'}`}>
-              <span className="font-mono text-sm w-6 tabular-nums">{i + 1}</span>
-              <span className="flex-1 font-semibold">{p.name}</span>
-              <span className="font-black text-amber-300 tabular-nums">{p.score}</span>
+          {rankedFinalScores.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-slate-900/70 px-4 py-8 text-center">
+              <p className="text-sm text-slate-400">No scores were captured for this round.</p>
+              <p className="mt-2 text-xs text-slate-500">Start a new room to run another game.</p>
             </div>
-          ))}
+          )}
+
+          {rankedFinalScores.map((p, i) => {
+            const isTopOne = i === 0;
+            const isTopTwo = i === 1;
+            const isTopThree = i === 2;
+            const placementClass =
+              isTopOne
+                ? 'border-amber-300/50 bg-amber-300/15 text-amber-100'
+                : isTopTwo
+                  ? 'border-slate-300/40 bg-slate-200/10 text-slate-100'
+                  : isTopThree
+                    ? 'border-orange-300/40 bg-orange-300/10 text-orange-100'
+                    : 'border-slate-800 bg-slate-900/80 text-white';
+            const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
+
+            return (
+              <div key={p.id || `${p.name}_${i}`} className={`flex items-center justify-between rounded-2xl border px-4 py-4 ${placementClass}`}>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm w-6 tabular-nums">{i + 1}</span>
+                  {medal && <span className="text-base leading-none">{medal}</span>}
+                </div>
+                <span className="flex-1 font-semibold">{p.name}</span>
+                <span className="font-black text-amber-300 tabular-nums">{p.score}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <button
+            onClick={handleHostPlayAgainSameDeck}
+            className="w-full rounded-2xl border border-emerald-500/40 bg-emerald-500/10 py-4 text-lg font-black text-emerald-200 transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-500/20 active:translate-y-0 active:scale-95"
+          >
+            PLAY AGAIN
+          </button>
+          <button
+            onClick={handleHostNewRoom}
+            className="w-full rounded-2xl bg-emerald-400 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
+          >
+            NEW ROOM
+          </button>
+          <button
+            onClick={handleExportFinalScores}
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95"
+          >
+            EXPORT CSV
+          </button>
+        </div>
+
+        <div className="mt-3">
+          <button
+            onClick={handleBack}
+            className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95"
+          >
+            EXIT HOST
+          </button>
         </div>
 
         {showDraftManager && (

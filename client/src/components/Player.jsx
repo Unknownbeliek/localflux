@@ -236,6 +236,46 @@ export default function Player({ onBack }) {
     handleBack();
   };
 
+  const handleBackToLobby = () => {
+    if (!socketRef.current?.connected) {
+      setError('Not connected. Please retry in a moment.');
+      return;
+    }
+
+    setError('');
+    socketRef.current.emit(
+      'join',
+      {
+        playerName: latestNameRef.current || 'Guest',
+        playerSessionId: playerSessionIdRef.current,
+      },
+      (res) => {
+        if (!res?.success) {
+          setError(res?.error || 'Could not rejoin lobby.');
+          return;
+        }
+
+        if (typeof res.playerName === 'string' && res.playerName.trim()) {
+          setName(res.playerName.trim());
+        }
+        if (res.avatarObject && typeof res.avatarObject === 'object') {
+          setAvatarObject(normalizeAvatarObject(res.avatarObject));
+        }
+
+        setRoomName(res.roomName || 'LocalFlux Game');
+        if (res.chatMode) setChatMode(res.chatMode);
+        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+        setIsLobbyDeckReady(Boolean(res.deckSelected));
+        setMyScore(Number(res.myScore) || 0);
+        setFinalScores([]);
+        setQuestion(null);
+        setSelected(null);
+        setResultData(null);
+        setPhase('waiting');
+      }
+    );
+  };
+
   const handleAnswer = (opt) => {
     if (selected) return;
     setSelected(opt);
@@ -308,8 +348,10 @@ export default function Player({ onBack }) {
   if (phase === 'gameover') {
     const myEntry = finalScores.find(p => p.id === selfPlayerId);
     const myRank = finalScores.findIndex(p => p.id === selfPlayerId) + 1;
+    const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col p-5 pt-8 animate-phase-in">
+        {renderLeaveAndPing()}
         <p className="mb-5 text-[11px] uppercase tracking-[0.28em] text-slate-500">Game Over</p>
         <h2 className="text-4xl font-black tracking-tight mb-2">Final Standings</h2>
         {myEntry && (
@@ -318,26 +360,49 @@ export default function Player({ onBack }) {
           </p>
         )}
         <div className="flex flex-col gap-3 flex-1">
-          {finalScores.map((p, i) => (
-            <div
-              key={p.id || `${p.name}_${i}`}
-              className={`flex items-center justify-between rounded-2xl px-4 py-4 border ${
-                i === 0
-                  ? 'border-amber-300/50 bg-amber-300/15 text-amber-100'
-                  : p.id === selfPlayerId
-                    ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-100'
-                    : 'border-slate-800 bg-slate-900/80 text-white'
-              }`}
-            >
-              <span className="font-mono text-sm w-6 tabular-nums">{i + 1}</span>
-              <span className="flex-1 font-semibold">{p.name}</span>
-              <span className="font-black tabular-nums">{p.score}</span>
-            </div>
-          ))}
+          {rankedFinalScores.map((p, i) => {
+            const isTopOne = i === 0;
+            const isTopTwo = i === 1;
+            const isTopThree = i === 2;
+            const isMe = p.id === selfPlayerId;
+            const placementClass =
+              isTopOne
+                ? 'border-amber-300/50 bg-amber-300/15 text-amber-100'
+                : isTopTwo
+                  ? 'border-slate-300/40 bg-slate-200/10 text-slate-100'
+                  : isTopThree
+                    ? 'border-orange-300/40 bg-orange-300/10 text-orange-100'
+                    : isMe
+                      ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-100'
+                      : 'border-slate-800 bg-slate-900/80 text-white';
+            const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
+
+            return (
+              <div
+                key={p.id || `${p.name}_${i}`}
+                className={`flex items-center justify-between rounded-2xl px-4 py-4 border ${placementClass}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm w-6 tabular-nums">{i + 1}</span>
+                  {medal && <span className="text-base leading-none">{medal}</span>}
+                </div>
+                <span className="flex-1 font-semibold">{p.name}</span>
+                <span className="font-black tabular-nums">{p.score}</span>
+              </div>
+            );
+          })}
         </div>
-        <button onClick={handleBack} className="w-full mt-8 rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
-          HOME
-        </button>
+        {error && (
+          <p className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>
+        )}
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button onClick={handleBackToLobby} className="w-full rounded-2xl bg-emerald-400 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95">
+            BACK TO LOBBY
+          </button>
+          <button onClick={handleBack} className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
+            EXIT
+          </button>
+        </div>
       </div>
     );
   }
