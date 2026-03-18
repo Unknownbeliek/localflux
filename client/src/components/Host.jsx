@@ -1177,9 +1177,8 @@ export default function Host({ onBack, studioQuestions = null }) {
     return (
       <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white p-4 md:p-6 animate-phase-in">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.15),rgba(2,6,23,0)_70%)]" />
-        <div className="relative z-10 mx-auto grid max-w-7xl gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
-          <div className="flex flex-col gap-4">
-            <header className="flex items-center justify-between gap-4 rounded-3xl border border-slate-800 bg-slate-900/70 p-4">
+        <div className="relative z-10 -mx-4 mb-4 border-y border-slate-800 bg-slate-900/70 px-4 py-4 md:-mx-6 md:px-6">
+          <header className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <button onClick={handleBack} className="rounded-lg px-3 py-2 text-sm text-slate-400 transition-colors hover:bg-slate-800 hover:text-white">Back</button>
               <div className="flex items-center gap-2">
@@ -1191,12 +1190,14 @@ export default function Host({ onBack, studioQuestions = null }) {
             <div className="flex items-center gap-2">
               <PingIndicator socket={hostSocket} />
               <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-semibold text-emerald-300">Session Active</span>
+                <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-xs font-semibold text-emerald-300">Session Active</span>
               </div>
             </div>
-            </header>
-
+          </header>
+        </div>
+        <div className="relative z-10 mx-auto grid max-w-7xl gap-4 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
+          <div className="flex flex-col gap-4">
             <section className="grid gap-4 md:grid-cols-2">
               <div className="rounded-3xl border border-slate-800 bg-slate-900/70 p-5">
                 <div className="mb-4 text-[11px] uppercase tracking-[0.26em] text-slate-500">Join Link</div>
