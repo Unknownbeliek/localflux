@@ -81,6 +81,39 @@ app.get('/api/decks', (req, res) => {
   res.json(decks);
 });
 
+app.get('/api/decks/:file', (req, res) => {
+  const requested = String(req.params.file || '');
+  if (!requested.endsWith('.json') || requested.includes('/') || requested.includes('\\')) {
+    return res.status(400).json({ error: 'Invalid deck file.' });
+  }
+
+  const decksDir = path.resolve(__dirname, '..', 'data', 'decks');
+  const deckPath = path.resolve(decksDir, requested);
+  if (!deckPath.startsWith(decksDir)) {
+    return res.status(400).json({ error: 'Invalid deck path.' });
+  }
+  if (!fs.existsSync(deckPath)) {
+    return res.status(404).json({ error: 'Deck not found.' });
+  }
+
+  try {
+    const data = JSON.parse(fs.readFileSync(deckPath, 'utf8'));
+    if (!Array.isArray(data.questions)) {
+      return res.status(422).json({ error: 'Deck format invalid.' });
+    }
+
+    return res.json({
+      name: requested.replace('.json', ''),
+      file: requested,
+      count: data.questions.length,
+      questions: data.questions,
+    });
+  } catch (error) {
+    console.error(`[Deck] Error reading ${requested}:`, error.message);
+    return res.status(500).json({ error: 'Failed to read deck file.' });
+  }
+});
+
 //  Log downloading endpoint
 
 app.get('/logs/chat', (req, res) => {

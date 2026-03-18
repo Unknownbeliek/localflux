@@ -31,6 +31,20 @@ function App() {
             } />
           }
         />
+        <Route
+          path="/deck"
+          element={
+            <ProtectedRoute element={
+              <DeckStudio
+                onBack={() => window.location.href = '/'}
+                onHostDeck={(questions) => {
+                  setStudioQuestions(questions)
+                  window.location.href = '/host'
+                }}
+              />
+            } />
+          }
+        />
       </Routes>
       </BrowserRouter>
     </HostTokenProvider>

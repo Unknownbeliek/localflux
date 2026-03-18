@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import Chat from './Chat';
 import { createGameSocket } from '../backendUrl';
-import { Rocket, Shield, Zap, Flame } from 'lucide-react';
+import PingIndicator from './PingIndicator';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
@@ -22,24 +22,12 @@ const PRESET_AVATARS = [
   '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
   'e55afb4aea57bced165fb55ad92addf5.jpg',
 ];
-const GRADIENT_AVATARS = [
-  { value: 'emerald', className: 'bg-gradient-to-br from-emerald-300 via-emerald-500 to-teal-600' },
-  { value: 'sunset', className: 'bg-gradient-to-br from-amber-300 via-orange-500 to-rose-600' },
-  { value: 'ocean', className: 'bg-gradient-to-br from-cyan-300 via-sky-500 to-indigo-700' },
-  { value: 'neon', className: 'bg-gradient-to-br from-lime-300 via-green-500 to-emerald-700' },
-];
-const ICON_AVATARS = [
-  { value: 'rocket', Icon: Rocket },
-  { value: 'shield', Icon: Shield },
-  { value: 'zap', Icon: Zap },
-  { value: 'flame', Icon: Flame },
-];
 
 function normalizeAvatarObject(input) {
-  if (!input || typeof input !== 'object') return { type: 'gradient', value: 'emerald' };
-  if (!['preset', 'gradient', 'icon'].includes(input.type)) return { type: 'gradient', value: 'emerald' };
-  if (!String(input.value || '').trim()) return { type: 'gradient', value: 'emerald' };
-  return { type: input.type, value: String(input.value).trim() };
+  if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
+  const value = String(input.value || '').trim();
+  if (input.type !== 'preset' || !value) return { type: 'preset', value: '1.jpg' };
+  return { type: 'preset', value };
 }
 
 function resolvePresetPath(value) {
@@ -80,15 +68,23 @@ function clearPlayerState() {
   window.localStorage.removeItem(PLAYER_STATE_KEY);
 }
 
+function displayRoomName(name) {
+  const normalized = String(name || '').trim();
+  if (!normalized || normalized.toLowerCase() === LAN_ROOM) {
+    return 'LocalFlux Room';
+  }
+  return normalized;
+}
+
 export default function Player({ onBack }) {
   const savedPlayerState = readPlayerState();
   const playerSessionIdRef = useRef(getOrCreatePlayerSessionId());
-  const resumeAttemptedRef = useRef(false);
   const socketRef = useRef(null);
   const [connected, setConnected] = useState(false);
+  const [chatSocket, setChatSocket] = useState(null);
+  const [selfPlayerId, setSelfPlayerId] = useState('');
   const [name, setName] = useState(savedPlayerState?.name || 'Guest');
   const [avatarObject, setAvatarObject] = useState(normalizeAvatarObject(savedPlayerState?.avatarObject));
-  const [avatarTab, setAvatarTab] = useState(savedPlayerState?.avatarObject?.type || 'preset');
   const [isEditingName, setIsEditingName] = useState(false);
   const [hiddenPresetPaths, setHiddenPresetPaths] = useState(() => new Set());
   const [error, setError] = useState('');
@@ -103,11 +99,55 @@ export default function Player({ onBack }) {
   const [finalScores, setFinalScores] = useState([]);
   const [chatMode, setChatMode] = useState('FREE');
   const [chatAllowed, setChatAllowed] = useState([]);
+  const [isLobbyDeckReady, setIsLobbyDeckReady] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
-  const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
+  const [joinRetryIn, setJoinRetryIn] = useState(0);
+  const roomDisplayName = displayRoomName(roomName);
+  const latestNameRef = useRef(name);
+
+  const attemptJoinRoom = () => {
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      setError('Connecting to server...');
+      return;
+    }
+
+    socket.emit(
+      'join',
+      {
+        playerName: latestNameRef.current || 'Guest',
+        playerSessionId: playerSessionIdRef.current,
+      },
+      (res) => {
+        if (!res?.success) {
+          setError(res?.error || 'Could not join game.');
+          return;
+        }
+
+        setError('');
+        setJoinRetryIn(0);
+        if (typeof res.playerName === 'string' && res.playerName.trim()) {
+          setName(res.playerName.trim());
+        }
+        if (res.avatarObject && typeof res.avatarObject === 'object') {
+          setAvatarObject(normalizeAvatarObject(res.avatarObject));
+        }
+        setRoomName(res.roomName || 'LocalFlux Game');
+        if (res.chatMode) setChatMode(res.chatMode);
+        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+        setIsLobbyDeckReady(Boolean(res.deckSelected));
+        setMyScore(Number(res.myScore) || 0);
+        setPhase('waiting');
+      }
+    );
+  };
+
+  useEffect(() => {
+    latestNameRef.current = name;
+  }, [name]);
 
   useEffect(() => {
     if (!name.trim() && !roomName.trim()) return;
@@ -122,32 +162,18 @@ export default function Player({ onBack }) {
   useEffect(() => {
     const socket = createGameSocket();
     socketRef.current = socket;
+    const chatSocketTimer = window.setTimeout(() => {
+      setChatSocket(socket);
+    }, 0);
     socket.on('connect', () => {
       setConnected(true);
-
-      // Auto-join to LAN room on connect
-      socket.emit(
-        'join',
-        {
-          playerName: name || 'Guest',
-          playerSessionId: playerSessionIdRef.current,
-        },
-        (res) => {
-          if (!res?.success) {
-            setError(res?.error || 'Could not join game.');
-            return;
-          }
-
-          setError('');
-          setRoomName(res.roomName || 'LocalFlux Game');
-          if (res.chatMode) setChatMode(res.chatMode);
-          if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
-          setMyScore(Number(res.myScore) || 0);
-          setPhase('waiting');
-        }
-      );
+      setSelfPlayerId(socket.id || '');
+      attemptJoinRoom();
     });
-    socket.on('disconnect', () => setConnected(false));
+    socket.on('disconnect', () => {
+      setConnected(false);
+      setJoinRetryIn(0);
+    });
     socket.on('player:profileUpdated', ({ player }) => {
       if (!player || player.id !== socket.id) return;
       if (typeof player.name === 'string') setName(player.name);
@@ -157,9 +183,16 @@ export default function Player({ onBack }) {
       if (mode) setChatMode(mode);
       if (Array.isArray(allowed)) setChatAllowed(allowed);
     });
+    socket.on('room:deck_updated', ({ selected }) => {
+      if (typeof selected === 'boolean') {
+        setIsLobbyDeckReady(selected);
+        return;
+      }
+      setIsLobbyDeckReady(true);
+    });
     socket.on('room_closed', ({ message }) => {
       setError(message || 'Room closed by host.');
-      setPhase('join');
+      setPhase('joining');
       setRoomName('');
       clearPlayerState();
     });
@@ -188,10 +221,36 @@ export default function Player({ onBack }) {
       setPhase('gameover');
     });
     return () => {
+      window.clearTimeout(chatSocketTimer);
       socket.off('chat:mode');
+      setChatSocket(null);
       socket.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (phase !== 'joining' || !connected) return undefined;
+
+    let remaining = 3;
+    const kickoffTimer = window.setTimeout(() => {
+      attemptJoinRoom();
+      setJoinRetryIn(remaining);
+    }, 0);
+
+    const retryTimer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        attemptJoinRoom();
+        remaining = 3;
+      }
+      setJoinRetryIn(remaining);
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(kickoffTimer);
+      window.clearInterval(retryTimer);
+    };
+  }, [phase, connected]);
 
   useEffect(() => {
     if (!(phase === 'question' || phase === 'answered') || !questionEndsAt) return undefined;
@@ -199,7 +258,7 @@ export default function Player({ onBack }) {
       const remaining = Math.max(0, Math.ceil((questionEndsAt - Date.now()) / 1000));
       setTimeLeft(remaining);
       if (remaining <= 0) window.clearInterval(timer);
-    }, 250);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
 
@@ -212,6 +271,46 @@ export default function Player({ onBack }) {
     const ok = window.confirm('Leave this room and return home?');
     if (!ok) return;
     handleBack();
+  };
+
+  const handleBackToLobby = () => {
+    if (!socketRef.current?.connected) {
+      setError('Not connected. Please retry in a moment.');
+      return;
+    }
+
+    setError('');
+    socketRef.current.emit(
+      'join',
+      {
+        playerName: latestNameRef.current || 'Guest',
+        playerSessionId: playerSessionIdRef.current,
+      },
+      (res) => {
+        if (!res?.success) {
+          setError(res?.error || 'Could not rejoin lobby.');
+          return;
+        }
+
+        if (typeof res.playerName === 'string' && res.playerName.trim()) {
+          setName(res.playerName.trim());
+        }
+        if (res.avatarObject && typeof res.avatarObject === 'object') {
+          setAvatarObject(normalizeAvatarObject(res.avatarObject));
+        }
+
+        setRoomName(res.roomName || 'LocalFlux Game');
+        if (res.chatMode) setChatMode(res.chatMode);
+        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+        setIsLobbyDeckReady(Boolean(res.deckSelected));
+        setMyScore(Number(res.myScore) || 0);
+        setFinalScores([]);
+        setQuestion(null);
+        setSelected(null);
+        setResultData(null);
+        setPhase('waiting');
+      }
+    );
   };
 
   const handleAnswer = (opt) => {
@@ -242,32 +341,18 @@ export default function Player({ onBack }) {
   };
 
   const renderAvatarBadge = (sizeClass = 'h-12 w-12') => {
-    if (avatarObject.type === 'preset') {
-      return (
-        <div
-          className={`${sizeClass} rounded-full border border-slate-600 p-1 shadow-inner`}
-          style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}
-        >
-          <img
-            src={resolvePresetPath(avatarObject.value)}
-            alt="Selected avatar"
-            className="h-full w-full rounded-full object-contain drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]"
-          />
-        </div>
-      );
-    }
-    if (avatarObject.type === 'icon') {
-      const iconEntry = ICON_AVATARS.find((entry) => entry.value === avatarObject.value) || ICON_AVATARS[0];
-      const AvatarIcon = iconEntry.Icon;
-      return (
-        <div className={`${sizeClass} rounded-full border border-emerald-500/40 bg-emerald-500/15 flex items-center justify-center text-emerald-200`}>
-          <AvatarIcon size={22} strokeWidth={2.4} />
-        </div>
-      );
-    }
-
-    const gradient = GRADIENT_AVATARS.find((entry) => entry.value === avatarObject.value)?.className || GRADIENT_AVATARS[0].className;
-    return <div className={`${sizeClass} rounded-full border border-white/20 ${gradient}`} />;
+    return (
+      <div
+        className={`${sizeClass} rounded-full border border-slate-600 p-1 shadow-inner`}
+        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}
+      >
+        <img
+          src={resolvePresetPath(avatarObject.value)}
+          alt="Selected avatar"
+          className="h-full w-full rounded-full object-contain drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]"
+        />
+      </div>
+    );
   };
 
   const timerTone =
@@ -277,11 +362,33 @@ export default function Player({ onBack }) {
         ? 'text-amber-300'
         : 'text-emerald-300';
 
+  const renderLeaveAndPing = ({ inline = false, leaveButtonClass = '' } = {}) => {
+    const buttonClass = leaveButtonClass || 'rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800';
+
+    if (inline) {
+      return (
+        <div className="mb-2 flex items-center gap-2">
+          <button onClick={handleLeaveRoom} className={buttonClass}>Leave</button>
+          <PingIndicator socket={chatSocket} />
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <button onClick={handleLeaveRoom} className={`absolute top-5 left-5 ${buttonClass}`}>Leave</button>
+        <PingIndicator socket={chatSocket} className="absolute top-5 right-5" />
+      </>
+    );
+  };
+
   if (phase === 'gameover') {
-    const myEntry = finalScores.find(p => p.id === socketRef.current?.id);
-    const myRank = finalScores.findIndex(p => p.id === socketRef.current?.id) + 1;
+    const myEntry = finalScores.find(p => p.id === selfPlayerId);
+    const myRank = finalScores.findIndex(p => p.id === selfPlayerId) + 1;
+    const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col p-5 pt-8 animate-phase-in">
+        {renderLeaveAndPing()}
         <p className="mb-5 text-[11px] uppercase tracking-[0.28em] text-slate-500">Game Over</p>
         <h2 className="text-4xl font-black tracking-tight mb-2">Final Standings</h2>
         {myEntry && (
@@ -290,26 +397,49 @@ export default function Player({ onBack }) {
           </p>
         )}
         <div className="flex flex-col gap-3 flex-1">
-          {finalScores.map((p, i) => (
-            <div
-              key={p.name}
-              className={`flex items-center justify-between rounded-2xl px-4 py-4 border ${
-                i === 0
-                  ? 'border-amber-300/50 bg-amber-300/15 text-amber-100'
-                  : p.id === socketRef.current?.id
-                    ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-100'
-                    : 'border-slate-800 bg-slate-900/80 text-white'
-              }`}
-            >
-              <span className="font-mono text-sm w-6 tabular-nums">{i + 1}</span>
-              <span className="flex-1 font-semibold">{p.name}</span>
-              <span className="font-black tabular-nums">{p.score}</span>
-            </div>
-          ))}
+          {rankedFinalScores.map((p, i) => {
+            const isTopOne = i === 0;
+            const isTopTwo = i === 1;
+            const isTopThree = i === 2;
+            const isMe = p.id === selfPlayerId;
+            const placementClass =
+              isTopOne
+                ? 'border-amber-300/50 bg-amber-300/15 text-amber-100'
+                : isTopTwo
+                  ? 'border-slate-300/40 bg-slate-200/10 text-slate-100'
+                  : isTopThree
+                    ? 'border-orange-300/40 bg-orange-300/10 text-orange-100'
+                    : isMe
+                      ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-100'
+                      : 'border-slate-800 bg-slate-900/80 text-white';
+            const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
+
+            return (
+              <div
+                key={p.id || `${p.name}_${i}`}
+                className={`flex items-center justify-between rounded-2xl px-4 py-4 border ${placementClass}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-sm w-6 tabular-nums">{i + 1}</span>
+                  {medal && <span className="text-base leading-none">{medal}</span>}
+                </div>
+                <span className="flex-1 font-semibold">{p.name}</span>
+                <span className="font-black tabular-nums">{p.score}</span>
+              </div>
+            );
+          })}
         </div>
-        <button onClick={handleBack} className="w-full mt-8 rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
-          HOME
-        </button>
+        {error && (
+          <p className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>
+        )}
+        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <button onClick={handleBackToLobby} className="w-full rounded-2xl bg-emerald-400 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95">
+            BACK TO LOBBY
+          </button>
+          <button onClick={handleBack} className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
+            EXIT
+          </button>
+        </div>
       </div>
     );
   }
@@ -318,7 +448,7 @@ export default function Player({ onBack }) {
     const gotIt = selected === resultData.correct_answer;
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-6 gap-6 text-white animate-phase-in ${gotIt ? 'bg-emerald-950' : 'bg-rose-950'}`}>
-        <button onClick={handleLeaveRoom} className="absolute top-5 left-5 rounded-lg border border-white/20 bg-black/30 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/85 transition hover:bg-black/45">Leave</button>
+        {renderLeaveAndPing({ leaveButtonClass: 'rounded-lg border border-white/20 bg-black/30 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/85 transition hover:bg-black/45' })}
         <div className={`text-6xl font-black tracking-tight ${gotIt ? 'text-emerald-300' : 'text-rose-300'}`}>
           {gotIt ? 'CORRECT' : 'INCORRECT'}
         </div>
@@ -334,7 +464,7 @@ export default function Player({ onBack }) {
   if (phase === 'answered') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 gap-4 animate-phase-in">
-        <button onClick={handleLeaveRoom} className="absolute top-5 left-5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
+        {renderLeaveAndPing()}
         <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Answer Locked</p>
         <p className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">{selected}</p>
         <div className={`mt-2 text-3xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</div>
@@ -354,8 +484,8 @@ export default function Player({ onBack }) {
       <div className="min-h-screen bg-slate-950 text-white flex flex-col p-4 pt-6 pb-24 md:pb-6 animate-phase-in">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <button onClick={handleLeaveRoom} className="mb-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomName}</p>
+            {renderLeaveAndPing({ inline: true })}
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-right">
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
@@ -377,7 +507,7 @@ export default function Player({ onBack }) {
         <div className="grid grid-cols-1 gap-4 content-start">
           {question.options.map((opt, idx) => (
             <button
-              key={opt}
+              key={`${question?.q_id || 'q'}_${idx}_${opt}`}
               onClick={() => handleAnswer(opt)}
               className={`w-full rounded-2xl border px-5 py-6 text-left text-xl font-black transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${
                 idx % 4 === 0
@@ -395,7 +525,7 @@ export default function Player({ onBack }) {
         </div>
 
         <div className="mt-5 hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-3 md:block">
-          <Chat socket={socketRef.current} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
         </div>
 
         <button
@@ -423,7 +553,7 @@ export default function Player({ onBack }) {
                 </button>
               </div>
               <div className="min-h-0 flex-1">
-                <Chat socket={socketRef.current} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+                <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
               </div>
             </div>
           </>
@@ -435,16 +565,15 @@ export default function Player({ onBack }) {
   if (phase === 'waiting') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-3 p-5 animate-phase-in">
-        <button onClick={handleLeaveRoom} className="absolute top-5 left-5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
-        <p className="text-3xl font-black tracking-tight">{roomName || 'Lobby'}</p>
+        {renderLeaveAndPing()}
+        <p className="text-3xl font-black tracking-tight">{roomDisplayName}</p>
         <p className="text-slate-400 text-sm font-mono">Waiting for host to start...</p>
+        <p className={`text-xs font-semibold ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
+          {isLobbyDeckReady ? 'Deck locked in! Get ready.' : 'Waiting for host to choose a deck...'}
+        </p>
         <p className={`text-xs font-mono mt-2 ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           {connected ? 'connected' : 'reconnecting...'}
         </p>
-
-        <div className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-          Chat Mode: <span className={`${chatMode === 'FREE' ? 'text-emerald-300' : chatMode === 'RESTRICTED' ? 'text-amber-200' : 'text-slate-500'}`}>{modeLabels[chatMode] || chatMode}</span>
-        </div>
 
         <section className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/75 p-4 shadow-xl shadow-black/30">
           <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Player ID Card</p>
@@ -481,92 +610,34 @@ export default function Player({ onBack }) {
 
               {isEditingName ? (
                 <>
-                  <div className="mt-4 mb-2 grid grid-cols-3 gap-2 rounded-xl border border-slate-700 bg-slate-900/70 p-1">
-                    {['preset', 'gradient', 'icon'].map((tab) => (
+                  <div className="mt-4 mb-2 grid grid-cols-4 gap-2">
+                    {PRESET_AVATARS.map((presetId) => (
+                      hiddenPresetPaths.has(presetId) ? null :
                       <button
-                        key={tab}
-                        onClick={() => setAvatarTab(tab)}
-                        className={`rounded-lg py-1.5 text-[11px] font-black uppercase tracking-[0.16em] transition ${
-                          avatarTab === tab ? 'bg-emerald-400 text-black' : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                        key={presetId}
+                        onClick={() => setAvatarObject({ type: 'preset', value: presetId })}
+                        className={`rounded-xl border p-1 transition ${
+                          avatarObject.value === presetId
+                            ? 'border-emerald-400 ring-2 ring-emerald-500/40'
+                            : 'border-slate-700 hover:border-slate-500'
                         }`}
+                        style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)' }}
                       >
-                        {tab}
+                        <img
+                          src={resolvePresetPath(presetId)}
+                          alt={`Avatar preset ${presetId}`}
+                          onError={() => {
+                            setHiddenPresetPaths((prev) => {
+                              const next = new Set(prev);
+                              next.add(presetId);
+                              return next;
+                            });
+                          }}
+                          className="h-14 w-full rounded-lg object-contain p-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] overflow-hidden"
+                        />
                       </button>
                     ))}
                   </div>
-
-                  {avatarTab === 'preset' && (
-                    <div className="grid grid-cols-4 gap-2">
-                      {PRESET_AVATARS.map((presetId) => (
-                        hiddenPresetPaths.has(presetId) ? null :
-                        <button
-                          key={presetId}
-                          onClick={() => setAvatarObject({ type: 'preset', value: presetId })}
-                          className={`rounded-xl border p-1 transition ${
-                            avatarObject.type === 'preset' && avatarObject.value === presetId
-                              ? 'border-emerald-400 ring-2 ring-emerald-500/40'
-                              : 'border-slate-700 hover:border-slate-500'
-                          }`}
-                          style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)' }}
-                        >
-                          <img
-                            src={resolvePresetPath(presetId)}
-                            alt={`Avatar preset ${presetId}`}
-                            onError={() => {
-                              setHiddenPresetPaths((prev) => {
-                                const next = new Set(prev);
-                                next.add(presetId);
-                                return next;
-                              });
-                            }}
-                            className="h-14 w-full rounded-lg object-contain p-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] overflow-hidden"
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {avatarTab === 'gradient' && (
-                    <div className="grid grid-cols-4 gap-2">
-                      {GRADIENT_AVATARS.map((entry) => (
-                        <button
-                          key={entry.value}
-                          onClick={() => setAvatarObject({ type: 'gradient', value: entry.value })}
-                          className={`rounded-xl border p-2 transition ${
-                            avatarObject.type === 'gradient' && avatarObject.value === entry.value
-                              ? 'border-emerald-400 ring-2 ring-emerald-500/40'
-                              : 'border-slate-700 hover:border-slate-500'
-                          }`}
-                        >
-                          <div className={`h-10 w-10 mx-auto rounded-full border border-white/20 ${entry.className}`} />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {avatarTab === 'icon' && (
-                    <div className="grid grid-cols-4 gap-2">
-                      {ICON_AVATARS.map((entry) => {
-                        const AvatarIcon = entry.Icon;
-                        const selectedIcon = avatarObject.type === 'icon' && avatarObject.value === entry.value;
-                        return (
-                          <button
-                            key={entry.value}
-                            onClick={() => setAvatarObject({ type: 'icon', value: entry.value })}
-                            className={`rounded-xl border p-2 transition ${
-                              selectedIcon
-                                ? 'border-emerald-400 bg-emerald-500/15 ring-2 ring-emerald-500/40 text-emerald-200'
-                                : 'border-slate-700 text-slate-300 hover:border-slate-500'
-                            }`}
-                          >
-                            <div className="h-10 w-10 mx-auto rounded-full border border-current/30 flex items-center justify-center">
-                              <AvatarIcon size={20} strokeWidth={2.3} />
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
 
                   <button
                     onClick={handleSaveProfile}
@@ -585,7 +656,7 @@ export default function Player({ onBack }) {
         </section>
 
         <div className="w-full max-w-md mt-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
-          <Chat socket={socketRef.current} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
         </div>
       </div>
     );
@@ -600,6 +671,19 @@ export default function Player({ onBack }) {
         <div className="w-full flex flex-col gap-3 items-center justify-center">
           <p className="text-slate-400 mb-4">One moment...</p>
           {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 w-full text-center">{error}</p>}
+          {connected && phase === 'joining' && (
+            <p className="text-xs font-mono text-slate-400">Auto retry in {joinRetryIn || 1}s</p>
+          )}
+          <button
+            onClick={() => {
+              attemptJoinRoom();
+              setJoinRetryIn(3);
+            }}
+            disabled={!connected}
+            className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-black text-slate-100 transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            RETRY NOW
+          </button>
           <div className={`flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
             {connected ? (
               <span>connected</span>

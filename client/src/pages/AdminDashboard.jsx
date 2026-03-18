@@ -10,6 +10,43 @@ export default function AdminDashboard() {
   const [isGeneratingToken, setIsGeneratingToken] = useState(false)
   const [tokenError, setTokenError] = useState('')
 
+  const requestHostToken = async () => {
+    const socket = createGameSocket()
+
+    if (!socket.connected) {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          socket.disconnect()
+          reject(new Error('Connection timeout'))
+        }, 5000)
+
+        socket.on('connect', () => {
+          clearTimeout(timeout)
+          resolve()
+        })
+      })
+    }
+
+    const tokenRes = await new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Token generation timeout'))
+      }, 5000)
+
+      socket.emit('admin:generate-host-token', {}, (res) => {
+        clearTimeout(timeout)
+        socket.disconnect()
+
+        if (res?.success && res?.token) {
+          resolve(res)
+        } else {
+          reject(new Error(res?.error || 'Failed to generate token'))
+        }
+      })
+    })
+
+    return tokenRes
+  }
+
   /**
    * Handle "Launch Game Screen" click.
    * Generates a host token and navigates to /host with token in URL.
@@ -19,43 +56,7 @@ export default function AdminDashboard() {
     setTokenError('')
 
     try {
-      // Create a temporary socket for token generation
-      const socket = createGameSocket()
-
-      // Wait for connection before emitting event
-      if (!socket.connected) {
-        await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            socket.disconnect()
-            reject(new Error('Connection timeout'))
-          }, 5000)
-
-          socket.on('connect', () => {
-            clearTimeout(timeout)
-            resolve()
-          })
-        })
-      }
-
-      // Request token with timeout
-      const tokenPromise = new Promise((resolve, reject) => {
-        const timeout = setTimeout(() => {
-          reject(new Error('Token generation timeout'))
-        }, 5000)
-
-        socket.emit('admin:generate-host-token', {}, (res) => {
-          clearTimeout(timeout)
-          socket.disconnect()
-
-          if (res?.success && res?.token) {
-            resolve(res)
-          } else {
-            reject(new Error(res?.error || 'Failed to generate token'))
-          }
-        })
-      })
-
-      const tokenRes = await tokenPromise
+      const tokenRes = await requestHostToken()
 
       // Store token in context and navigate to /host with token in URL
       setHostToken(tokenRes.token, tokenRes.ttlMs)
@@ -63,6 +64,21 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error('[AdminDashboard] Token generation error:', err)
       setTokenError(err.message || 'Failed to generate token. Try again.')
+      setIsGeneratingToken(false)
+    }
+  }
+
+  const handleOpenStudio = async () => {
+    setIsGeneratingToken(true)
+    setTokenError('')
+
+    try {
+      const tokenRes = await requestHostToken()
+      setHostToken(tokenRes.token, tokenRes.ttlMs)
+      navigate(`/studio?token=${encodeURIComponent(tokenRes.token)}`)
+    } catch (err) {
+      console.error('[AdminDashboard] Studio token error:', err)
+      setTokenError(err.message || 'Failed to open Deck Studio. Try again.')
       setIsGeneratingToken(false)
     }
   }
@@ -87,7 +103,8 @@ export default function AdminDashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Deck Studio button */}
           <button
-            onClick={() => navigate('/studio')}
+            onClick={handleOpenStudio}
+            disabled={isGeneratingToken}
             className="group relative overflow-hidden rounded-2xl border border-amber-400/40 bg-gradient-to-br from-amber-400/10 to-amber-600/5 p-6 transition-all duration-150 hover:-translate-y-1 hover:border-amber-400/60 hover:shadow-lg hover:shadow-amber-500/20 active:translate-y-0 active:scale-95"
           >
             {/* Background glow */}

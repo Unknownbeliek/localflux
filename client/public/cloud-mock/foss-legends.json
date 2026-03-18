@@ -1,0 +1,23 @@
+{
+  "title": "Open Source Legends",
+  "slides": [
+    {
+      "prompt": "Who created the Linux kernel?",
+      "image": "",
+      "options": ["Bill Gates", "Linus Torvalds", "Steve Jobs", "Richard Stallman"],
+      "correctIndex": 1
+    },
+    {
+      "prompt": "What does FOSS stand for?",
+      "image": "",
+      "options": ["Free and Open Source Software", "Fast Online Server System", "Federal Open Security Standard", "File Object Storage System"],
+      "correctIndex": 0
+    },
+    {
+      "prompt": "Which version control system was also created by Linus Torvalds?",
+      "image": "",
+      "options": ["Subversion", "Mercurial", "Git", "CVS"],
+      "correctIndex": 2
+    }
+  ]
+}

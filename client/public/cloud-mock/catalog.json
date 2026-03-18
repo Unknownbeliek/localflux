@@ -1,0 +1,14 @@
+{
+  "lastUpdated": "2026-03-18",
+  "decks": [
+    {
+      "id": "deck-foss-01",
+      "title": "Open Source Legends",
+      "description": "Test your knowledge of Linux, Git, and the FOSS movement.",
+      "questionCount": 3,
+      "author": "LocalFlux Admin",
+      "tags": ["Tech", "FOSS"],
+      "downloadUrl": "/cloud-mock/foss-legends.json"
+    }
+  ]
+}
