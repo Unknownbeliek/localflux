@@ -4,6 +4,7 @@ import Chat from './Chat';
 import { createGameSocket, getBackendUrl } from '../backendUrl';
 import { useHostToken } from '../context/HostTokenProvider';
 import { deckStudioDB } from '../deckStudio/db';
+import { saveDraft } from '../deckStudio/db';
 import { DeckSchema } from '../deckStudio/schemas';
 import { QRCodeSVG } from 'qrcode.react';
 import { Rocket, Shield, Zap, Flame } from 'lucide-react';
@@ -305,6 +306,11 @@ export default function Host({ onBack, studioQuestions = null }) {
     socket.on('answer_count', ({ count }) => setAnswerCount(count));
     socket.on('question_result', (data) => { setResultData(data); setPhase('result'); });
     socket.on('game_over', ({ scores }) => { setFinalScores(scores); setPhase('gameover'); });
+    socket.on('host:deck_updated', ({ deckName, deckSource, questionCount }) => {
+      if (deckName) setDeckLabel(deckName);
+      if (deckSource) setSelectedDeckSource(deckSource);
+      if (typeof questionCount === 'number') setSelectedDeckCount(questionCount);
+    });
     socket.on('host_reconnecting', ({ message }) => {
       if (message) setError(message);
     });
@@ -507,7 +513,7 @@ export default function Host({ onBack, studioQuestions = null }) {
       setPendingDroppedDeck(null);
     };
 
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const text = String(reader.result || '');
         let candidateDeck;
@@ -537,8 +543,43 @@ export default function Host({ onBack, studioQuestions = null }) {
           throw new Error(checked.error.issues[0]?.message || 'Deck validation failed.');
         }
 
-        setPendingDroppedDeck(checked.data);
-        setDropNotice(`Parsed and validated ${checked.data.title}. Ready to load.`);
+        const validatedDeck = checked.data;
+        const deckQuestions = studioSlidesToQuestions(validatedDeck.slides || []);
+
+        await saveDraft(validatedDeck);
+
+        setPendingDroppedDeck(validatedDeck);
+        setStudioDecks((prev) => {
+          const remaining = prev.filter((entry) => entry.id !== validatedDeck.id);
+          return [validatedDeck, ...remaining];
+        });
+        setSelectedDeckKey(`studio:${validatedDeck.id}`);
+        setSelectedDeckSource('studio');
+        setSelectedDeckCount(validatedDeck.slides.length);
+        setDeckLabel(validatedDeck.title);
+
+        if (pin && socketRef.current?.connected) {
+          socketRef.current.emit(
+            'host:set_deck',
+            {
+              hostToken,
+              deckName: validatedDeck.title,
+              deckSource: 'drop',
+              deckQuestions,
+            },
+            (ack) => {
+              if (!ack?.ok) {
+                setError(ack?.reason || 'Deck saved locally but failed to sync room.');
+                setDropNotice(`Saved ${validatedDeck.title}, but room sync failed.`);
+                return;
+              }
+              setDropNotice(`Loaded ${validatedDeck.title} (${validatedDeck.slides.length} questions) and synced to room.`);
+            }
+          );
+        } else {
+          setDropNotice(`Loaded ${validatedDeck.title} (${validatedDeck.slides.length} questions) to local library.`);
+        }
+
         setError('');
       } catch (err) {
         setPendingDroppedDeck(null);

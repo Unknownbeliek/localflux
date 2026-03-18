@@ -180,6 +180,40 @@ function registerHandlers(socket, io, questions, tokenManager) {
     callback({ success: true, pin: lanRoomId, deckSource: customQuestions ? 'studio' : 'default' });
   });
 
+  // ── host:set_deck ────────────────────────────────────────────────────────
+  socket.on('host:set_deck', ({ deckQuestions, deckName, deckSource, hostToken }, callback) => {
+    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+      console.warn(`[Warn] Unauthorized host:set_deck attempt from ${socket.id}`);
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+
+    const room = getRoom();
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
+
+    const customQuestions = normalizeCustomQuestions(deckQuestions);
+    if (!customQuestions) {
+      return callback?.({ ok: false, reason: 'invalid_deck_payload' });
+    }
+
+    room.questions = customQuestions;
+    room.deckMeta = {
+      name: String(deckName || 'Imported Deck').trim(),
+      source: String(deckSource || 'host').trim(),
+      count: customQuestions.length,
+      updatedAt: Date.now(),
+    };
+
+    io.to(LAN_ROOM_ID).emit('host:deck_updated', {
+      deckName: room.deckMeta.name,
+      deckSource: room.deckMeta.source,
+      questionCount: room.deckMeta.count,
+    });
+
+    callback?.({ ok: true, questionCount: customQuestions.length });
+  });
+
   // ── host:resume ─────────────────────────────────────────────────────────
   socket.on('host:resume', ({ pin, hostSessionId }, callback) => {
     const room = getRoom();
