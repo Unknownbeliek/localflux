@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useDeckStudioStore } from '../deckStudio/store';
+import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog';
+import CloudDeckCard from '../components/CloudDeckCard';
 
 function isSlideValid(slide) {
   return (
@@ -42,6 +44,10 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   const [csvText, setCsvText] = useState('');
   const [category, setCategory] = useState('General Knowledge');
   const [actionMessage, setActionMessage] = useState('');
+  const [cloudDecks, setCloudDecks] = useState([]);
+  const [cloudStatus, setCloudStatus] = useState('loading');
+  const [cloudError, setCloudError] = useState('');
+  const [downloadingDeckId, setDownloadingDeckId] = useState('');
 
   const csvTemplate =
     'prompt,optionA,optionB,optionC,optionD,correct,imageUrl\n' +
@@ -50,6 +56,36 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   useEffect(() => {
     initDraft();
   }, [initDraft]);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadCloudCatalog = async () => {
+      setCloudStatus('loading');
+      setCloudError('');
+      try {
+        const decks = await fetchCloudDecks();
+        if (!active) return;
+        setCloudDecks(decks);
+        setCloudStatus('ready');
+      } catch (err) {
+        if (!active) return;
+        const message = String(err?.message || '').toLowerCase();
+        const isOffline =
+          message.includes('failed to fetch') ||
+          message.includes('network') ||
+          message.includes('offline');
+        setCloudDecks([]);
+        setCloudStatus(isOffline ? 'offline' : 'error');
+        setCloudError(err?.message || 'Unable to load cloud decks.');
+      }
+    };
+
+    loadCloudCatalog();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const onKeyDown = (event) => {
@@ -149,6 +185,21 @@ export default function DeckStudio({ onBack, onHostDeck }) {
     }));
     onHostDeck(questions);
     setActionMessage('Launching host with this deck...');
+  };
+
+  const onDownloadCloudDeck = async (deckMeta) => {
+    if (!deckMeta?.deckUrl || downloadingDeckId) return;
+    setActionMessage('');
+    setDownloadingDeckId(deckMeta.id);
+    try {
+      const saved = await downloadDeckToLocal(deckMeta.deckUrl);
+      setActionMessage(`Downloaded "${saved.title}" to local deck storage.`);
+      await initDraft();
+    } catch (err) {
+      setActionMessage(err?.message || 'Cloud download failed.');
+    } finally {
+      setDownloadingDeckId('');
+    }
   };
 
   return (
@@ -309,6 +360,48 @@ export default function DeckStudio({ onBack, onHostDeck }) {
         </section>
 
         <section className="space-y-4">
+          {(cloudStatus === 'loading' || cloudStatus === 'ready' || cloudStatus === 'offline' || cloudStatus === 'error') && (
+            <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-2xl shadow-black/30">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Explore Cloud Decks</p>
+                {cloudStatus === 'offline' && (
+                  <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
+                    Offline Mode
+                  </span>
+                )}
+              </div>
+
+              {cloudStatus === 'loading' && (
+                <p className="text-xs text-slate-400">Checking cloud catalog...</p>
+              )}
+
+              {cloudStatus === 'ready' && cloudDecks.length > 0 && (
+                <div className="grid gap-2 md:grid-cols-2">
+                  {cloudDecks.map((deckMeta) => (
+                    <CloudDeckCard
+                      key={deckMeta.id}
+                      deck={deckMeta}
+                      downloading={downloadingDeckId === deckMeta.id}
+                      onDownload={onDownloadCloudDeck}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {cloudStatus === 'ready' && cloudDecks.length === 0 && (
+                <p className="text-xs text-slate-400">No cloud decks currently available.</p>
+              )}
+
+              {cloudStatus === 'error' && (
+                <p className="text-xs text-rose-300">{cloudError || 'Could not load cloud catalog.'}</p>
+              )}
+
+              {cloudStatus === 'offline' && (
+                <p className="text-xs text-amber-200/90">Cloud catalog unavailable. Local editing remains fully available.</p>
+              )}
+            </div>
+          )}
+
           <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-2xl shadow-black/30">
             <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Deck Preview</p>
 
