@@ -182,10 +182,11 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [copied, setCopied] = useState(false);
   const [availableDecks, setAvailableDecks] = useState([]);
   const [studioDecks, setStudioDecks] = useState([]);
-  const [selectedDeckKey, setSelectedDeckKey] = useState('server:default');
-  const [selectedDeckSource, setSelectedDeckSource] = useState('server');
+  const [selectedDeckKey, setSelectedDeckKey] = useState('');
+  const [selectedDeckSource, setSelectedDeckSource] = useState('none');
   const [selectedDeckCount, setSelectedDeckCount] = useState(null);
-  const [deckLabel, setDeckLabel] = useState('Default');
+  const [deckLabel, setDeckLabel] = useState('No deck selected');
+  const [isDeckReady, setIsDeckReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingDroppedDeck, setPendingDroppedDeck] = useState(null);
   const [dropNotice, setDropNotice] = useState('');
@@ -239,6 +240,10 @@ export default function Host({ onBack, studioQuestions = null }) {
           setPin(recoveredState.pin);
           setRoomName(res.roomName || recoveredState.roomName || '');
           setPlayers(Array.isArray(res.players) ? res.players : []);
+          setIsDeckReady(Boolean(res.deckSelected));
+          if (res.deckMeta?.name) setDeckLabel(res.deckMeta.name);
+          if (typeof res.deckMeta?.count === 'number') setSelectedDeckCount(res.deckMeta.count);
+          if (res.deckMeta?.source) setSelectedDeckSource(res.deckMeta.source);
 
           if (res.status === 'started' && res.activeQuestion) {
             const { question, index, total, durationMs, endsAt } = res.activeQuestion;
@@ -306,7 +311,8 @@ export default function Host({ onBack, studioQuestions = null }) {
     socket.on('answer_count', ({ count }) => setAnswerCount(count));
     socket.on('question_result', (data) => { setResultData(data); setPhase('result'); });
     socket.on('game_over', ({ scores }) => { setFinalScores(scores); setPhase('gameover'); });
-    socket.on('host:deck_updated', ({ deckName, deckSource, questionCount }) => {
+    socket.on('room:deck_updated', ({ selected, deckName, deckSource, questionCount }) => {
+      if (typeof selected === 'boolean') setIsDeckReady(selected);
       if (deckName) setDeckLabel(deckName);
       if (deckSource) setSelectedDeckSource(deckSource);
       if (typeof questionCount === 'number') setSelectedDeckCount(questionCount);
@@ -372,25 +378,32 @@ export default function Host({ onBack, studioQuestions = null }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (Array.isArray(studioQuestions) && studioQuestions.length > 0) {
-      setSelectedDeckKey('studio:session');
-      setSelectedDeckSource('studio');
-      setSelectedDeckCount(studioQuestions.length);
-      setDeckLabel(`Studio Session (${studioQuestions.length} questions)`);
+  const emitSelectedDeck = (deckName, deckSource, deckQuestions) => {
+    if (!pin || !socketRef.current?.connected) {
+      setError('Room is not connected yet. Try again.');
       return;
     }
+    socketRef.current.emit(
+      'host:set_deck',
+      {
+        hostToken,
+        deckName,
+        deckSource,
+        deckQuestions,
+      },
+      (ack) => {
+        if (!ack?.ok) {
+          setIsDeckReady(false);
+          setError(ack?.reason || 'Failed to apply selected deck.');
+          return;
+        }
+        setError('');
+        setIsDeckReady(true);
+      }
+    );
+  };
 
-    if (availableDecks.length > 0 && selectedDeckKey === 'server:default') {
-      const first = availableDecks[0];
-      setSelectedDeckKey(`server:${first.file}`);
-      setSelectedDeckSource('server');
-      setSelectedDeckCount(first.count);
-      setDeckLabel(first.name);
-    }
-  }, [availableDecks, selectedDeckKey, studioQuestions]);
-
-  const handleDeckSelection = (event) => {
+  const handleDeckSelection = async (event) => {
     const value = event.target.value;
     setSelectedDeckKey(value);
 
@@ -399,15 +412,18 @@ export default function Host({ onBack, studioQuestions = null }) {
       const count = Array.isArray(studioQuestions) ? studioQuestions.length : 0;
       setSelectedDeckCount(count);
       setDeckLabel(`Studio Session (${count} questions)`);
+      if (count > 0) emitSelectedDeck('Studio Session', 'studio', studioQuestions || []);
       return;
     }
 
     if (value.startsWith('studio:')) {
       const id = value.replace('studio:', '');
       const draft = studioDecks.find((item) => item.id === id);
+      const deckQuestions = studioSlidesToQuestions(draft?.slides || []);
       setSelectedDeckSource('studio');
       setSelectedDeckCount(draft?.slides?.length || 0);
       setDeckLabel(draft?.title || 'Studio Draft');
+      emitSelectedDeck(draft?.title || 'Studio Draft', 'studio', deckQuestions);
       return;
     }
 
@@ -417,6 +433,17 @@ export default function Host({ onBack, studioQuestions = null }) {
       setSelectedDeckSource('server');
       setSelectedDeckCount(deck?.count || 0);
       setDeckLabel(deck?.name || 'Bundled Deck');
+      try {
+        const res = await fetch(`${getBackendUrl()}/api/decks/${encodeURIComponent(file)}`);
+        const data = await res.json();
+        if (!Array.isArray(data?.questions)) {
+          throw new Error(data?.error || 'Invalid server deck payload.');
+        }
+        emitSelectedDeck(deck?.name || 'Bundled Deck', 'server', data.questions);
+      } catch (err) {
+        setIsDeckReady(false);
+        setError(err?.message || 'Could not load selected server deck.');
+      }
     }
   };
 
@@ -425,56 +452,27 @@ export default function Host({ onBack, studioQuestions = null }) {
     if (!socketRef.current?.connected) return setError('Not connected.');
     if (!hostToken) return setError('Host token invalid. Restart the application.');
     setError('');
-    const submitCreate = (deckQuestions) => {
-      const payload = { roomName, hostSessionId: hostSessionIdRef.current, hostToken };
-      if (Array.isArray(deckQuestions) && deckQuestions.length > 0) {
-        payload.deckQuestions = deckQuestions;
-      }
 
-      socketRef.current.emit('create_room', payload, (res) => {
-        if (res.success) { setPin(res.pin); setPhase('lobby');
-          // apply the selected chat mode immediately for the new room
-          if (chatMode) {
-            const modePayload = { pin: res.pin, mode: chatMode, hostToken };
-            if (chatMode === 'RESTRICTED' && allowedList.length > 0) modePayload.allowed = allowedList;
-            socketRef.current.emit('chat:host_set_mode', modePayload, (ack) => {
-              if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
-            });
-          }
+    socketRef.current.emit('create_room', { roomName, hostSessionId: hostSessionIdRef.current, hostToken }, (res) => {
+      if (res.success) {
+        setPin(res.pin);
+        setPhase('lobby');
+        setSelectedDeckKey('');
+        setSelectedDeckSource('none');
+        setSelectedDeckCount(null);
+        setDeckLabel('No deck selected');
+        setIsDeckReady(false);
+        if (chatMode) {
+          const modePayload = { pin: res.pin, mode: chatMode, hostToken };
+          if (chatMode === 'RESTRICTED' && allowedList.length > 0) modePayload.allowed = allowedList;
+          socketRef.current.emit('chat:host_set_mode', modePayload, (ack) => {
+            if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
+          });
         }
-        else setError(res?.error || 'Failed to create room.');
-      });
-    };
-
-    if (selectedDeckKey === 'studio:session') {
-      return submitCreate(studioQuestions || []);
-    }
-
-    if (selectedDeckKey.startsWith('studio:')) {
-      const id = selectedDeckKey.replace('studio:', '');
-      const draft = studioDecks.find((item) => item.id === id);
-      const questions = studioSlidesToQuestions(draft?.slides || []);
-      return submitCreate(questions);
-    }
-
-    if (selectedDeckKey.startsWith('server:')) {
-      const file = selectedDeckKey.replace('server:', '');
-      if (!file || file === 'default') return submitCreate(null);
-      fetch(`${getBackendUrl()}/api/decks/${encodeURIComponent(file)}`)
-        .then((r) => r.json())
-        .then((data) => {
-          if (!Array.isArray(data?.questions)) {
-            throw new Error(data?.error || 'Could not load selected deck.');
-          }
-          submitCreate(data.questions);
-        })
-        .catch((err) => {
-          setError(err?.message || 'Could not load selected deck.');
-        });
-      return;
-    }
-
-    submitCreate(null);
+        return;
+      }
+      setError(res?.error || 'Failed to create room.');
+    });
   };
 
   const handleDragOver = (event) => {
@@ -939,49 +937,58 @@ export default function Host({ onBack, studioQuestions = null }) {
                     <p className="text-sm font-black tracking-wide text-emerald-200">Drop .json, .flux, or .csv to load instantly</p>
                   </div>
                 )}
-                <div className="mb-4 text-[11px] uppercase tracking-[0.26em] text-slate-500">Active Deck</div>
+                <div className="mb-4 text-[11px] uppercase tracking-[0.26em] text-slate-500">Choose Deck</div>
                 <div className="mb-4 flex items-center gap-2">
                   <div className="h-3 w-3 rounded-full bg-emerald-400" />
                   <div className="text-sm font-semibold text-emerald-300">{deckLabel}</div>
                 </div>
-                <label className="mb-2 block text-xs text-slate-500">Select Deck</label>
-                <select
-                  value={selectedDeckKey}
-                  onChange={handleDeckSelection}
-                  className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
-                >
-                  <optgroup label={`Bundled Decks (${availableDecks.length})`}>
-                    {availableDecks.length === 0 && <option value="server:default">Default Server Deck</option>}
-                    {availableDecks.map((deck) => (
-                      <option key={deck.file} value={`server:${deck.file}`}>
-                        {deck.name} ({deck.count} questions)
-                      </option>
-                    ))}
-                  </optgroup>
-                  {Array.isArray(studioQuestions) && studioQuestions.length > 0 && (
-                    <optgroup label="Current Studio Launch">
-                      <option value="studio:session">Studio Session ({studioQuestions.length} questions)</option>
-                    </optgroup>
-                  )}
-                  <optgroup label={`Studio Drafts (${studioDecks.length})`}>
-                    {studioDecks.length === 0 && <option value="studio:none" disabled>No local studio drafts found</option>}
-                    {studioDecks.map((draft) => (
-                      <option key={draft.id} value={`studio:${draft.id}`}>
-                        {draft.title || 'Untitled'} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
-                      </option>
-                    ))}
-                  </optgroup>
-                </select>
-                <div className="mt-4 space-y-1 text-xs text-slate-500">
-                  <p>Active source: <span className="text-slate-300">{selectedDeckSource}</span></p>
-                  <p>Question count: <span className="text-slate-300">{selectedDeckCount ?? '--'}</span></p>
-                  {dropNotice && <p className="text-emerald-300">{dropNotice}</p>}
-                  <button
-                    onClick={() => { window.location.href = hostToken ? `/studio?token=${encodeURIComponent(hostToken)}` : '/studio'; }}
-                    className="mt-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-400/20"
-                  >
-                    Explore More (Cloud + Studio)
-                  </button>
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-2 block text-xs text-slate-500">Select Deck</label>
+                    <select
+                      value={selectedDeckKey}
+                      onChange={handleDeckSelection}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
+                    >
+                      <option value="">Choose a deck...</option>
+                      <optgroup label={`Bundled Decks (${availableDecks.length})`}>
+                        {availableDecks.map((deck) => (
+                          <option key={deck.file} value={`server:${deck.file}`}>
+                            {deck.name} ({deck.count} questions)
+                          </option>
+                        ))}
+                      </optgroup>
+                      {Array.isArray(studioQuestions) && studioQuestions.length > 0 && (
+                        <optgroup label="Current Studio Launch">
+                          <option value="studio:session">Studio Session ({studioQuestions.length} questions)</option>
+                        </optgroup>
+                      )}
+                      <optgroup label={`Studio Drafts (${studioDecks.length})`}>
+                        {studioDecks.length === 0 && <option value="studio:none" disabled>No local studio drafts found</option>}
+                        {studioDecks.map((draft) => (
+                          <option key={draft.id} value={`studio:${draft.id}`}>
+                            {draft.title || 'Untitled'} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
+                          </option>
+                        ))}
+                      </optgroup>
+                    </select>
+                    <div className="mt-3 space-y-1 text-xs text-slate-500">
+                      <p>Active source: <span className="text-slate-300">{selectedDeckSource}</span></p>
+                      <p>Question count: <span className="text-slate-300">{selectedDeckCount ?? '--'}</span></p>
+                      {dropNotice && <p className="text-emerald-300">{dropNotice}</p>}
+                    </div>
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-4">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Explore Cloud Decks</p>
+                    <p className="mt-2 text-xs text-slate-500">Cloud download options will appear here.</p>
+                    <button
+                      onClick={() => { window.location.href = hostToken ? `/studio?token=${encodeURIComponent(hostToken)}` : '/studio'; }}
+                      className="mt-3 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-400/20"
+                    >
+                      Open Studio (Build + Cloud)
+                    </button>
+                  </div>
                 </div>
               </div>
             </section>
@@ -1040,9 +1047,9 @@ export default function Host({ onBack, studioQuestions = null }) {
                 <div>
                   <button
                     onClick={handleStart}
-                    disabled={players.length === 0}
+                    disabled={players.length === 0 || !isDeckReady}
                     className={`rounded-2xl px-8 py-4 text-lg font-black transition-all duration-150 ${
-                      players.length === 0
+                      players.length === 0 || !isDeckReady
                         ? 'cursor-not-allowed bg-slate-700 text-slate-500'
                         : 'bg-emerald-400 text-black hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95'
                     }`}
@@ -1050,6 +1057,7 @@ export default function Host({ onBack, studioQuestions = null }) {
                     START GAME
                   </button>
                   {players.length === 0 && <p className="mt-2 text-xs text-slate-500">Waiting for at least 1 player.</p>}
+                  {players.length > 0 && !isDeckReady && <p className="mt-2 text-xs text-amber-300">Select a deck before starting.</p>}
                 </div>
                 <p className="text-sm text-slate-400">Room ready. Once started, players enter timed questions instantly.</p>
               </div>
@@ -1140,46 +1148,6 @@ export default function Host({ onBack, studioQuestions = null }) {
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
         />
-        <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
-          <p className="mb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">Active Deck Before Create</p>
-          <select
-            value={selectedDeckKey}
-            onChange={handleDeckSelection}
-            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
-          >
-            <optgroup label={`Bundled Decks (${availableDecks.length})`}>
-              {availableDecks.length === 0 && <option value="server:default">Default Server Deck</option>}
-              {availableDecks.map((deck) => (
-                <option key={deck.file} value={`server:${deck.file}`}>
-                  {deck.name} ({deck.count} questions)
-                </option>
-              ))}
-            </optgroup>
-            {Array.isArray(studioQuestions) && studioQuestions.length > 0 && (
-              <optgroup label="Current Studio Launch">
-                <option value="studio:session">Studio Session ({studioQuestions.length} questions)</option>
-              </optgroup>
-            )}
-            <optgroup label={`Studio Drafts (${studioDecks.length})`}>
-              {studioDecks.length === 0 && <option value="studio:none" disabled>No local studio drafts found</option>}
-              {studioDecks.map((draft) => (
-                <option key={draft.id} value={`studio:${draft.id}`}>
-                  {draft.title || 'Untitled'} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
-                </option>
-              ))}
-            </optgroup>
-          </select>
-          <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
-            <span>Source: <span className="text-slate-300">{selectedDeckSource}</span></span>
-            <span>Questions: <span className="text-slate-300">{selectedDeckCount ?? '--'}</span></span>
-          </div>
-          <button
-            onClick={() => { window.location.href = hostToken ? `/studio?token=${encodeURIComponent(hostToken)}` : '/studio'; }}
-            className="mt-2 w-full rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-400/20"
-          >
-            Open Studio (Build + Cloud)
-          </button>
-        </div>
         {error && <p className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300">{error}</p>}
         <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-emerald-400 py-5 text-xl font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
           CREATE
