@@ -2,6 +2,7 @@
 import Chat from './Chat';
 import { createGameSocket, getBackendUrl } from '../backendUrl';
 import { useHostToken } from '../context/HostTokenProvider';
+import { deckStudioDB } from '../deckStudio/db';
 import { QRCodeSVG } from 'qrcode.react';
 import { Rocket, Shield, Zap, Flame } from 'lucide-react';
 import PingIndicator from './PingIndicator';
@@ -67,6 +68,19 @@ function clearHostState() {
   window.localStorage.removeItem(HOST_STATE_KEY);
 }
 
+function studioSlidesToQuestions(slides = []) {
+  return slides.map((slide, index) => ({
+    q_id: `q_${String(index + 1).padStart(2, '0')}`,
+    type: slide.imageUrl ? 'image_guess' : 'text_only',
+    prompt: String(slide.prompt || '').trim(),
+    asset_ref: slide.imageUrl || null,
+    options: Array.isArray(slide.options) ? slide.options.map((opt) => String(opt || '').trim()) : ['', '', '', ''],
+    correct_answer: Array.isArray(slide.options) ? String(slide.options[slide.correctIndex] || slide.options[0] || '').trim() : '',
+    time_limit_ms: 20000,
+    fuzzy_allowances: [],
+  }));
+}
+
 export default function Host({ onBack, studioQuestions = null }) {
   const { token: hostToken } = useHostToken();
   const savedHostState = readHostState();
@@ -94,6 +108,10 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [newAllowedText, setNewAllowedText] = useState('');
   const [copied, setCopied] = useState(false);
   const [availableDecks, setAvailableDecks] = useState([]);
+  const [studioDecks, setStudioDecks] = useState([]);
+  const [selectedDeckKey, setSelectedDeckKey] = useState('server:default');
+  const [selectedDeckSource, setSelectedDeckSource] = useState('server');
+  const [selectedDeckCount, setSelectedDeckCount] = useState(null);
   const [deckLabel, setDeckLabel] = useState('Default');
   const [recentlyUpdatedPlayerIds, setRecentlyUpdatedPlayerIds] = useState(new Set());
   const [timeLeft, setTimeLeft] = useState(0);
@@ -244,42 +262,138 @@ export default function Host({ onBack, studioQuestions = null }) {
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
 
-  // Fetch available decks on mount
+  // Fetch bundled server decks on mount
   useEffect(() => {
     fetch(`${getBackendUrl()}/api/decks`)
       .then(r => r.json())
       .then(decks => {
         setAvailableDecks(decks);
-        if (decks.length > 0) {
-          setDeckLabel(decks[0].name);
-        }
       })
       .catch(err => console.error('Failed to fetch decks:', err));
   }, []);
+
+  // Fetch Deck Studio local drafts
+  useEffect(() => {
+    let active = true;
+    deckStudioDB.drafts
+      .orderBy('updatedAt')
+      .reverse()
+      .toArray()
+      .then((drafts) => {
+        if (!active) return;
+        setStudioDecks(drafts || []);
+      })
+      .catch((err) => {
+        console.error('Failed to load studio drafts:', err);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (Array.isArray(studioQuestions) && studioQuestions.length > 0) {
+      setSelectedDeckKey('studio:session');
+      setSelectedDeckSource('studio');
+      setSelectedDeckCount(studioQuestions.length);
+      setDeckLabel(`Studio Session (${studioQuestions.length} questions)`);
+      return;
+    }
+
+    if (availableDecks.length > 0 && selectedDeckKey === 'server:default') {
+      const first = availableDecks[0];
+      setSelectedDeckKey(`server:${first.file}`);
+      setSelectedDeckSource('server');
+      setSelectedDeckCount(first.count);
+      setDeckLabel(first.name);
+    }
+  }, [availableDecks, selectedDeckKey, studioQuestions]);
+
+  const handleDeckSelection = (event) => {
+    const value = event.target.value;
+    setSelectedDeckKey(value);
+
+    if (value === 'studio:session') {
+      setSelectedDeckSource('studio');
+      const count = Array.isArray(studioQuestions) ? studioQuestions.length : 0;
+      setSelectedDeckCount(count);
+      setDeckLabel(`Studio Session (${count} questions)`);
+      return;
+    }
+
+    if (value.startsWith('studio:')) {
+      const id = value.replace('studio:', '');
+      const draft = studioDecks.find((item) => item.id === id);
+      setSelectedDeckSource('studio');
+      setSelectedDeckCount(draft?.slides?.length || 0);
+      setDeckLabel(draft?.title || 'Studio Draft');
+      return;
+    }
+
+    if (value.startsWith('server:')) {
+      const file = value.replace('server:', '');
+      const deck = availableDecks.find((item) => item.file === file);
+      setSelectedDeckSource('server');
+      setSelectedDeckCount(deck?.count || 0);
+      setDeckLabel(deck?.name || 'Bundled Deck');
+    }
+  };
 
   const handleCreate = () => {
     if (!roomName.trim()) return setError('Enter a room name.');
     if (!socketRef.current?.connected) return setError('Not connected.');
     if (!hostToken) return setError('Host token invalid. Restart the application.');
     setError('');
-    const payload = { roomName, hostSessionId: hostSessionIdRef.current, hostToken };
-    if (Array.isArray(studioQuestions) && studioQuestions.length > 0) {
-      payload.deckQuestions = studioQuestions;
+    const submitCreate = (deckQuestions) => {
+      const payload = { roomName, hostSessionId: hostSessionIdRef.current, hostToken };
+      if (Array.isArray(deckQuestions) && deckQuestions.length > 0) {
+        payload.deckQuestions = deckQuestions;
+      }
+
+      socketRef.current.emit('create_room', payload, (res) => {
+        if (res.success) { setPin(res.pin); setPhase('lobby');
+          // apply the selected chat mode immediately for the new room
+          if (chatMode) {
+            const modePayload = { pin: res.pin, mode: chatMode, hostToken };
+            if (chatMode === 'RESTRICTED' && allowedList.length > 0) modePayload.allowed = allowedList;
+            socketRef.current.emit('chat:host_set_mode', modePayload, (ack) => {
+              if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
+            });
+          }
+        }
+        else setError(res?.error || 'Failed to create room.');
+      });
+    };
+
+    if (selectedDeckKey === 'studio:session') {
+      return submitCreate(studioQuestions || []);
     }
 
-    socketRef.current.emit('create_room', payload, (res) => {
-      if (res.success) { setPin(res.pin); setPhase('lobby');
-        // apply the selected chat mode immediately for the new room
-        if (chatMode) {
-          const payload = { pin: res.pin, mode: chatMode, hostToken };
-          if (chatMode === 'RESTRICTED' && allowedList.length > 0) payload.allowed = allowedList;
-          socketRef.current.emit('chat:host_set_mode', payload, (ack) => {
-            if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
-          });
-        }
-      }
-      else setError('Failed to create room.');
-    });
+    if (selectedDeckKey.startsWith('studio:')) {
+      const id = selectedDeckKey.replace('studio:', '');
+      const draft = studioDecks.find((item) => item.id === id);
+      const questions = studioSlidesToQuestions(draft?.slides || []);
+      return submitCreate(questions);
+    }
+
+    if (selectedDeckKey.startsWith('server:')) {
+      const file = selectedDeckKey.replace('server:', '');
+      if (!file || file === 'default') return submitCreate(null);
+      fetch(`${getBackendUrl()}/api/decks/${encodeURIComponent(file)}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (!Array.isArray(data?.questions)) {
+            throw new Error(data?.error || 'Could not load selected deck.');
+          }
+          submitCreate(data.questions);
+        })
+        .catch((err) => {
+          setError(err?.message || 'Could not load selected deck.');
+        });
+      return;
+    }
+
+    submitCreate(null);
   };
 
   const handleStart = () => {
@@ -321,7 +435,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     setChatMode(mode);
     if (!pin || !socketRef.current?.connected) return;
     setError('');
-    const payload = { pin, mode };
+    const payload = { pin, mode, hostToken };
     if (mode === 'RESTRICTED' && nextAllowed.length > 0) payload.allowed = nextAllowed;
     socketRef.current.emit('chat:host_set_mode', payload, (ack) => {
       if (!ack?.ok) setError(ack?.reason || 'Failed to set chat mode');
@@ -623,17 +737,42 @@ export default function Host({ onBack, studioQuestions = null }) {
                 </div>
                 <label className="mb-2 block text-xs text-slate-500">Select Deck</label>
                 <select
-                  value={deckLabel}
-                  onChange={(e) => setDeckLabel(e.target.value)}
+                  value={selectedDeckKey}
+                  onChange={handleDeckSelection}
                   className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
                 >
-                  {availableDecks.map((deck) => (
-                    <option key={deck.name} value={deck.name}>
-                      {deck.name} ({deck.count} questions)
-                    </option>
-                  ))}
+                  <optgroup label={`Bundled Decks (${availableDecks.length})`}>
+                    {availableDecks.length === 0 && <option value="server:default">Default Server Deck</option>}
+                    {availableDecks.map((deck) => (
+                      <option key={deck.file} value={`server:${deck.file}`}>
+                        {deck.name} ({deck.count} questions)
+                      </option>
+                    ))}
+                  </optgroup>
+                  {Array.isArray(studioQuestions) && studioQuestions.length > 0 && (
+                    <optgroup label="Current Studio Launch">
+                      <option value="studio:session">Studio Session ({studioQuestions.length} questions)</option>
+                    </optgroup>
+                  )}
+                  <optgroup label={`Studio Drafts (${studioDecks.length})`}>
+                    {studioDecks.length === 0 && <option value="studio:none" disabled>No local studio drafts found</option>}
+                    {studioDecks.map((draft) => (
+                      <option key={draft.id} value={`studio:${draft.id}`}>
+                        {draft.title || 'Untitled'} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
+                      </option>
+                    ))}
+                  </optgroup>
                 </select>
-                <p className="mt-4 text-xs text-slate-500">Ready to play</p>
+                <div className="mt-4 space-y-1 text-xs text-slate-500">
+                  <p>Active source: <span className="text-slate-300">{selectedDeckSource}</span></p>
+                  <p>Question count: <span className="text-slate-300">{selectedDeckCount ?? '--'}</span></p>
+                  <button
+                    onClick={() => { window.location.href = '/studio'; }}
+                    className="mt-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-400/20"
+                  >
+                    Explore More (Cloud + Studio)
+                  </button>
+                </div>
               </div>
             </section>
 
@@ -791,6 +930,46 @@ export default function Host({ onBack, studioQuestions = null }) {
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
           className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
         />
+        <div className="mb-3 rounded-2xl border border-slate-800 bg-slate-950/70 p-3">
+          <p className="mb-2 text-[11px] uppercase tracking-[0.22em] text-slate-500">Active Deck Before Create</p>
+          <select
+            value={selectedDeckKey}
+            onChange={handleDeckSelection}
+            className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-emerald-300 focus:border-emerald-500 focus:outline-none"
+          >
+            <optgroup label={`Bundled Decks (${availableDecks.length})`}>
+              {availableDecks.length === 0 && <option value="server:default">Default Server Deck</option>}
+              {availableDecks.map((deck) => (
+                <option key={deck.file} value={`server:${deck.file}`}>
+                  {deck.name} ({deck.count} questions)
+                </option>
+              ))}
+            </optgroup>
+            {Array.isArray(studioQuestions) && studioQuestions.length > 0 && (
+              <optgroup label="Current Studio Launch">
+                <option value="studio:session">Studio Session ({studioQuestions.length} questions)</option>
+              </optgroup>
+            )}
+            <optgroup label={`Studio Drafts (${studioDecks.length})`}>
+              {studioDecks.length === 0 && <option value="studio:none" disabled>No local studio drafts found</option>}
+              {studioDecks.map((draft) => (
+                <option key={draft.id} value={`studio:${draft.id}`}>
+                  {draft.title || 'Untitled'} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
+                </option>
+              ))}
+            </optgroup>
+          </select>
+          <div className="mt-2 flex items-center justify-between text-xs text-slate-500">
+            <span>Source: <span className="text-slate-300">{selectedDeckSource}</span></span>
+            <span>Questions: <span className="text-slate-300">{selectedDeckCount ?? '--'}</span></span>
+          </div>
+          <button
+            onClick={() => { window.location.href = '/studio'; }}
+            className="mt-2 w-full rounded-lg border border-amber-400/40 bg-amber-400/10 px-2.5 py-1.5 text-[11px] font-semibold text-amber-200 transition hover:bg-amber-400/20"
+          >
+            Open Studio (Build + Cloud)
+          </button>
+        </div>
         {error && <p className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300">{error}</p>}
         <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-emerald-400 py-5 text-xl font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
           CREATE
