@@ -1,6 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import Chat from './Chat';
 import { createGameSocket } from '../backendUrl';
+import PingIndicator from './PingIndicator';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
@@ -103,7 +104,6 @@ export default function Player({ onBack }) {
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
-  const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
   const roomDisplayName = displayRoomName(roomName);
   const latestNameRef = useRef(name);
 
@@ -179,7 +179,7 @@ export default function Player({ onBack }) {
     });
     socket.on('room_closed', ({ message }) => {
       setError(message || 'Room closed by host.');
-      setPhase('join');
+      setPhase('joining');
       setRoomName('');
       clearPlayerState();
     });
@@ -221,7 +221,7 @@ export default function Player({ onBack }) {
       const remaining = Math.max(0, Math.ceil((questionEndsAt - Date.now()) / 1000));
       setTimeLeft(remaining);
       if (remaining <= 0) window.clearInterval(timer);
-    }, 250);
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
 
@@ -285,6 +285,26 @@ export default function Player({ onBack }) {
         ? 'text-amber-300'
         : 'text-emerald-300';
 
+  const renderLeaveAndPing = ({ inline = false, leaveButtonClass = '' } = {}) => {
+    const buttonClass = leaveButtonClass || 'rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800';
+
+    if (inline) {
+      return (
+        <div className="mb-2 flex items-center gap-2">
+          <button onClick={handleLeaveRoom} className={buttonClass}>Leave</button>
+          <PingIndicator socket={chatSocket} />
+        </div>
+      );
+    }
+
+    return (
+      <>
+        <button onClick={handleLeaveRoom} className={`absolute top-5 left-5 ${buttonClass}`}>Leave</button>
+        <PingIndicator socket={chatSocket} className="absolute top-5 right-5" />
+      </>
+    );
+  };
+
   if (phase === 'gameover') {
     const myEntry = finalScores.find(p => p.id === selfPlayerId);
     const myRank = finalScores.findIndex(p => p.id === selfPlayerId) + 1;
@@ -300,7 +320,7 @@ export default function Player({ onBack }) {
         <div className="flex flex-col gap-3 flex-1">
           {finalScores.map((p, i) => (
             <div
-              key={p.name}
+              key={p.id || `${p.name}_${i}`}
               className={`flex items-center justify-between rounded-2xl px-4 py-4 border ${
                 i === 0
                   ? 'border-amber-300/50 bg-amber-300/15 text-amber-100'
@@ -326,7 +346,7 @@ export default function Player({ onBack }) {
     const gotIt = selected === resultData.correct_answer;
     return (
       <div className={`min-h-screen flex flex-col items-center justify-center p-6 gap-6 text-white animate-phase-in ${gotIt ? 'bg-emerald-950' : 'bg-rose-950'}`}>
-        <button onClick={handleLeaveRoom} className="absolute top-5 left-5 rounded-lg border border-white/20 bg-black/30 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/85 transition hover:bg-black/45">Leave</button>
+        {renderLeaveAndPing({ leaveButtonClass: 'rounded-lg border border-white/20 bg-black/30 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/85 transition hover:bg-black/45' })}
         <div className={`text-6xl font-black tracking-tight ${gotIt ? 'text-emerald-300' : 'text-rose-300'}`}>
           {gotIt ? 'CORRECT' : 'INCORRECT'}
         </div>
@@ -342,7 +362,7 @@ export default function Player({ onBack }) {
   if (phase === 'answered') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 gap-4 animate-phase-in">
-        <button onClick={handleLeaveRoom} className="absolute top-5 left-5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
+        {renderLeaveAndPing()}
         <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Answer Locked</p>
         <p className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">{selected}</p>
         <div className={`mt-2 text-3xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</div>
@@ -362,7 +382,7 @@ export default function Player({ onBack }) {
       <div className="min-h-screen bg-slate-950 text-white flex flex-col p-4 pt-6 pb-24 md:pb-6 animate-phase-in">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <button onClick={handleLeaveRoom} className="mb-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
+            {renderLeaveAndPing({ inline: true })}
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
           </div>
           <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-right">
@@ -385,7 +405,7 @@ export default function Player({ onBack }) {
         <div className="grid grid-cols-1 gap-4 content-start">
           {question.options.map((opt, idx) => (
             <button
-              key={opt}
+              key={`${question?.q_id || 'q'}_${idx}_${opt}`}
               onClick={() => handleAnswer(opt)}
               className={`w-full rounded-2xl border px-5 py-6 text-left text-xl font-black transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${
                 idx % 4 === 0
@@ -443,7 +463,7 @@ export default function Player({ onBack }) {
   if (phase === 'waiting') {
     return (
       <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-3 p-5 animate-phase-in">
-        <button onClick={handleLeaveRoom} className="absolute top-5 left-5 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800">Leave</button>
+        {renderLeaveAndPing()}
         <p className="text-3xl font-black tracking-tight">{roomDisplayName}</p>
         <p className="text-slate-400 text-sm font-mono">Waiting for host to start...</p>
         <p className={`text-xs font-semibold ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
@@ -452,10 +472,6 @@ export default function Player({ onBack }) {
         <p className={`text-xs font-mono mt-2 ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           {connected ? 'connected' : 'reconnecting...'}
         </p>
-
-        <div className="rounded-full border border-slate-700 bg-slate-900 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-400">
-          Chat Mode: <span className={`${chatMode === 'FREE' ? 'text-emerald-300' : chatMode === 'RESTRICTED' ? 'text-amber-200' : 'text-slate-500'}`}>{modeLabels[chatMode] || chatMode}</span>
-        </div>
 
         <section className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/75 p-4 shadow-xl shadow-black/30">
           <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Player ID Card</p>
