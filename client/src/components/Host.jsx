@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import Chat from './Chat';
 import { createGameSocket, getBackendUrl } from '../backendUrl';
@@ -182,7 +182,14 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [newAllowedText, setNewAllowedText] = useState('');
   const [copied, setCopied] = useState(false);
   const [availableDecks, setAvailableDecks] = useState([]);
+  const [isLoadingBundledDecks, setIsLoadingBundledDecks] = useState(false);
+  const [bundledDecksError, setBundledDecksError] = useState('');
   const [studioDecks, setStudioDecks] = useState([]);
+  const [studioDeckQuery, setStudioDeckQuery] = useState('');
+  const [showDraftManager, setShowDraftManager] = useState(false);
+  const [renameDraftId, setRenameDraftId] = useState('');
+  const [renameDraftTitle, setRenameDraftTitle] = useState('');
+  const [manageNotice, setManageNotice] = useState('');
   const [selectedDeckKey, setSelectedDeckKey] = useState('');
   const [selectedDeckSource, setSelectedDeckSource] = useState('none');
   const [selectedDeckCount, setSelectedDeckCount] = useState(null);
@@ -354,15 +361,36 @@ export default function Host({ onBack, studioQuestions = null }) {
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
 
+  const loadBundledDecks = useCallback(async () => {
+    setIsLoadingBundledDecks(true);
+    setBundledDecksError('');
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/decks`);
+      const decks = await response.json();
+      if (!Array.isArray(decks)) {
+        throw new Error('Invalid deck list response.');
+      }
+      setAvailableDecks(decks);
+    } catch (err) {
+      setAvailableDecks([]);
+      setBundledDecksError(err?.message || 'Could not load bundled decks.');
+      console.error('Failed to fetch decks:', err);
+    } finally {
+      setIsLoadingBundledDecks(false);
+    }
+  }, []);
+
   // Fetch bundled server decks on mount
   useEffect(() => {
-    fetch(`${getBackendUrl()}/api/decks`)
-      .then(r => r.json())
-      .then(decks => {
-        setAvailableDecks(decks);
-      })
-      .catch(err => console.error('Failed to fetch decks:', err));
-  }, []);
+    loadBundledDecks();
+  }, [loadBundledDecks]);
+
+  // Retry deck loading when entering lobby if previous attempt failed or was empty
+  useEffect(() => {
+    if (phase !== 'lobby') return;
+    if (availableDecks.length > 0) return;
+    loadBundledDecks();
+  }, [phase, availableDecks.length, loadBundledDecks]);
 
   // Fetch Deck Studio local drafts
   useEffect(() => {
@@ -382,6 +410,12 @@ export default function Host({ onBack, studioQuestions = null }) {
       active = false;
     };
   }, []);
+
+  const filteredStudioDecks = useMemo(() => {
+    const q = studioDeckQuery.trim().toLowerCase();
+    if (!q) return studioDecks;
+    return studioDecks.filter((draft) => String(draft?.title || '').toLowerCase().includes(q));
+  }, [studioDecks, studioDeckQuery]);
 
   // Fetch cloud catalog for lobby explorer section
   useEffect(() => {
@@ -650,6 +684,71 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
   };
 
+  const handleDeleteStudioDraft = async (draftId) => {
+    if (!draftId) return;
+    const ok = window.confirm('Delete this saved studio deck?');
+    if (!ok) return;
+
+    try {
+      await deckStudioDB.drafts.delete(draftId);
+      setStudioDecks((prev) => prev.filter((draft) => draft.id !== draftId));
+      setManageNotice('Draft deleted.');
+
+      if (selectedDeckKey === `studio:${draftId}`) {
+        setSelectedDeckKey('');
+        setSelectedDeckSource('none');
+        setSelectedDeckCount(null);
+        setDeckLabel('No deck selected');
+        setIsDeckReady(false);
+      }
+    } catch (err) {
+      setManageNotice(err?.message || 'Failed to delete draft.');
+    }
+  };
+
+  const startRenameStudioDraft = (draft) => {
+    setRenameDraftId(draft.id);
+    setRenameDraftTitle(String(draft.title || 'Untitled Deck'));
+    setManageNotice('');
+  };
+
+  const cancelRenameStudioDraft = () => {
+    setRenameDraftId('');
+    setRenameDraftTitle('');
+  };
+
+  const submitRenameStudioDraft = async () => {
+    const nextTitle = renameDraftTitle.trim();
+    if (!renameDraftId || !nextTitle) {
+      setManageNotice('Deck title cannot be empty.');
+      return;
+    }
+
+    const draft = studioDecks.find((item) => item.id === renameDraftId);
+    if (!draft) {
+      setManageNotice('Draft not found.');
+      return;
+    }
+
+    const updated = {
+      ...draft,
+      title: nextTitle,
+      updatedAt: Date.now(),
+    };
+
+    try {
+      await saveDraft(updated);
+      setStudioDecks((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      if (selectedDeckKey === `studio:${updated.id}`) {
+        setDeckLabel(updated.title);
+      }
+      setManageNotice('Draft renamed.');
+      cancelRenameStudioDraft();
+    } catch (err) {
+      setManageNotice(err?.message || 'Failed to rename draft.');
+    }
+  };
+
   const handleStart = () => {
     if (!socketRef.current?.connected) return setError('Lost connection.');
     setError('');
@@ -777,6 +876,94 @@ export default function Host({ onBack, studioQuestions = null }) {
             </div>
           ))}
         </div>
+
+        {showDraftManager && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 p-4">
+            <div className="w-full max-w-2xl rounded-3xl border border-slate-700 bg-slate-950 p-4 shadow-2xl shadow-black/60">
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm font-black tracking-wide text-emerald-200">Manage Studio Drafts</p>
+                <button
+                  onClick={() => {
+                    setShowDraftManager(false);
+                    cancelRenameStudioDraft();
+                    setManageNotice('');
+                  }}
+                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-200 transition hover:bg-slate-800"
+                >
+                  Close
+                </button>
+              </div>
+
+              {manageNotice && (
+                <p className="mb-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{manageNotice}</p>
+              )}
+
+              <div className="max-h-[60vh] space-y-2 overflow-y-auto pr-1">
+                {studioDecks.length === 0 && (
+                  <div className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-4 text-center text-xs text-slate-500">
+                    No studio drafts saved yet.
+                  </div>
+                )}
+
+                {studioDecks.map((draft) => {
+                  const isEditing = renameDraftId === draft.id;
+                  const questionCount = Array.isArray(draft.slides) ? draft.slides.length : 0;
+                  return (
+                    <div key={draft.id} className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          {isEditing ? (
+                            <input
+                              value={renameDraftTitle}
+                              onChange={(e) => setRenameDraftTitle(e.target.value)}
+                              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-2 text-sm text-slate-100 focus:border-emerald-500 focus:outline-none"
+                            />
+                          ) : (
+                            <p className="truncate text-sm font-semibold text-slate-100">{draft.title || 'Untitled Deck'}</p>
+                          )}
+                          <p className="mt-1 text-[11px] text-slate-500">{questionCount} questions</p>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={submitRenameStudioDraft}
+                                className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-emerald-200 transition hover:bg-emerald-500/25"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelRenameStudioDraft}
+                                className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => startRenameStudioDraft(draft)}
+                              className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                            >
+                              Rename
+                            </button>
+                          )}
+
+                          <button
+                            onClick={() => handleDeleteStudioDraft(draft.id)}
+                            className="rounded-lg border border-rose-500/40 bg-rose-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-rose-200 transition hover:bg-rose-500/25"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1005,6 +1192,23 @@ export default function Host({ onBack, studioQuestions = null }) {
                 </div>
                 <div className="space-y-4">
                   <div>
+                    <div className="mb-2 flex items-center gap-2">
+                      <input
+                        value={studioDeckQuery}
+                        onChange={(e) => setStudioDeckQuery(e.target.value)}
+                        placeholder="Search studio drafts"
+                        className="w-full rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none"
+                      />
+                      <button
+                        onClick={() => {
+                          setShowDraftManager(true);
+                          setManageNotice('');
+                        }}
+                        className="rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800"
+                      >
+                        Manage
+                      </button>
+                    </div>
                     <label className="mb-2 block text-xs text-slate-500">Select Deck</label>
                     <select
                       value={selectedDeckKey}
@@ -1013,6 +1217,11 @@ export default function Host({ onBack, studioQuestions = null }) {
                     >
                       <option value="">Choose a deck...</option>
                       <optgroup label={`Bundled Decks (${availableDecks.length})`}>
+                        {availableDecks.length === 0 && (
+                          <option value="" disabled>
+                            {isLoadingBundledDecks ? 'Loading bundled decks...' : 'No bundled decks found'}
+                          </option>
+                        )}
                         {availableDecks.map((deck) => (
                           <option key={deck.file} value={`server:${deck.file}`}>
                             {deck.name} ({deck.count} questions)
@@ -1024,11 +1233,12 @@ export default function Host({ onBack, studioQuestions = null }) {
                           <option value="studio:session">Studio Session ({studioQuestions.length} questions)</option>
                         </optgroup>
                       )}
-                      <optgroup label={`Studio Drafts (${studioDecks.length})`}>
+                      <optgroup label={`Studio Drafts (${filteredStudioDecks.length})`}>
                         {studioDecks.length === 0 && <option value="studio:none" disabled>No local studio drafts found</option>}
-                        {studioDecks.map((draft) => (
+                        {studioDecks.length > 0 && filteredStudioDecks.length === 0 && <option value="studio:none_query" disabled>No drafts match search</option>}
+                        {filteredStudioDecks.map((draft) => (
                           <option key={draft.id} value={`studio:${draft.id}`}>
-                            {draft.title || 'Untitled'} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
+                            {(draft.title || 'Untitled')} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
                           </option>
                         ))}
                       </optgroup>
@@ -1036,7 +1246,15 @@ export default function Host({ onBack, studioQuestions = null }) {
                     <div className="mt-3 space-y-1 text-xs text-slate-500">
                       <p>Active source: <span className="text-slate-300">{selectedDeckSource}</span></p>
                       <p>Question count: <span className="text-slate-300">{selectedDeckCount ?? '--'}</span></p>
+                      {bundledDecksError && <p className="text-amber-300">Bundled deck load failed: {bundledDecksError}</p>}
                       {dropNotice && <p className="text-emerald-300">{dropNotice}</p>}
+                      <button
+                        onClick={loadBundledDecks}
+                        disabled={isLoadingBundledDecks}
+                        className="mt-1 rounded-lg border border-slate-700 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold text-slate-200 transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        {isLoadingBundledDecks ? 'Refreshing decks...' : 'Refresh Bundled Decks'}
+                      </button>
                     </div>
                   </div>
 
