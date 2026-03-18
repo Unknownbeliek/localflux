@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { saveDraft } from './db';
 import { DeckSchema } from './schemas';
 
-export const CLOUD_CATALOG_URL = 'https://raw.githubusercontent.com/placeholder/catalog.json';
+export const CLOUD_CATALOG_URL = '/cloud-mock/catalog.json';
 
 const CloudCatalogDeckSchema = z.object({
   id: z.string().trim().min(1),
