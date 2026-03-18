@@ -121,6 +121,7 @@ export function HostTokenProvider({ children }) {
  * Hook to access host token context.
  * Must be used within a HostTokenProvider.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 export function useHostToken() {
   const context = useContext(HostTokenContext);
   if (!context) {
