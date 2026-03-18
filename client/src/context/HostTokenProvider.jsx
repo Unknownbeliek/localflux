@@ -16,7 +16,6 @@ const HostTokenContext = createContext(null);
 export function HostTokenProvider({ children }) {
   const [token, setToken] = useState(null);
   const [expiresAt, setExpiresAt] = useState(null);
-  const [isValid, setIsValid] = useState(false);
 
   /**
    * Load token from URL params (for QR scan flow).
@@ -30,7 +29,6 @@ export function HostTokenProvider({ children }) {
       setToken(urlToken);
       // Calculate expiration: assume 10-minute TTL from now
       setExpiresAt(Date.now() + 10 * 60 * 1000);
-      setIsValid(true);
       console.log('[HostTokenProvider] Token loaded from URL');
     }
   }, []);
@@ -39,11 +37,12 @@ export function HostTokenProvider({ children }) {
    * Set token programmatically (e.g., from socket response).
    */
   const setHostToken = useCallback((newToken, ttlMs = 10 * 60 * 1000) => {
+    const parsedTtl = Number(ttlMs);
+    const safeTtlMs = Number.isFinite(parsedTtl) && parsedTtl > 0 ? parsedTtl : 10 * 60 * 1000;
     setToken(newToken);
-    const expiresIn = Date.now() + ttlMs;
+    const expiresIn = Date.now() + safeTtlMs;
     setExpiresAt(expiresIn);
-    setIsValid(true);
-    console.log(`[HostTokenProvider] Token set (expires in ${ttlMs}ms)`);
+    console.log(`[HostTokenProvider] Token set (expires in ${safeTtlMs}ms)`);
   }, []);
 
   /**
@@ -52,7 +51,6 @@ export function HostTokenProvider({ children }) {
   const clearToken = useCallback(() => {
     setToken(null);
     setExpiresAt(null);
-    setIsValid(false);
     console.log('[HostTokenProvider] Token cleared');
   }, []);
 
@@ -61,12 +59,8 @@ export function HostTokenProvider({ children }) {
    */
   const isTokenValid = useCallback(() => {
     if (!token || !expiresAt) return false;
-    if (Date.now() > expiresAt) {
-      clearToken();
-      return false;
-    }
-    return isValid;
-  }, [token, expiresAt, isValid, clearToken]);
+    return Date.now() < expiresAt;
+  }, [token, expiresAt]);
 
   /**
    * Get remaining TTL in milliseconds.

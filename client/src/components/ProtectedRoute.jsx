@@ -18,9 +18,17 @@ import { useHostToken } from '../context/HostTokenProvider'
  * @returns {React.ReactNode} Element or redirect to home
  */
 export function ProtectedRoute({ element }) {
-  const { isValid } = useHostToken()
+  const { isValid, setHostToken } = useHostToken()
+  const urlToken =
+    typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('token') : null
 
-  if (!isValid) {
+  React.useEffect(() => {
+    if (!isValid && urlToken) {
+      setHostToken(urlToken)
+    }
+  }, [isValid, urlToken, setHostToken])
+
+  if (!isValid && !urlToken) {
     console.warn('[ProtectedRoute] Access denied - invalid or missing token')
     return <Navigate to="/" replace />
   }

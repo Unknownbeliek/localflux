@@ -186,6 +186,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [isDragging, setIsDragging] = useState(false);
   const [_pendingDroppedDeck, setPendingDroppedDeck] = useState(null);
   const [dropNotice, setDropNotice] = useState('');
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine));
   const [cloudDecks, setCloudDecks] = useState([]);
   const [cloudStatus, setCloudStatus] = useState('idle');
   const [cloudError, setCloudError] = useState('');
@@ -369,6 +370,19 @@ export default function Host({ onBack, studioQuestions = null }) {
     }, 250);
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   const loadBundledDecks = useCallback(async () => {
     setIsLoadingBundledDecks(true);
