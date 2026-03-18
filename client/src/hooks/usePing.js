@@ -4,7 +4,7 @@ import { createGameSocket } from '../backendUrl';
 export default function usePing(socket, intervalMs = 2000) {
   const ownedSocketRef = useRef(null);
   const [latencyMs, setLatencyMs] = useState(null);
-  const [connected, setConnected] = useState(false);
+  const [connected, setConnected] = useState(Boolean(socket?.connected));
 
   useEffect(() => {
     const targetSocket = socket || createGameSocket();
@@ -37,10 +37,16 @@ export default function usePing(socket, intervalMs = 2000) {
       setLatencyMs(Math.max(0, Date.now() - sentAt));
     };
 
-    setConnected(Boolean(targetSocket.connected));
     targetSocket.on('connect', handleConnect);
     targetSocket.on('disconnect', handleDisconnect);
     targetSocket.on('server:pong', handlePong);
+
+    if (targetSocket.connected) {
+      window.setTimeout(() => {
+        setConnected(true);
+        sendPing();
+      }, 0);
+    }
 
     const timer = window.setInterval(() => {
       sendPing();
