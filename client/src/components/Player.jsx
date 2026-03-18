@@ -76,17 +76,7 @@ function clearPlayerState() {
   window.localStorage.removeItem(PLAYER_STATE_KEY);
 }
 
-function getOrCreatePlayerSessionId() {
-  if (typeof window === 'undefined') return '';
-  const existing = window.localStorage.getItem(PLAYER_SESSION_KEY);
-  if (existing) return existing;
-  const next =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `ps_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  window.localStorage.setItem(PLAYER_SESSION_KEY, next);
-  return next;
-}
+export default function Player({ onBack }) {
   const savedPlayerState = readPlayerState();
   const playerSessionIdRef = useRef(getOrCreatePlayerSessionId());
   const resumeAttemptedRef = useRef(false);
