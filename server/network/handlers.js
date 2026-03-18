@@ -152,7 +152,13 @@ function registerHandlers(socket, io, questions, tokenManager) {
   });
 
   // ── create_room ─────────────────────────────────────────────────────────
-  socket.on('create_room', ({ roomName, deckQuestions, hostSessionId }, callback) => {
+  socket.on('create_room', ({ roomName, deckQuestions, hostSessionId, hostToken }, callback) => {
+    // Validate host token
+    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+      console.warn(`[Warn] Unauthorized create_room attempt from ${socket.id}`);
+      return callback({ success: false, error: 'Unauthorized: invalid or missing host token.' });
+    }
+
     if (!roomName || !roomName.trim()) {
       return callback({ success: false, error: 'Room name is required.' });
     }
@@ -478,7 +484,13 @@ function registerHandlers(socket, io, questions, tokenManager) {
     callback?.({ ok: true });
   });
 
-  socket.on('host:kick_player', ({ target }, callback) => {
+  socket.on('host:kick_player', ({ target, hostToken }, callback) => {
+    // Validate host token
+    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+      console.warn(`[Warn] Unauthorized host:kick_player attempt from ${socket.id}`);
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+
     const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
@@ -504,7 +516,13 @@ function registerHandlers(socket, io, questions, tokenManager) {
   });
 
   // host sets chat mode (OFF | FREE | RESTRICTED) and optional allowed messages
-  socket.on('chat:host_set_mode', ({ pin: p, mode, allowed }, callback) => {
+  socket.on('chat:host_set_mode', ({ pin: p, mode, allowed, hostToken }, callback) => {
+    // Validate host token
+    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+      console.warn(`[Warn] Unauthorized chat:host_set_mode attempt from ${socket.id}`);
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+
     const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
