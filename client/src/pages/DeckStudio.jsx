@@ -42,7 +42,6 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   } = useDeckStudioStore();
 
   const [csvText, setCsvText] = useState('');
-  const [category, setCategory] = useState('General Knowledge');
   const [actionMessage, setActionMessage] = useState('');
   const [cloudDecks, setCloudDecks] = useState([]);
   const [cloudStatus, setCloudStatus] = useState('loading');
@@ -196,244 +195,257 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   };
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.14),rgba(2,6,23,0)_70%)]" />
-      <div className="pointer-events-none absolute -right-24 top-16 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
-      <div className="pointer-events-none absolute -left-24 bottom-12 h-64 w-64 rounded-full bg-amber-400/10 blur-3xl" />
-
-      <header className="relative z-10 border-b border-slate-800 px-4 py-3 md:px-6">
-        <div className="mx-auto flex w-full max-w-7xl items-center gap-4">
+    <div className="flex h-screen bg-slate-900 text-white">
+      <aside className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
+        <div className="border-b border-slate-700 p-4">
+          <h1 className="text-lg font-black tracking-tight">Deck Studio</h1>
+          <p className="mt-1 text-xs text-slate-400">Slide Navigator</p>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {deck.slides.map((slide, index) => {
+            const isActive = slide.id === activeSlide?.id;
+            return (
+              <button
+                key={slide.id}
+                onClick={() => selectSlide(slide.id)}
+                className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                  isActive
+                    ? 'border-emerald-400/70 bg-emerald-500/20'
+                    : 'border-slate-700 bg-slate-900 hover:border-slate-500'
+                }`}
+              >
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Question {index + 1}</p>
+                <p className="mt-1 line-clamp-2 text-xs text-slate-100">
+                  {slide.prompt || 'Untitled question'}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+        <div className="border-t border-slate-700 p-4">
           <button
-            onClick={onBack}
-            className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-100 transition hover:border-emerald-500/50 hover:bg-slate-800"
+            onClick={onAddQuestion}
+            className="w-full rounded-xl bg-emerald-400 px-3 py-3 text-sm font-black tracking-wide text-black transition hover:bg-emerald-300"
           >
-            BACK
+            + Add Question
           </button>
+        </div>
+      </aside>
+
+      <main className="flex-1 bg-slate-900 flex flex-col items-center justify-center p-8">
+        <div className="w-full max-w-5xl space-y-5 rounded-3xl border border-slate-700 bg-slate-800/70 p-8 shadow-2xl shadow-black/30">
           <div>
-            <h1 className="text-3xl font-black tracking-tight text-white">Deck Studio</h1>
-            <p className="text-xs tracking-wide text-slate-400">LocalFlux build and launch flow</p>
+            <input
+              value={activeSlide?.prompt || ''}
+              onChange={(e) => activeSlide && updatePrompt(activeSlide.id, e.target.value)}
+              placeholder="Type your question here"
+              className="w-full bg-transparent text-center text-4xl font-black tracking-tight text-white placeholder:text-slate-500 focus:outline-none"
+            />
+            {activeErrors.prompt && <p className="mt-2 text-center text-sm text-rose-300">{activeErrors.prompt}</p>}
           </div>
-          <div className="ml-auto text-right">
-            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Draft Status</p>
-            <p className="text-sm font-semibold text-emerald-300">{saveState}</p>
+
+          <div className="rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900/50 p-6">
+            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
+              Image Placeholder
+            </p>
+            <input
+              value={activeSlide?.imageUrl || ''}
+              onChange={(e) => activeSlide && updateImageUrl(activeSlide.id, e.target.value)}
+              placeholder="Paste image URL or future dropzone"
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            {(activeSlide?.options || ['', '', '', '']).map((option, optionIndex) => {
+              const optionStyles = [
+                'bg-red-500/90 border-red-300/70',
+                'bg-blue-500/90 border-blue-300/70',
+                'bg-yellow-400/95 border-yellow-200/70 text-slate-950',
+                'bg-green-500/90 border-green-300/70',
+              ];
+              const isCorrect = activeSlide?.correctIndex === optionIndex;
+
+              return (
+                <div
+                  key={`${activeSlide?.id || 'none'}_${optionIndex}`}
+                  className={`rounded-2xl border-2 p-4 ${optionStyles[optionIndex]}`}
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <label className="text-xs font-black uppercase tracking-wide">Option {optionIndex + 1}</label>
+                    <label className="inline-flex items-center gap-1 text-xs font-bold uppercase tracking-wide">
+                      <input
+                        type="radio"
+                        name="correctOption"
+                        checked={isCorrect}
+                        onChange={() => activeSlide && setCorrectIndex(activeSlide.id, optionIndex)}
+                        className="h-4 w-4"
+                      />
+                      Correct
+                    </label>
+                  </div>
+                  <input
+                    value={option}
+                    onChange={(e) => activeSlide && updateOption(activeSlide.id, optionIndex, e.target.value)}
+                    placeholder={`Answer ${optionIndex + 1}`}
+                    className="w-full rounded-lg border border-white/40 bg-black/20 px-3 py-2 text-sm font-semibold text-white placeholder:text-white/70 focus:outline-none focus:ring-2 focus:ring-white/70"
+                  />
+                  {isCorrect && (
+                    <p className="mt-2 text-[11px] font-black uppercase tracking-wide text-white">
+                      Correct Answer
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {activeErrors.options && <p className="text-center text-sm text-rose-300">{activeErrors.options}</p>}
+        </div>
+      </main>
+
+      <aside className="w-80 bg-slate-800 border-l border-slate-700 flex flex-col">
+        <div className="border-b border-slate-700 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">Settings</p>
+            <button
+              onClick={onBack}
+              className="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 hover:border-slate-500"
+            >
+              Back
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-emerald-300">Draft status: {saveState}</p>
+          <div className="mt-3 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <span>Progress</span>
+            <span className="font-black text-emerald-300">{validCount}/{deck.slides.length}</span>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-700">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-300 transition-all duration-500"
+              style={{ width: `${progressPct}%` }}
+            />
           </div>
         </div>
-      </header>
 
-      <main className="relative z-10 mx-auto grid w-full max-w-7xl gap-5 px-4 py-6 md:px-6 lg:grid-cols-[1fr_1fr]">
-        <section className="space-y-4">
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-2xl shadow-black/30">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Deck Identity</p>
+        <div className="flex-1 space-y-4 overflow-y-auto p-4">
+          <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
             <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">Deck Name</label>
             <input
               value={deck.title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="e.g. Eyes of Cinema - Season 1"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
             />
+          </section>
 
-            <div className="mt-4 flex items-center justify-between text-xs font-semibold uppercase tracking-wide text-slate-400">
-              <span>Progress</span>
-              <span className="font-black text-emerald-300">{validCount}/{deck.slides.length}</span>
-            </div>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-              <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-300 transition-all duration-500" style={{ width: `${progressPct}%` }} />
-            </div>
-          </div>
+          <section className="grid grid-cols-2 gap-2">
+            <button
+              onClick={undo}
+              disabled={historyPast.length === 0}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-100 disabled:opacity-40"
+            >
+              Undo
+            </button>
+            <button
+              onClick={redo}
+              disabled={historyFuture.length === 0}
+              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-100 disabled:opacity-40"
+            >
+              Redo
+            </button>
+            <button
+              onClick={onExport}
+              className="col-span-2 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-black uppercase tracking-wide text-slate-100 hover:border-emerald-500/60"
+            >
+              Export .flux Deck
+            </button>
+            <button
+              onClick={onHostDirectly}
+              className="col-span-2 rounded-xl bg-emerald-400 px-3 py-2.5 text-xs font-black uppercase tracking-wide text-black hover:bg-emerald-300"
+            >
+              Save and Launch
+            </button>
+            <button
+              onClick={onDeleteQuestion}
+              disabled={deck.slides.length <= 1}
+              className="col-span-2 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2.5 text-xs font-semibold uppercase tracking-wide text-rose-200 disabled:opacity-40"
+            >
+              Delete Current Question
+            </button>
+          </section>
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-2xl shadow-black/30">
-            <div className="mb-3 flex items-center justify-between">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Question Builder</p>
-              <div className="flex gap-2">
-                <button
-                  onClick={undo}
-                  disabled={historyPast.length === 0}
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-slate-100 transition hover:border-emerald-500/50 hover:bg-slate-800 disabled:opacity-40"
-                >
-                  UNDO
-                </button>
-                <button
-                  onClick={redo}
-                  disabled={historyFuture.length === 0}
-                  className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] font-semibold tracking-wide text-slate-100 transition hover:border-emerald-500/50 hover:bg-slate-800 disabled:opacity-40"
-                >
-                  REDO
-                </button>
-              </div>
-            </div>
-
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">Question Text</label>
-            <textarea
-              value={activeSlide?.prompt || ''}
-              onChange={(e) => activeSlide && updatePrompt(activeSlide.id, e.target.value)}
-              rows={3}
-              placeholder="Type your question here..."
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
-            />
-            {activeErrors.prompt && <p className="mt-1 text-xs text-rose-300">{activeErrors.prompt}</p>}
-
-            <div className="mt-4 grid gap-2 md:grid-cols-2">
-              {(activeSlide?.options || ['', '', '', '']).map((option, optionIndex) => (
-                <div
-                  key={`${activeSlide?.id || 'none'}_${optionIndex}`}
-                  className={`rounded-lg border p-2.5 ${
-                    activeSlide?.correctIndex === optionIndex
-                      ? 'border-emerald-400/70 bg-emerald-500/10'
-                      : 'border-slate-700 bg-slate-950'
-                  }`}
-                >
-                  <div className="mb-1.5 flex items-center justify-between">
-                    <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">Option {optionIndex + 1}</span>
-                    <label className="text-[11px] font-semibold uppercase tracking-wide text-slate-200">
-                      <input
-                        type="radio"
-                        name="correctOption"
-                        checked={activeSlide?.correctIndex === optionIndex}
-                        onChange={() => activeSlide && setCorrectIndex(activeSlide.id, optionIndex)}
-                        className="mr-1"
-                      />
-                      Correct
-                    </label>
-                  </div>
-                  {activeSlide?.correctIndex === optionIndex && (
-                    <p className="mb-1 inline-flex rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-200">
-                      Correct Answer
-                    </p>
-                  )}
-                  <input
-                    value={option}
-                    onChange={(e) => activeSlide && updateOption(activeSlide.id, optionIndex, e.target.value)}
-                    className="w-full rounded-md border border-slate-700 bg-slate-900 px-2.5 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
-                  />
-                </div>
-              ))}
-            </div>
-            {activeErrors.options && <p className="mt-1 text-xs text-rose-300">{activeErrors.options}</p>}
-
-            <div className="mt-4">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">Frame Image (Optional)</label>
-              <input
-                value={activeSlide?.imageUrl || ''}
-                onChange={(e) => activeSlide && updateImageUrl(activeSlide.id, e.target.value)}
-                placeholder="https://example.com/frame.jpg"
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+          <details className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+            <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-300">
+              CSV Pipeline
+            </summary>
+            <div className="mt-3 space-y-2">
+              <textarea
+                value={csvText}
+                onChange={(e) => setCsvText(e.target.value)}
+                rows={5}
+                placeholder="prompt,optionA,optionB,optionC,optionD,correct,imageUrl"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
               />
-            </div>
-
-            <div className="mt-3">
-              <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
-              >
-                <option>General Knowledge</option>
-                <option>Movie Frames</option>
-                <option>Science</option>
-                <option>History</option>
-              </select>
-            </div>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              <button
-                onClick={onAddQuestion}
-                className="flex-1 rounded-xl bg-emerald-400 py-2.5 text-xs font-black tracking-wide text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
-              >
-                + ADD TO DECK
-              </button>
-              <button
-                onClick={onDeleteQuestion}
-                disabled={deck.slides.length <= 1}
-                className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2.5 text-xs font-semibold tracking-wide text-rose-200 transition hover:bg-rose-500/20 disabled:opacity-40"
-              >
-                DELETE
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          {(cloudStatus === 'loading' || cloudStatus === 'ready' || cloudStatus === 'offline' || cloudStatus === 'error') && (
-            <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-2xl shadow-black/30">
-              <div className="mb-3 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Explore Cloud Decks</p>
-                <div className="flex items-center gap-2">
-                  {(cloudStatus === 'offline' || cloudStatus === 'error') && (
-                    <span className="rounded-full border border-amber-400/40 bg-amber-400/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-amber-200">
-                      Offline Mode
-                    </span>
-                  )}
-                  <button
-                    onClick={loadCloudCatalog}
-                    disabled={cloudStatus === 'loading'}
-                    className="rounded-lg border border-slate-700 bg-slate-950 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-200 transition hover:border-emerald-500/50 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    {cloudStatus === 'loading' ? 'Retrying...' : 'Retry'}
-                  </button>
-                </div>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={onImportCsv}
+                  className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-emerald-500/60"
+                >
+                  Import Text
+                </button>
+                <button
+                  onClick={() => setCsvText(csvTemplate)}
+                  className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-400/20"
+                >
+                  Template
+                </button>
               </div>
-
-              {cloudStatus === 'loading' && (
-                <p className="text-xs text-slate-400">Checking cloud catalog...</p>
-              )}
-
-              {cloudStatus === 'ready' && cloudDecks.length > 0 && (
-                <div className="grid gap-2 md:grid-cols-2">
-                  {cloudDecks.map((deckMeta) => (
-                    <CloudDeckCard
-                      key={deckMeta.id}
-                      deck={deckMeta}
-                      downloading={downloadingDeckId === deckMeta.id}
-                      onDownload={onDownloadCloudDeck}
-                    />
-                  ))}
-                </div>
-              )}
-
-              {cloudStatus === 'ready' && cloudDecks.length === 0 && (
-                <p className="text-xs text-slate-400">No cloud decks currently available.</p>
-              )}
-
-              {cloudStatus === 'error' && (
-                <p className="text-xs text-rose-300">{cloudError || 'Could not load cloud catalog.'}</p>
-              )}
-
-              {cloudStatus === 'offline' && (
-                <p className="text-xs text-amber-200/90">Cloud catalog unavailable. Local editing remains fully available.</p>
-              )}
+              <label className="block cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-center text-xs font-semibold text-slate-100 hover:border-emerald-500/60">
+                Import CSV File
+                <input type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
+              </label>
+              {csvError && <p className="text-xs text-rose-300">{csvError}</p>}
             </div>
+          </details>
+
+          {(cloudStatus === 'loading' || cloudStatus === 'ready' || cloudStatus === 'offline' || cloudStatus === 'error') && (
+            <details className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
+              <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-300">
+                Cloud Catalog
+              </summary>
+              <div className="mt-3 space-y-2">
+                <button
+                  onClick={loadCloudCatalog}
+                  disabled={cloudStatus === 'loading'}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-100 hover:border-emerald-500/60 disabled:opacity-50"
+                >
+                  {cloudStatus === 'loading' ? 'Refreshing...' : 'Refresh Cloud Decks'}
+                </button>
+                {cloudStatus === 'loading' && <p className="text-xs text-slate-400">Checking cloud catalog...</p>}
+                {cloudStatus === 'error' && <p className="text-xs text-rose-300">{cloudError || 'Could not load cloud catalog.'}</p>}
+                {cloudStatus === 'offline' && <p className="text-xs text-amber-200">Cloud unavailable. Local editing continues.</p>}
+                {cloudStatus === 'ready' && cloudDecks.length === 0 && (
+                  <p className="text-xs text-slate-400">No cloud decks available.</p>
+                )}
+                {cloudStatus === 'ready' && cloudDecks.length > 0 && (
+                  <div className="space-y-2">
+                    {cloudDecks.map((deckMeta) => (
+                      <CloudDeckCard
+                        key={deckMeta.id}
+                        deck={deckMeta}
+                        downloading={downloadingDeckId === deckMeta.id}
+                        onDownload={onDownloadCloudDeck}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            </details>
           )}
 
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-2xl shadow-black/30">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Deck Preview</p>
-
-            {deck.slides.length === 0 ? (
-              <div className="flex h-56 items-center justify-center rounded-xl border border-dashed border-slate-700 bg-slate-950 text-center text-slate-500">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-wide">No Questions Yet</p>
-                  <p className="mt-1 text-xs">Build your first question on the left, then click + Add to Deck.</p>
-                </div>
-              </div>
-            ) : (
-              <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-                {deck.slides.map((slide, index) => (
-                  <button
-                    key={slide.id}
-                    onClick={() => selectSlide(slide.id)}
-                    className={`w-full rounded-xl border px-3 py-2 text-left transition ${slide.id === activeSlide?.id ? 'border-emerald-500/60 bg-emerald-500/10' : 'border-slate-700 bg-slate-950 hover:border-emerald-500/40'}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-emerald-300">Q{index + 1}</span>
-                      <span className="truncate text-sm text-slate-100">{slide.prompt || 'Untitled question'}</span>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
           {validation.global.length > 0 && (
-            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
               {validation.global.map((issue) => (
                 <p key={issue}>{issue}</p>
               ))}
@@ -441,51 +453,18 @@ export default function DeckStudio({ onBack, onHostDeck }) {
           )}
 
           {invalidSlideCount > 0 && (
-            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-3 text-xs text-rose-200">
+            <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
               {invalidSlideCount} question{invalidSlideCount > 1 ? 's' : ''} need fixes before export or launch.
             </div>
           )}
 
           {actionMessage && (
-            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-100">
+            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
               {actionMessage}
             </div>
           )}
-
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/75 p-4 shadow-2xl shadow-black/30">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">CSV Pipeline</p>
-            <textarea
-              value={csvText}
-              onChange={(e) => setCsvText(e.target.value)}
-              rows={4}
-              placeholder="prompt,optionA,optionB,optionC,optionD,correct,imageUrl"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
-            />
-            <div className="mt-2 flex gap-2">
-              <button onClick={onImportCsv} className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:border-emerald-500/50 hover:bg-slate-800">Import CSV Text</button>
-              <button onClick={() => setCsvText(csvTemplate)} className="flex-1 rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-200 transition hover:bg-amber-400/20">Template</button>
-            </div>
-            <label className="mt-2 block cursor-pointer rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-center text-xs font-semibold text-slate-100 transition hover:border-emerald-500/50 hover:bg-slate-800">
-              Import CSV File
-              <input type="file" accept=".csv,text/csv" className="hidden" onChange={onImportFile} />
-            </label>
-            {csvError && <p className="mt-2 text-xs text-rose-300">{csvError}</p>}
-          </div>
-
-          <button
-            onClick={onExport}
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm font-black tracking-wide text-slate-100 transition hover:border-emerald-500/50 hover:bg-slate-800"
-          >
-            EXPORT .FLUX DECK
-          </button>
-          <button
-            onClick={onHostDirectly}
-            className="w-full rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black tracking-wide text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
-          >
-            SAVE & LAUNCH GAME
-          </button>
-        </section>
-      </main>
+        </div>
+      </aside>
     </div>
   );
 }
