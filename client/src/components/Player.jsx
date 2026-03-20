@@ -6,6 +6,8 @@ import PingIndicator from './PingIndicator';
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
 const PLAYER_STATE_KEY = 'lf_player_state';
+const START_SPLASH_MIN_MS = 1200;
+const END_SPLASH_MIN_MS = 1400;
 const PRESET_AVATARS = [
   '1.jpg',
   '2.jpg',
@@ -119,10 +121,31 @@ export default function Player({ onBack }) {
   const [timeLeft, setTimeLeft] = useState(0);
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
+  const [nextQuestionIn, setNextQuestionIn] = useState(0);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [joinRetryIn, setJoinRetryIn] = useState(0);
   const roomDisplayName = displayRoomName(roomName);
   const latestNameRef = useRef(name);
+  const startSplashUntilRef = useRef(0);
+  const pendingQuestionRef = useRef(null);
+  const startSplashTimerRef = useRef(null);
+  const pendingFinalScoresRef = useRef(null);
+  const endSplashTimerRef = useRef(null);
+
+  const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt }) => {
+    setQuestion(nextQuestion);
+    setSelected(null);
+    setResultData(null);
+    setNextQuestionIn(0);
+    setChatDrawerOpen(false);
+    const limitMs = Number(durationMs ?? nextQuestion?.time_limit_ms);
+    const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
+    const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
+    setTimeTotal(Math.ceil(normalizedMs / 1000));
+    setQuestionEndsAt(targetEndsAt);
+    setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
+    setPhase('question');
+  };
 
   const applyResumePayload = (res) => {
     setError('');
@@ -280,21 +303,40 @@ export default function Player({ onBack }) {
       setError(message || 'Room closed by host.');
       setPhase('joining');
       setRoomName('');
+      pendingFinalScoresRef.current = null;
+      if (endSplashTimerRef.current) {
+        window.clearTimeout(endSplashTimerRef.current);
+        endSplashTimerRef.current = null;
+      }
       clearPlayerState();
     });
-    socket.on('game_started', () => setPhase('waiting'));
-    socket.on('next_question', ({ question, durationMs, endsAt }) => {
-      setQuestion(question);
-      setSelected(null);
-      setResultData(null);
-      setChatDrawerOpen(false);
-      const limitMs = Number(durationMs ?? question?.time_limit_ms);
-      const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
-      const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
-      setTimeTotal(Math.ceil(normalizedMs / 1000));
-      setQuestionEndsAt(targetEndsAt);
-      setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
-      setPhase('question');
+    socket.on('game_started', () => {
+      setPhase('starting');
+      startSplashUntilRef.current = Date.now() + START_SPLASH_MIN_MS;
+      pendingQuestionRef.current = null;
+      if (startSplashTimerRef.current) {
+        window.clearTimeout(startSplashTimerRef.current);
+        startSplashTimerRef.current = null;
+      }
+    });
+    socket.on('next_question', (payload) => {
+      const remainingSplashMs = startSplashUntilRef.current - Date.now();
+      if (remainingSplashMs > 0) {
+        pendingQuestionRef.current = payload;
+        if (startSplashTimerRef.current) {
+          window.clearTimeout(startSplashTimerRef.current);
+        }
+        startSplashTimerRef.current = window.setTimeout(() => {
+          if (!pendingQuestionRef.current) return;
+          const nextPayload = pendingQuestionRef.current;
+          pendingQuestionRef.current = null;
+          startSplashTimerRef.current = null;
+          applyNextQuestion(nextPayload);
+        }, remainingSplashMs);
+        return;
+      }
+
+      applyNextQuestion(payload);
     });
     socket.on('question_result', (data) => {
       setResultData(data);
@@ -302,12 +344,34 @@ export default function Player({ onBack }) {
       if (me) setMyScore(me.score);
       setPhase('result');
     });
+    socket.on('round:transition', ({ nextInMs }) => {
+      const seconds = Math.max(0, Math.ceil(Number(nextInMs || 0) / 1000));
+      setNextQuestionIn(seconds);
+    });
     socket.on('game_over', ({ scores }) => {
-      setFinalScores(scores);
-      setPhase('gameover');
+      setNextQuestionIn(0);
+      setPhase('ending');
+      pendingFinalScoresRef.current = Array.isArray(scores) ? scores : [];
+      if (endSplashTimerRef.current) {
+        window.clearTimeout(endSplashTimerRef.current);
+      }
+      endSplashTimerRef.current = window.setTimeout(() => {
+        setFinalScores(Array.isArray(pendingFinalScoresRef.current) ? pendingFinalScoresRef.current : []);
+        pendingFinalScoresRef.current = null;
+        endSplashTimerRef.current = null;
+        setPhase('gameover');
+      }, END_SPLASH_MIN_MS);
     });
     return () => {
       window.clearTimeout(chatSocketTimer);
+      if (startSplashTimerRef.current) {
+        window.clearTimeout(startSplashTimerRef.current);
+        startSplashTimerRef.current = null;
+      }
+      if (endSplashTimerRef.current) {
+        window.clearTimeout(endSplashTimerRef.current);
+        endSplashTimerRef.current = null;
+      }
       socket.off('chat:mode');
       setChatSocket(null);
       socket.disconnect();
@@ -350,15 +414,32 @@ export default function Player({ onBack }) {
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
 
+  useEffect(() => {
+    if (phase !== 'result' || nextQuestionIn <= 0) return undefined;
+    const timer = window.setInterval(() => {
+      setNextQuestionIn((prev) => {
+        if (prev <= 1) {
+          window.clearInterval(timer);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [phase, nextQuestionIn]);
+
   const handleBack = () => {
     clearPlayerState();
     onBack?.();
   };
 
-  const handleLeaveRoom = () => {
-    const ok = window.confirm('Leave this room and return home?');
-    if (!ok) return;
-    handleBack();
+  const handleExitToPlay = () => {
+    clearPlayerState();
+    if (typeof window !== 'undefined') {
+      window.location.assign('/play');
+      return;
+    }
+    onBack?.();
   };
 
   const handleBackToLobby = () => {
@@ -450,13 +531,10 @@ export default function Player({ onBack }) {
         ? 'text-amber-300'
         : 'text-emerald-300';
 
-  const renderLeaveAndPing = ({ inline = false, leaveButtonClass = '' } = {}) => {
-    const buttonClass = leaveButtonClass || 'rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold tracking-wide text-slate-200 transition hover:bg-slate-800';
-
+  const renderLeaveAndPing = ({ inline = false } = {}) => {
     if (inline) {
       return (
-        <div className="mb-2 flex items-center gap-2">
-          <button onClick={handleLeaveRoom} className={buttonClass}>Leave</button>
+        <div className="mb-2 flex items-center">
           <PingIndicator socket={chatSocket} />
         </div>
       );
@@ -464,7 +542,6 @@ export default function Player({ onBack }) {
 
     return (
       <>
-        <button onClick={handleLeaveRoom} className={`absolute top-5 left-5 ${buttonClass}`}>Leave</button>
         <PingIndicator socket={chatSocket} className="absolute top-5 right-5" />
       </>
     );
@@ -524,7 +601,7 @@ export default function Player({ onBack }) {
           <button onClick={handleBackToLobby} className="w-full rounded-2xl bg-emerald-400 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95">
             BACK TO LOBBY
           </button>
-          <button onClick={handleBack} className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
+          <button onClick={handleExitToPlay} className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
             EXIT
           </button>
         </div>
@@ -532,19 +609,98 @@ export default function Player({ onBack }) {
     );
   }
 
-  if (phase === 'result' && resultData) {
-    const gotIt = selected === resultData.correct_answer;
+  if (phase === 'ending') {
     return (
-      <div className={`min-h-screen flex flex-col items-center justify-center p-6 gap-6 text-white animate-phase-in ${gotIt ? 'bg-emerald-950' : 'bg-rose-950'}`}>
-        {renderLeaveAndPing({ leaveButtonClass: 'rounded-lg border border-white/20 bg-black/30 px-3 py-1.5 text-xs font-semibold tracking-wide text-white/85 transition hover:bg-black/45' })}
-        <div className={`text-6xl font-black tracking-tight ${gotIt ? 'text-emerald-300' : 'text-rose-300'}`}>
-          {gotIt ? 'CORRECT' : 'INCORRECT'}
+      <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex items-center justify-center p-6 animate-phase-in">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_100%,rgba(14,165,233,0.18),rgba(2,6,23,0)_70%)]" />
+        <div className="relative w-full max-w-md rounded-3xl border border-sky-500/30 bg-slate-900/80 px-6 py-10 text-center shadow-2xl shadow-black/40">
+          <div className="mx-auto mb-5 h-16 w-16 rounded-full border-2 border-sky-400/60 border-t-sky-200 animate-spin" />
+          <p className="text-xs uppercase tracking-[0.28em] text-sky-300/80">Round Complete</p>
+          <h2 className="mt-3 text-4xl font-black tracking-tight text-white">Game Ended</h2>
+          <p className="mt-3 text-sm text-slate-300">Final standings up next.</p>
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-300 animate-pulse" />
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-300 animate-pulse [animation-delay:160ms]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-sky-300 animate-pulse [animation-delay:320ms]" />
+          </div>
         </div>
-        <p className="rounded-xl border border-white/20 bg-black/20 px-4 py-3 text-center text-sm text-slate-200">
-          Correct answer: <span className="font-black text-white">{resultData.correct_answer}</span>
+      </div>
+    );
+  }
+
+  if (phase === 'result' && resultData) {
+    const correctAnswer = resultData.correct_answer;
+    const hasAnswered = Boolean(selected);
+    const gotIt = hasAnswered && selected === correctAnswer;
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex flex-col p-4 pt-6 pb-10 animate-phase-in">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            {renderLeaveAndPing({ inline: true })}
+            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
+          </div>
+          <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Next</p>
+            <p className="text-2xl font-black tabular-nums text-emerald-300">{nextQuestionIn > 0 ? `${nextQuestionIn}s` : '...'}</p>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900/80 px-5 py-6">
+          <p className="text-2xl font-black leading-tight">{question?.prompt}</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4 content-start">
+          {(Array.isArray(question?.options) ? question.options : []).map((opt, idx) => {
+            const isSelected = selected === opt;
+            const isCorrect = correctAnswer === opt;
+            const baseClass = 'border-slate-700 bg-slate-900 text-slate-200';
+
+            let feedbackClass = baseClass;
+            if (isSelected && hasAnswered) {
+              feedbackClass = gotIt
+                ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
+                : 'border-rose-400 bg-rose-500/20 text-rose-100';
+            } else if (isCorrect) {
+              feedbackClass = 'border-emerald-500/50 bg-emerald-500/10 text-emerald-200';
+            }
+
+            return (
+              <div
+                key={`${question?.q_id || 'q'}_${idx}_${opt}`}
+                className={`w-full rounded-2xl border px-5 py-6 text-left text-xl font-black ${feedbackClass}`}
+              >
+                {opt}
+              </div>
+            );
+          })}
+        </div>
+
+        <p className="mt-5 text-center text-sm font-semibold text-slate-300">
+          {hasAnswered ? (gotIt ? 'Correct answer locked in.' : 'Your selected answer was incorrect.') : 'You did not submit an answer this round.'}
         </p>
-        <p className="font-mono text-sm tabular-nums">Score: <span className="font-black text-amber-300">{myScore}</span></p>
-        <p className="text-xs uppercase tracking-[0.24em] text-white/60">Waiting for host</p>
+        <p className="mt-2 text-center font-mono text-sm tabular-nums">Score: <span className="font-black text-amber-300">{myScore}</span></p>
+        <p className="mt-2 text-center text-xs uppercase tracking-[0.24em] text-white/60">
+          {nextQuestionIn > 0 ? `Next question in ${nextQuestionIn}s` : 'Preparing next question'}
+        </p>
+      </div>
+    );
+  }
+
+  if (phase === 'starting') {
+    return (
+      <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex items-center justify-center p-6 animate-phase-in">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
+        <div className="relative w-full max-w-md rounded-3xl border border-emerald-500/30 bg-slate-900/80 px-6 py-10 text-center shadow-2xl shadow-black/40">
+          <div className="mx-auto mb-5 h-16 w-16 rounded-full border-2 border-emerald-400/60 border-t-emerald-200 animate-spin" />
+          <p className="text-xs uppercase tracking-[0.28em] text-emerald-300/80">Match Started</p>
+          <h2 className="mt-3 text-4xl font-black tracking-tight text-white">Get Ready...</h2>
+          <p className="mt-3 text-sm text-slate-300">Host started the game. Your first question is loading.</p>
+          <div className="mt-6 flex items-center justify-center gap-2">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300 animate-pulse" />
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300 animate-pulse [animation-delay:160ms]" />
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-300 animate-pulse [animation-delay:320ms]" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -630,7 +786,7 @@ export default function Player({ onBack }) {
               onClick={() => setChatDrawerOpen(false)}
               className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] md:hidden"
             />
-            <div className="fixed inset-x-0 bottom-0 z-50 flex h-[62vh] max-h-[560px] flex-col rounded-t-3xl border border-slate-700 bg-slate-950 p-3 shadow-2xl shadow-black/60 md:hidden">
+            <div className="fixed inset-x-0 bottom-0 z-50 flex h-[62vh] max-h-140 flex-col rounded-t-3xl border border-slate-700 bg-slate-950 p-3 shadow-2xl shadow-black/60 md:hidden">
               <div className="mb-2 flex items-center justify-between px-1">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Room Chat</p>
                 <button

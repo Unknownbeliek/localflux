@@ -17,10 +17,28 @@ const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const { loadDeck, DEFAULT_DECK_PATH } = require('./core/deckLoader');
 const { registerHandlers } = require('./network/handlers');
 const { HostTokenManager } = require('./core/hostTokenManager');
+
+const PORT = Number(process.env.PORT || 3000);
+const CLIENT_PORT = Number(process.env.CLIENT_PORT || 5173);
+
+function getPrimaryLanIp() {
+  const networkInterfaces = os.networkInterfaces();
+  for (const iface of Object.values(networkInterfaces)) {
+    if (!Array.isArray(iface)) continue;
+    for (const addr of iface) {
+      if (!addr || addr.internal) continue;
+      if (addr.family !== 'IPv4') continue;
+      if (String(addr.address || '').startsWith('169.254.')) continue;
+      return addr.address;
+    }
+  }
+  return null;
+}
 
 //  HTTP + Socket.IO setup 
 
@@ -117,10 +135,9 @@ app.get('/api/decks/:file', (req, res) => {
 //  Log downloading endpoint
 
 app.get('/logs/chat', (req, res) => {
-  const pin = req.query.pin;
   const hostSocketId = req.query.hostId; // host must pass socket id for verification
-  if (!pin || !hostSocketId) return res.status(400).send('pin+hostId required');
-  const room = require('./core/roomStore').getRoom(pin);
+  if (!hostSocketId) return res.status(400).send('hostId required');
+  const room = require('./core/roomStore').getRoom();
   if (!room) return res.status(404).send('room not found');
   if (room.hostId !== hostSocketId) return res.status(403).send('only host');
   const logPath = path.resolve(process.cwd(), 'logs', 'chat.log');
@@ -128,10 +145,24 @@ app.get('/logs/chat', (req, res) => {
   res.download(logPath, 'chat.log');
 });
 
+app.get('/api/network-info', (_req, res) => {
+  const localIp = getPrimaryLanIp();
+  res.json({
+    localIp,
+    backendPort: PORT,
+    clientPort: CLIENT_PORT,
+  });
+});
+
 //  Start 
 
-const PORT = process.env.PORT || 3000;
 server.listen(PORT, '0.0.0.0', () => {
+  const localIp = getPrimaryLanIp();
   console.log(`LocalFlux server -> http://localhost:${PORT}`);
-  console.log(`On your network  -> http://<your-local-ip>:${PORT}`);
+  if (localIp) {
+    console.log(`On your network  -> http://${localIp}:${PORT}`);
+    console.log(`Host join page   -> http://${localIp}:${CLIENT_PORT}/play`);
+  } else {
+    console.log('On your network  -> LAN IP not detected');
+  }
 });
