@@ -63,6 +63,7 @@ describe('typeGuessHandlers', () => {
       getRoom: () => room,
       LAN_ROOM_ID: 'local_flux_main',
       settleCurrentRound: jest.fn(),
+      getChatMode: () => 'FREE',
     });
 
     let ack;
@@ -74,6 +75,8 @@ describe('typeGuessHandlers', () => {
     expect(ack.matched).toBe(true);
     expect(room.players[0].score).toBe(100);
     expect(room.answersIn.p1).toBe('Interstellar');
+    const systemMsg = io.calls.find((c) => c.event === 'chat:message' && c.payload?.event === 'guess_correct');
+    expect(systemMsg?.payload?.text).toContain('+100 pts');
   });
 
   test('rejects guesses when mode is multiple choice', () => {
@@ -87,6 +90,7 @@ describe('typeGuessHandlers', () => {
       getRoom: () => room,
       LAN_ROOM_ID: 'local_flux_main',
       settleCurrentRound: jest.fn(),
+      getChatMode: () => 'FREE',
     });
 
     let ack;
@@ -96,5 +100,30 @@ describe('typeGuessHandlers', () => {
 
     expect(ack.ok).toBe(false);
     expect(ack.reason).toBe('type_guess_disabled');
+  });
+
+  test('does not broadcast wrong guesses in restricted mode', () => {
+    const room = makeRoom();
+    const socket = makeSocket();
+    const io = makeIo();
+
+    registerTypeGuessHandlers({
+      socket,
+      io,
+      getRoom: () => room,
+      LAN_ROOM_ID: 'local_flux_main',
+      settleCurrentRound: jest.fn(),
+      getChatMode: () => 'RESTRICTED',
+    });
+
+    let ack;
+    socket.trigger('player:chat_guess', { text: 'wrong answer' }, (res) => {
+      ack = res;
+    });
+
+    expect(ack.ok).toBe(true);
+    expect(ack.matched).toBe(false);
+    const missMessage = io.calls.find((c) => c.event === 'chat:message' && c.payload?.event === 'guess_miss');
+    expect(missMessage).toBeUndefined();
   });
 });

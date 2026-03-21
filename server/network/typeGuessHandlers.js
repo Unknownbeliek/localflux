@@ -17,7 +17,7 @@ function buildAcceptedAnswers(question) {
   return fromQuestion;
 }
 
-function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCurrentRound }) {
+function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCurrentRound, getChatMode }) {
   socket.on('player:chat_guess', ({ text } = {}, callback) => {
     const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
@@ -56,7 +56,7 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
       io.to(LAN_ROOM_ID).emit('chat:message', {
         from: 'system',
         name: 'System',
-        text: `${player.name} guessed correctly!`,
+        text: `${player.name} guessed correctly! +${TYPE_GUESS_POINTS} pts`,
         event: 'guess_correct',
         ts: Date.now(),
       });
@@ -92,13 +92,16 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
       return;
     }
 
-    io.to(LAN_ROOM_ID).emit('chat:message', {
-      from: socket.id,
-      name: socket.playerName || player.name || 'Player',
-      text: rawGuess,
-      event: 'guess_miss',
-      ts: Date.now(),
-    });
+    const chatMode = typeof getChatMode === 'function' ? String(getChatMode() || 'FREE') : 'FREE';
+    if (chatMode === 'FREE') {
+      io.to(LAN_ROOM_ID).emit('chat:message', {
+        from: socket.id,
+        name: socket.playerName || player.name || 'Player',
+        text: rawGuess,
+        event: 'guess_miss',
+        ts: Date.now(),
+      });
+    }
 
     return callback?.({ ok: true, matched: false, submitted: false, reason: result.reason, score: result.score });
   });

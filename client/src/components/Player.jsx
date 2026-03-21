@@ -115,6 +115,7 @@ export default function Player({ onBack }) {
   const [guessText, setGuessText] = useState('');
   const [guessFeedback, setGuessFeedback] = useState('');
   const [answeredCorrect, setAnsweredCorrect] = useState(null);
+  const [privateGuessHistory, setPrivateGuessHistory] = useState([]);
   const [myScore, setMyScore] = useState(0);
   const [resultData, setResultData] = useState(null);
   const [finalScores, setFinalScores] = useState([]);
@@ -134,6 +135,21 @@ export default function Player({ onBack }) {
   const startSplashTimerRef = useRef(null);
   const pendingFinalScoresRef = useRef(null);
   const endSplashTimerRef = useRef(null);
+  const desktopGuessInputRef = useRef(null);
+  const mobileGuessInputRef = useRef(null);
+
+  const resolveQuestionTiming = ({ durationMs, endsAt, question: incomingQuestion }) => {
+    const limitMs = Number(durationMs ?? incomingQuestion?.time_limit_ms);
+    const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
+    const serverEndsAt = Number(endsAt);
+    const serverRemainingMs = Number.isFinite(serverEndsAt) ? serverEndsAt - Date.now() : NaN;
+    const remainingMs = Number.isFinite(serverRemainingMs) && serverRemainingMs > 0 ? serverRemainingMs : normalizedMs;
+    const targetEndsAt = Date.now() + remainingMs;
+    return {
+      normalizedMs,
+      targetEndsAt,
+    };
+  };
 
   const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt }) => {
     setQuestion(nextQuestion);
@@ -141,12 +157,11 @@ export default function Player({ onBack }) {
     setGuessText('');
     setGuessFeedback('');
     setAnsweredCorrect(null);
+    setPrivateGuessHistory([]);
     setResultData(null);
     setNextQuestionIn(0);
     setChatDrawerOpen(false);
-    const limitMs = Number(durationMs ?? nextQuestion?.time_limit_ms);
-    const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
-    const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
+    const { normalizedMs, targetEndsAt } = resolveQuestionTiming({ durationMs, endsAt, question: nextQuestion });
     setTimeTotal(Math.ceil(normalizedMs / 1000));
     setQuestionEndsAt(targetEndsAt);
     setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
@@ -179,6 +194,7 @@ export default function Player({ onBack }) {
       setSelected(hasAnswered ? res.answeredValue ?? null : null);
       setGuessText('');
       setGuessFeedback('');
+      setPrivateGuessHistory([]);
       const isTypeGuessQuestion = activeQuestion?.answer_mode === 'type_guess';
       if (hasAnswered && isTypeGuessQuestion) {
         setAnsweredCorrect(true);
@@ -187,8 +203,7 @@ export default function Player({ onBack }) {
         setAnsweredCorrect(null);
         setPhase(hasAnswered ? 'answered' : 'question');
       }
-      const normalizedMs = Number.isFinite(Number(durationMs)) && Number(durationMs) > 0 ? Number(durationMs) : 20000;
-      const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
+      const { normalizedMs, targetEndsAt } = resolveQuestionTiming({ durationMs, endsAt, question: activeQuestion });
       setTimeTotal(Math.ceil(normalizedMs / 1000));
       setQuestionEndsAt(targetEndsAt);
       setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
@@ -491,6 +506,7 @@ export default function Player({ onBack }) {
         setFinalScores([]);
         setQuestion(null);
         setSelected(null);
+        setPrivateGuessHistory([]);
         setResultData(null);
         setPhase('waiting');
       }
@@ -532,10 +548,26 @@ export default function Player({ onBack }) {
         return;
       }
 
-      setAnsweredCorrect(false);
+      setAnsweredCorrect(null);
       setGuessText('');
-      setGuessFeedback('Not a match yet. Guess sent to chat.');
+      setGuessFeedback('');
+      if (chatMode !== 'FREE') {
+        setPrivateGuessHistory((prev) => [payload, ...prev].slice(0, 6));
+      }
     });
+  };
+
+  const handleReusePrivateGuess = (entry) => {
+    const value = String(entry || '').trim();
+    if (!value || answeredCorrect === true) return;
+
+    setGuessText(value);
+
+    const isMobileViewport =
+      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
+    const inputEl = isMobileViewport ? mobileGuessInputRef.current : desktopGuessInputRef.current;
+    inputEl?.focus();
+    inputEl?.setSelectionRange(value.length, value.length);
   };
 
   const handleSaveProfile = () => {
@@ -788,15 +820,23 @@ export default function Player({ onBack }) {
     const progress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
     return (
-      <div className={`min-h-screen bg-slate-950 text-white flex flex-col p-4 pt-6 md:pb-6 animate-phase-in ${isTypeGuessQuestion ? 'pb-[62vh]' : 'pb-24'}`}>
+      <div className={`min-h-screen bg-slate-950 text-white flex flex-col p-4 pt-6 md:pb-6 animate-phase-in ${isTypeGuessQuestion ? 'pb-[50vh]' : 'pb-24'}`}>
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             {renderLeaveAndPing({ inline: true })}
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
           </div>
-          <div className="rounded-xl border border-slate-800 bg-slate-900 px-3 py-2 text-right">
+          <div
+            className={`rounded-xl border px-3 py-2 text-right transition-colors duration-150 ${
+              timeLeft <= 2
+                ? 'border-red-500/60 bg-red-500/10'
+                : timeLeft <= 5
+                  ? 'border-amber-500/50 bg-amber-500/10'
+                  : 'border-slate-800 bg-slate-900'
+            }`}
+          >
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
-            <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</p>
+            <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timeLeft <= 2 ? 'text-red-300' : timerTone}`}>{timeLeft}s</p>
           </div>
         </div>
 
@@ -814,8 +854,28 @@ export default function Player({ onBack }) {
         {isTypeGuessQuestion ? (
           <div className="hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-4 md:block">
             <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Type Your Guess</p>
+            {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
+              <div className="mb-3">
+                <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">Your Attempts (Private)</p>
+                <div className="flex flex-wrap gap-2">
+                  {privateGuessHistory.map((entry, idx) => (
+                    <button
+                      key={`${entry}_${idx}`}
+                      type="button"
+                      onClick={() => handleReusePrivateGuess(entry)}
+                      title={entry}
+                      disabled={answeredCorrect === true}
+                      className="max-w-full rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span className="block max-w-48 truncate">{entry}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="flex gap-2">
               <input
+                ref={desktopGuessInputRef}
                 type="text"
                 value={guessText}
                 onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
@@ -834,7 +894,7 @@ export default function Player({ onBack }) {
                 GUESS
               </button>
             </div>
-            {guessFeedback && <p className={`mt-3 text-xs font-semibold ${answeredCorrect === true ? 'text-emerald-300' : 'text-amber-300'}`}>{guessFeedback}</p>}
+            {guessFeedback && <p className="mt-3 text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 content-start">
@@ -859,39 +919,78 @@ export default function Player({ onBack }) {
         )}
 
         <div className="mt-5 hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-3 md:block">
-          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+          <Chat
+            socket={chatSocket}
+            roomPin={LAN_ROOM}
+            title="Room Chat"
+            initialMode={chatMode}
+            initialAllowed={chatAllowed}
+            suppressFreeComposer={isTypeGuessQuestion}
+            showMeta={!isTypeGuessQuestion}
+            showModeBadge={!isTypeGuessQuestion}
+          />
         </div>
 
         {isTypeGuessQuestion && (
-          <div className="fixed inset-x-0 bottom-0 z-40 h-[58vh] border-t border-slate-700 bg-slate-950/98 p-3 shadow-2xl shadow-black/60 md:hidden">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Guess + Chat</p>
-            <div className="mb-2 flex gap-2">
-              <input
-                type="text"
-                value={guessText}
-                onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !answeredCorrect) handleGuessSubmit();
-                }}
-                placeholder={answeredCorrect ? 'Answer submitted' : 'Type your guess...'}
-                disabled={answeredCorrect === true}
-                className={`flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none ${answeredCorrect === true ? 'cursor-not-allowed opacity-50' : ''}`}
+          <div
+            className="fixed inset-x-0 bottom-0 z-40 flex h-[40vh] flex-col border-t border-slate-700 bg-slate-950/98 p-2 shadow-2xl shadow-black/60 md:hidden"
+            style={{ paddingBottom: 'max(0.6rem, env(safe-area-inset-bottom))' }}
+          >
+            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Guess + Chat</p>
+
+            <div className="min-h-0 flex-1 rounded-2xl border border-slate-800 bg-slate-900/40 p-1.5">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                suppressFreeComposer
+                showMeta={false}
+                showModeBadge={false}
               />
-              <button
-                onClick={handleGuessSubmit}
-                className="rounded-xl bg-emerald-400 px-5 py-3 text-sm font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
-                disabled={!guessText.trim() || answeredCorrect === true}
-              >
-                GUESS
-              </button>
             </div>
-            {guessFeedback && (
-              <p className={`mb-2 text-xs font-semibold ${answeredCorrect === true ? 'text-emerald-300' : 'text-amber-300'}`}>
-                {guessFeedback}
-              </p>
-            )}
-            <div className="min-h-0 h-[calc(100%-88px)]">
-              <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+
+            <div className="mt-1 border-t border-slate-800 pt-1">
+              <p className="mb-1.5 text-[11px] uppercase tracking-[0.2em] text-slate-500">Type Your Guess</p>
+              {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
+                <div className="mb-1 flex flex-wrap gap-1.5">
+                  {privateGuessHistory.map((entry, idx) => (
+                    <button
+                      key={`${entry}_${idx}`}
+                      type="button"
+                      onClick={() => handleReusePrivateGuess(entry)}
+                      title={entry}
+                      disabled={answeredCorrect === true}
+                      className="max-w-full rounded-full border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <span className="block max-w-36 truncate">{entry}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              {guessFeedback && <p className="mb-1.5 text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
+              <div className="flex gap-1.5">
+                <input
+                  ref={mobileGuessInputRef}
+                  type="text"
+                  value={guessText}
+                  onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !answeredCorrect) handleGuessSubmit();
+                  }}
+                  placeholder={answeredCorrect ? 'Answer submitted' : 'Type your guess here...'}
+                  disabled={answeredCorrect === true}
+                  className={`min-h-12 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none ${answeredCorrect === true ? 'cursor-not-allowed opacity-50' : ''}`}
+                />
+                <button
+                  onClick={handleGuessSubmit}
+                  className="min-h-12 rounded-xl bg-emerald-400 px-5 py-3 text-sm font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+                  disabled={!guessText.trim() || answeredCorrect === true}
+                >
+                  GUESS
+                </button>
+              </div>
             </div>
           </div>
         )}

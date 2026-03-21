@@ -357,6 +357,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     getRoom,
     LAN_ROOM_ID,
     settleCurrentRound,
+    getChatMode: () => chatInstance?.mode || 'FREE',
   });
 
   // ── client_ping ────────────────────────────────────────────────────────
