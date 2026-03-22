@@ -68,26 +68,26 @@ function questionsToDeck(raw, fallbackTitle = 'Imported Deck') {
     ? raw.slides
     : Array.isArray(raw?.questions)
       ? raw.questions.map((q, idx) => {
-          const options = Array.isArray(q?.options) ? q.options.map((opt) => String(opt || '').trim()) : [];
-          const normalized = options.slice(0, 4);
-          while (normalized.length < 4) normalized.push('');
+        const options = Array.isArray(q?.options) ? q.options.map((opt) => String(opt || '').trim()) : [];
+        const normalized = options.slice(0, 4);
+        while (normalized.length < 4) normalized.push('');
 
-          const correctAnswer = String(q?.correct_answer || '').trim();
-          let correctIndex = normalized.findIndex((opt) => opt.toLowerCase() === correctAnswer.toLowerCase());
-          if (correctIndex < 0) correctIndex = 0;
+        const correctAnswer = String(q?.correct_answer || '').trim();
+        let correctIndex = normalized.findIndex((opt) => opt.toLowerCase() === correctAnswer.toLowerCase());
+        if (correctIndex < 0) correctIndex = 0;
 
-          return {
-            id: String(q?.id || q?.q_id || `slide_${idx + 1}_${uid()}`),
-            type: q?.type === 'typing' ? 'typing' : 'mcq',
-            prompt: String(q?.prompt || '').trim(),
-            image: String(q?.image || q?.asset_ref || '').trim() || null,
-            options: normalized,
-            correctIndex,
-            acceptedAnswers: Array.isArray(q?.acceptedAnswers) ? q.acceptedAnswers : [],
-            suggestionBank: Array.isArray(q?.suggestionBank) ? q.suggestionBank : [],
-            timeLimit: Number.isFinite(Number(q?.timeLimit)) ? Number(q.timeLimit) : 20000,
-          };
-        })
+        return {
+          id: String(q?.id || q?.q_id || `slide_${idx + 1}_${uid()}`),
+          type: q?.type === 'typing' ? 'typing' : 'mcq',
+          prompt: String(q?.prompt || '').trim(),
+          image: String(q?.image || q?.asset_ref || '').trim() || null,
+          options: normalized,
+          correctIndex,
+          acceptedAnswers: Array.isArray(q?.acceptedAnswers) ? q.acceptedAnswers : [],
+          suggestionBank: Array.isArray(q?.suggestionBank) ? q.suggestionBank : [],
+          timeLimit: Number.isFinite(Number(q?.timeLimit)) ? Number(q.timeLimit) : 20000,
+        };
+      })
       : [];
 
   return {
@@ -290,7 +290,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     });
     // keep host view of chat mode in sync
     socket.on('chat:mode', ({ mode, allowed }) => { setChatMode(mode); if (allowed) setAllowedList(allowed); });
-    
+
     socket.on('player_joined', ({ players }) => setPlayers(players));
     socket.on('player:profileUpdated', ({ player, players }) => {
       if (Array.isArray(players)) setPlayers(players);
@@ -371,8 +371,8 @@ export default function Host({ onBack, studioQuestions = null }) {
     socket.on('host_reconnecting', ({ message }) => {
       if (message) setError(message);
     });
-    socket.on('chat:muted', () => {});
-    socket.on('chat:unmuted', () => {});
+    socket.on('chat:muted', () => { });
+    socket.on('chat:unmuted', () => { });
     // listen for moderator updates if server emits them
     socket.on('chat:moderation', ({ action, target }) => {
       setMutedSet((s) => {
@@ -694,12 +694,12 @@ export default function Host({ onBack, studioQuestions = null }) {
           const hasSlides = Array.isArray(parsedJson?.slides);
           candidateDeck = hasSlides
             ? {
-                id: String(parsedJson.id || `import_${uid()}`),
-                title: String(parsedJson.title || lowerName || 'Imported Deck').trim(),
-                version: String(parsedJson.version || '1.0.0').trim(),
-                slides: parsedJson.slides,
-                updatedAt: Date.now(),
-              }
+              id: String(parsedJson.id || `import_${uid()}`),
+              title: String(parsedJson.title || lowerName || 'Imported Deck').trim(),
+              version: String(parsedJson.version || '1.0.0').trim(),
+              slides: parsedJson.slides,
+              updatedAt: Date.now(),
+            }
             : questionsToDeck(parsedJson, lowerName.replace(/\.(json|flux)$/i, '') || 'Imported Deck');
         }
 
@@ -981,7 +981,7 @@ export default function Host({ onBack, studioQuestions = null }) {
       if (!confirmed) return;
 
       if (socketRef.current?.connected && hostToken) {
-        socketRef.current.emit('host:close_room', { hostToken, hostSessionId: hostSessionIdRef.current }, () => {});
+        socketRef.current.emit('host:close_room', { hostToken, hostSessionId: hostSessionIdRef.current }, () => { });
       }
     }
     clearHostState();
@@ -1248,31 +1248,31 @@ export default function Host({ onBack, studioQuestions = null }) {
       <div className="z-10 w-full max-w-sm panel-elevated p-8 animate-phase-in">
         <h1 className="mb-8 text-5xl font-black tracking-tight font-outfit text-gradient-brand">New Room</h1>
         <div className="w-full">
-        <input
-          type="text"
-          placeholder="Room name"
-          value={roomName}
-          onChange={(e) => setRoomName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          className="mb-3 w-full rounded-2xl border border-slate-700/50 bg-[#0D1117] px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-violet-400 focus:outline-none font-outfit"
-        />
-        {error && <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/8 px-4 py-2.5 text-xs font-mono text-red-300">{error}</p>}
-        <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-violet-500 py-5 text-xl font-black text-white font-outfit transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:from-slate-700 disabled:via-slate-700 disabled:to-slate-700 animate-shimmer">
-          CREATE
-        </button>
-        <div className={`mt-3 flex items-center justify-center gap-2 text-xs font-outfit font-semibold ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
-          {connected ? (
-            <span>connected</span>
-          ) : (
-            <>
-              <span>connecting</span>
-              <span className="status-dot" />
-              <span className="status-dot" />
-              <span className="status-dot" />
-            </>
-          )}
-        </div>
-        {resumeNotice && <p className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-2.5 text-xs text-emerald-200">{resumeNotice}</p>}
+          <input
+            type="text"
+            placeholder="Room name"
+            value={roomName}
+            onChange={(e) => setRoomName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+            className="mb-3 w-full rounded-2xl border border-slate-700/50 bg-[#0D1117] px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-violet-400 focus:outline-none font-outfit"
+          />
+          {error && <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/8 px-4 py-2.5 text-xs font-mono text-red-300">{error}</p>}
+          <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-violet-500 py-5 text-xl font-black text-white font-outfit transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:from-slate-700 disabled:via-slate-700 disabled:to-slate-700 animate-shimmer">
+            CREATE
+          </button>
+          <div className={`mt-3 flex items-center justify-center gap-2 text-xs font-outfit font-semibold ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
+            {connected ? (
+              <span>connected</span>
+            ) : (
+              <>
+                <span>connecting</span>
+                <span className="status-dot" />
+                <span className="status-dot" />
+                <span className="status-dot" />
+              </>
+            )}
+          </div>
+          {resumeNotice && <p className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-2.5 text-xs text-emerald-200">{resumeNotice}</p>}
         </div>
       </div>
     </div>

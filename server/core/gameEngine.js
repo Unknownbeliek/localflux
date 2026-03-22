@@ -45,54 +45,15 @@ function applyModeToSlide(slide, mode) {
   return cloned;
 }
 
-function normalizeText(value) {
-  return String(value || '').trim().toLowerCase();
-}
-
-function parseSubmittedIndex(answer) {
-  if (typeof answer === 'number' && Number.isInteger(answer)) return answer;
-
-  const asNumber = Number(answer);
-  if (Number.isInteger(asNumber) && String(answer).trim() !== '') return asNumber;
-
-  return null;
-}
-
-function isMcqCorrect(slide, answer) {
-  const options = Array.isArray(slide?.options) ? slide.options : [];
-  const correctIndex = Number(slide?.correctIndex);
-
-  if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) return false;
-
-  const submittedIndex = parseSubmittedIndex(answer);
-  if (submittedIndex !== null) return submittedIndex === correctIndex;
-
-  const submittedText = normalizeText(answer);
-  const correctText = normalizeText(options[correctIndex]);
-  return submittedText.length > 0 && submittedText === correctText;
-}
-
-function isTypingCorrect(slide, answer) {
-  const accepted = Array.isArray(slide?.acceptedAnswers) ? slide.acceptedAnswers : [];
-  const submitted = normalizeText(answer);
-  if (!submitted) return false;
-
-  return accepted.some((item) => normalizeText(item) === submitted);
-}
-
-function calculateScoreForCorrect(slide) {
-  const raw = Number(slide?.timeLimit);
-  const safe = Number.isFinite(raw) && raw > 0 ? raw : 20000;
-  const derived = Math.round(safe / 200); // 20s => 100
-  return Math.max(50, Math.min(300, derived));
-}
+const { validateAnswer } = require('./answerValidation');
+const { calculateScore } = require('./scoringEngine');
 
 /**
  * Start a game in the given room.
  * Mutates room.status, room.currentQ, room.answersIn.
  *
  * @param {object} room      - Room object from roomStore
- * @param {object[]} questions - Full QUESTIONS array from the loaded deck
+ * @param {object[]} slides - Full QUESTIONS array from the loaded deck
  * @returns {{ question: object, index: number, total: number }}
  */
 function startGame(room, slides) {
@@ -115,18 +76,19 @@ function startGame(room, slides) {
 
 /**
  * Record a player's answer for the current question.
- * Awards +100 points for the first correct submission per player per round.
- * Idempotent — subsequent calls from the same player are rejected.
  *
  * @param {object} room
- * @param {object[]} questions
+ * @param {object[]} slides
  * @param {string} socketId
  * @param {string} answer
- * @returns {{ correct: boolean, alreadyAnswered: boolean, answerCount: number, totalPlayers: number }}
+ * @param {number} timeRemainingMs
+ * @param {number} totalTimeMs
+ * @param {string} gameMode
+ * @returns {{ correct: boolean, alreadyAnswered: boolean, answerCount: number, totalPlayers: number, pointsAwarded: number, matchDetails: object }}
  */
-function submitAnswer(room, slides, socketId, answer) {
+function submitAnswer(room, slides, socketId, answer, timeRemainingMs = 0, totalTimeMs = 20000, gameMode = 'arcade') {
   if (room.status !== 'started') {
-    return { correct: false, alreadyAnswered: false, answerCount: 0, totalPlayers: room.players.length };
+    return { correct: false, alreadyAnswered: false, answerCount: 0, totalPlayers: room.players.length, pointsAwarded: 0 };
   }
 
   if (room.answersIn[socketId] !== undefined) {
@@ -135,22 +97,26 @@ function submitAnswer(room, slides, socketId, answer) {
       alreadyAnswered: true,
       answerCount: Object.keys(room.answersIn).length,
       totalPlayers: room.players.length,
+      pointsAwarded: 0
     };
   }
 
   const slide = room.activeSlide || slides[room.currentQ];
-  const type = String(slide?.answer_mode === 'type_guess' ? 'typing' : 'mcq').trim().toLowerCase();
+  const player = room.players.find((p) => p.id === socketId);
+  const currentStreak = player ? (player.streak || 0) : 0;
+  
+  const validationResult = validateAnswer(slide, answer, gameMode);
+  const correct = validationResult.correct;
 
-  let correct = false;
-  if (type === 'typing') {
-    correct = isTypingCorrect(slide, answer);
-  } else {
-    correct = isMcqCorrect(slide, answer);
-  }
-
-  if (correct) {
-    const player = room.players.find((p) => p.id === socketId);
-    if (player) player.score += calculateScoreForCorrect(slide);
+  let pointsAwarded = 0;
+  
+  if (player) {
+    const slideDifficulty = slide?.difficulty || 'standard';
+    const scoreResult = calculateScore(correct, slideDifficulty, gameMode, timeRemainingMs, totalTimeMs, currentStreak);
+    
+    player.score = (player.score || 0) + scoreResult.points;
+    player.streak = scoreResult.newStreak;
+    pointsAwarded = scoreResult.points;
   }
 
   room.answersIn[socketId] = answer;
@@ -160,6 +126,8 @@ function submitAnswer(room, slides, socketId, answer) {
     alreadyAnswered: false,
     answerCount: Object.keys(room.answersIn).length,
     totalPlayers: room.players.length,
+    pointsAwarded,
+    matchDetails: validationResult
   };
 }
 
