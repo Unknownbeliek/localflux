@@ -108,6 +108,51 @@ lobby ──► started ──► finished
 
 ---
 
+## State Shapes (Host vs. Player)
+
+To enforce a "Dumb Client" anti-cheat architecture, the server never sends the actual answer to players before the round concludes. 
+
+### ServerGameState
+Held strictly in RAM (`core/roomStore.js`).
+```javascript
+{
+  roomId: "ABCD",
+  status: "started",
+  currentQuestionIndex: 2,
+  currentTimer: 15,
+  correctAnswer: "Paris", // NEVER sent to player payload during active round
+  playerScores: {
+    "socket_123": 1500,
+    "socket_456": 800
+  }
+}
+```
+
+### PlayerPayload
+Sent to all mobile clients during a live round.
+```javascript
+{
+  roomId: "ABCD",
+  status: "started",
+  currentQuestionIndex: 2
+  // CORRECT ANSWER IS DELIBERATELY EXCLUDED
+}
+```
+
+---
+
+## Host Mode Policy Matrix
+
+LocalFlux handles mixed-content decks (MCQ + Typing) gracefully. Hosts can override the deck's default mechanics from the lobby.
+
+| Mode | Behavior | Validation Safety |
+|---|---|---|
+| **Auto (Deck-Driven)** | Respects deck settings. `mcq` and `typing` questions run exactly as authored. | None (Default mode) |
+| **Force 4 Options** | `mcq` runs normally. `typing` auto-generates 3 distractors dynamically. | UI warns host if distractor generation fails threshold. Host can fallback or block. |
+| **Force Type Guess** | `typing` runs normally. `mcq` converts the correct option into the accepted typing answer. | None |
+
+---
+
 ## Adding a new socket event
 
 1. Write the pure logic in `core/gameEngine.js` (or `core/roomStore.js` if it's state management)

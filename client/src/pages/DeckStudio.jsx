@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useDeckStudioStore } from '../deckStudio/store';
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog';
 import CloudDeckCard from '../components/CloudDeckCard';
+import AnimatedBackground from '../components/AnimatedBackground';
 
 function isSlideValid(slide) {
   return (
@@ -195,23 +196,24 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-900 text-white">
-      <aside className="w-64 bg-slate-800 border-r border-slate-700 flex flex-col">
-        <div className="border-b border-slate-700 p-4">
-          <h1 className="text-lg font-black tracking-tight">Deck Studio</h1>
-          <p className="mt-1 text-xs text-slate-400">Slide Navigator</p>
+    <div className="flex h-[100dvh] bg-slate-950 text-white overflow-hidden relative">
+      <AnimatedBackground />
+      <aside className="relative z-10 w-64 bg-slate-950/60 backdrop-blur-2xl border-r border-white/10 flex flex-col shadow-2xl">
+        <div className="border-b border-white/10 p-5">
+          <h1 className="text-xl font-black tracking-tight text-white drop-shadow-md">Deck Studio</h1>
+          <p className="mt-1 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">Slide Navigator</p>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
           {deck.slides.map((slide, index) => {
             const isActive = slide.id === activeSlide?.id;
             return (
               <button
                 key={slide.id}
                 onClick={() => selectSlide(slide.id)}
-                className={`w-full rounded-xl border px-3 py-3 text-left transition ${
+                className={`w-full rounded-2xl border-2 px-4 py-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg ${
                   isActive
-                    ? 'border-emerald-400/70 bg-emerald-500/20'
-                    : 'border-slate-700 bg-slate-900 hover:border-slate-500'
+                    ? 'border-emerald-400/60 bg-emerald-500/20 shadow-[0_0_15px_rgba(52,211,153,0.2)]'
+                    : 'border-white/5 bg-slate-900/40 hover:border-white/20'
                 }`}
               >
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Question {index + 1}</p>
@@ -222,54 +224,54 @@ export default function DeckStudio({ onBack, onHostDeck }) {
             );
           })}
         </div>
-        <div className="border-t border-slate-700 p-4">
+        <div className="border-t border-white/10 p-5">
           <button
             onClick={onAddQuestion}
-            className="w-full rounded-xl bg-emerald-400 px-3 py-3 text-sm font-black tracking-wide text-black transition hover:bg-emerald-300"
+            className="w-full rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-400 px-4 py-4 text-sm font-black tracking-[0.1em] text-teal-950 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(52,211,153,0.4)] active:translate-y-0 active:scale-95"
           >
-            + Add Question
+            + ADD QUESTION
           </button>
         </div>
       </aside>
 
-      <main className="flex-1 bg-slate-900 flex flex-col items-center justify-center p-8">
-        <div className="w-full max-w-5xl space-y-5 rounded-3xl border border-slate-700 bg-slate-800/70 p-8 shadow-2xl shadow-black/30">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center p-8 overflow-y-auto">
+        <div className="w-full max-w-4xl space-y-6 rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl p-10 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
           <div>
             <input
               value={activeSlide?.prompt || ''}
               onChange={(e) => activeSlide && updatePrompt(activeSlide.id, e.target.value)}
-              placeholder="Type your question here"
-              className="w-full bg-transparent text-center text-4xl font-black tracking-tight text-white placeholder:text-slate-500 focus:outline-none"
+              placeholder="Type your question here..."
+              className="w-full bg-transparent text-center text-4xl md:text-5xl font-black tracking-tight text-white/95 placeholder:text-white/30 focus:outline-none drop-shadow-md transition-all"
             />
-            {activeErrors.prompt && <p className="mt-2 text-center text-sm text-rose-300">{activeErrors.prompt}</p>}
+            {activeErrors.prompt && <p className="mt-3 text-center text-sm font-semibold text-rose-400 drop-shadow-sm">{activeErrors.prompt}</p>}
           </div>
 
-          <div className="rounded-2xl border-2 border-dashed border-slate-600 bg-slate-900/50 p-6">
-            <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
-              Image Placeholder
+          <div className="rounded-3xl border-2 border-dashed border-white/20 bg-slate-900/30 p-8 backdrop-blur-md transition-all hover:border-emerald-400/40 hover:bg-slate-900/50">
+            <p className="mb-4 text-center text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">
+              Image Reference (URL)
             </p>
             <input
               value={activeSlide?.imageUrl || ''}
               onChange={(e) => activeSlide && updateImageUrl(activeSlide.id, e.target.value)}
-              placeholder="Paste image URL or future dropzone"
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+              placeholder="Paste image URL here"
+              className="w-full rounded-2xl border border-white/10 bg-black/40 px-5 py-4 text-sm font-medium text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 shadow-inner overflow-hidden"
             />
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {(activeSlide?.options || ['', '', '', '']).map((option, optionIndex) => {
               const optionStyles = [
-                'bg-red-500/90 border-red-300/70',
-                'bg-blue-500/90 border-blue-300/70',
-                'bg-yellow-400/95 border-yellow-200/70 text-slate-950',
-                'bg-green-500/90 border-green-300/70',
+                'bg-gradient-to-br from-rose-500 to-pink-600 border-white/20 shadow-xl',
+                'bg-gradient-to-br from-blue-500 to-indigo-600 border-white/20 shadow-xl',
+                'bg-gradient-to-br from-amber-400 to-orange-500 border-white/20 shadow-xl text-white',
+                'bg-gradient-to-br from-emerald-400 to-teal-500 border-white/20 shadow-xl',
               ];
               const isCorrect = activeSlide?.correctIndex === optionIndex;
 
               return (
                 <div
                   key={`${activeSlide?.id || 'none'}_${optionIndex}`}
-                  className={`rounded-2xl border-2 p-4 ${optionStyles[optionIndex]}`}
+                  className={`rounded-3xl border-2 p-5 transition-all duration-300 focus-within:scale-[1.02] focus-within:shadow-2xl hover:scale-[1.01] ${optionStyles[optionIndex]}`}
                 >
                   <div className="mb-3 flex items-center justify-between">
                     <label className="text-xs font-black uppercase tracking-wide">Option {optionIndex + 1}</label>
@@ -304,15 +306,15 @@ export default function DeckStudio({ onBack, onHostDeck }) {
         </div>
       </main>
 
-      <aside className="w-80 bg-slate-800 border-l border-slate-700 flex flex-col">
-        <div className="border-b border-slate-700 p-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-semibold uppercase tracking-wide text-slate-400">Settings</p>
+      <aside className="relative z-10 w-80 bg-slate-950/60 backdrop-blur-2xl border-l border-white/10 flex flex-col shadow-2xl">
+        <div className="border-b border-white/10 p-5">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Settings</p>
             <button
               onClick={onBack}
-              className="rounded-lg border border-slate-600 bg-slate-900 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-slate-200 hover:border-slate-500"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-white/80 transition-colors hover:bg-white/10 hover:text-white"
             >
-              Back
+              Exit
             </button>
           </div>
           <p className="mt-1 text-xs text-emerald-300">Draft status: {saveState}</p>
@@ -328,29 +330,29 @@ export default function DeckStudio({ onBack, onHostDeck }) {
           </div>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto p-4">
-          <section className="rounded-xl border border-slate-700 bg-slate-900/70 p-3">
-            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-300">Deck Name</label>
+        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+          <section className="rounded-2xl border border-white/5 bg-black/20 p-4 shadow-inner">
+            <label className="mb-2 block text-[11px] font-black uppercase tracking-[0.15em] text-slate-400">Deck Name</label>
             <input
               value={deck.title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g. Eyes of Cinema - Season 1"
-              className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/60"
+              placeholder="e.g. Pop Culture Trivia"
+              className="w-full rounded-xl border border-white/10 bg-slate-900/60 px-4 py-3 text-sm font-semibold text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/50 transition-all"
             />
           </section>
 
-          <section className="grid grid-cols-2 gap-2">
+          <section className="grid grid-cols-2 gap-3">
             <button
               onClick={undo}
               disabled={historyPast.length === 0}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-100 disabled:opacity-40"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-slate-300 transition-all hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Undo
             </button>
             <button
               onClick={redo}
               disabled={historyFuture.length === 0}
-              className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-xs font-semibold uppercase tracking-wide text-slate-100 disabled:opacity-40"
+              className="rounded-xl border border-white/10 bg-white/5 px-3 py-3 text-[11px] font-black uppercase tracking-[0.1em] text-slate-300 transition-all hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
             >
               Redo
             </button>

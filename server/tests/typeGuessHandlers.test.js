@@ -45,6 +45,11 @@ function makeRoom(overrides = {}) {
         fuzzy_allowances: ['Interstellar (2014)'],
       },
     ],
+    activeSlide: {
+      answer_mode: overrides.answerMode || 'type_guess',
+      correct_answer: 'Interstellar',
+      fuzzy_allowances: ['Interstellar (2014)'],
+    },
     players: [{ id: 'p1', name: 'Player One', score: 0 }],
     answersIn: {},
     ...overrides,

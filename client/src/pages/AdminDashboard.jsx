@@ -5,6 +5,7 @@ import { useHostToken } from '../context/HostTokenProvider'
 import { createGameSocket } from '../backendUrl'
 import { deckStudioDB } from '../deckStudio/db'
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog'
+import AnimatedBackground from '../components/AnimatedBackground'
 
 const LIBRARY_GRADIENTS = [
   'from-emerald-400 to-blue-500',
@@ -13,6 +14,7 @@ const LIBRARY_GRADIENTS = [
   'from-rose-400 to-fuchsia-500',
   'from-lime-400 to-emerald-500',
 ]
+
 
 function DeckCard({ deck, index, buttonLabel, onAction }) {
   const gradient = LIBRARY_GRADIENTS[index % LIBRARY_GRADIENTS.length]
@@ -224,17 +226,39 @@ export default function AdminDashboard() {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 select-none">
-      {/* Background blur effects */}
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
-      <div className="pointer-events-none absolute -right-24 top-16 h-72 w-72 rounded-full bg-emerald-500/10 blur-3xl" />
-      <div className="pointer-events-none absolute -left-24 bottom-12 h-64 w-64 rounded-full bg-amber-400/10 blur-3xl" />
+      {/* ── Animated Background ── */}
+      <div className="animated-bg">
+        {/* Floating gradient orbs */}
+        <div className="orb orb-1" />
+        <div className="orb orb-2" />
+        <div className="orb orb-3" />
+        <div className="orb orb-4" />
+
+        {/* Slowly rotating dot grid */}
+        <div className="dot-grid" />
+
+        {/* Shimmer particles */}
+        <div className="particles">
+          <div className="particle" />
+          <div className="particle" />
+          <div className="particle" />
+          <div className="particle" />
+          <div className="particle" />
+          <div className="particle" />
+          <div className="particle" />
+          <div className="particle" />
+        </div>
+
+        {/* Soft vignette */}
+        <div className="vignette" />
+      </div>
 
       {/* Main container */}
       <div className="z-10 w-full max-w-6xl">
         {/* Header */}
         <div className="mb-8">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5em] text-emerald-400">Local Multiplayer Quiz</p>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight">LocalFlux</h1>
+          <h1 className="text-5xl md:text-7xl font-black tracking-tight title-glow">LocalFlux</h1>
           <p className="mt-3 max-w-2xl text-slate-300 text-sm md:text-base">
             Start a room in seconds, pick a deck from your library, and run a polished couch-multiplayer quiz night.
           </p>

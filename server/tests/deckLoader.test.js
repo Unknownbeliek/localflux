@@ -24,14 +24,15 @@ function writeTempDeck(obj) {
 // ── loadDeck ─────────────────────────────────────────────────────────────────
 
 describe('loadDeck()', () => {
-  test('loads a valid deck and returns its questions array', () => {
+  test('loads a valid deck and returns its slides array', () => {
     const tmp = writeTempDeck({
       deck_meta: { title: 'Test' },
-      questions: [{ q_id: 'q_01', prompt: 'Who?' }],
+      slides: [{ id: 'slide_01', type: 'mcq', prompt: 'Who?', image: null, options: ['A', 'B', 'C', 'D'], correctIndex: 0, acceptedAnswers: [], suggestionBank: [], timeLimit: 20000 }],
     });
     const deck = loadDeck(tmp);
-    expect(Array.isArray(deck.questions)).toBe(true);
-    expect(deck.questions).toHaveLength(1);
+    expect(Array.isArray(deck.slides)).toBe(true);
+    expect(deck.slides).toHaveLength(1);
+    expect(deck.questions).toHaveLength(1); // compatibility alias
     fs.unlinkSync(tmp);
   });
 
@@ -39,15 +40,25 @@ describe('loadDeck()', () => {
     expect(() => loadDeck('/nonexistent/path/deck.json')).toThrow('Deck not found');
   });
 
-  test('throws when questions key is missing', () => {
+  test('throws when slides/questions key is missing', () => {
     const tmp = writeTempDeck({ deck_meta: { title: 'Bad' } });
-    expect(() => loadDeck(tmp)).toThrow('"questions" array');
+    expect(() => loadDeck(tmp)).toThrow('"slides" array');
     fs.unlinkSync(tmp);
   });
 
-  test('throws when questions is not an array', () => {
+  test('throws when slides and questions are not arrays', () => {
     const tmp = writeTempDeck({ questions: 'oops' });
-    expect(() => loadDeck(tmp)).toThrow('"questions" array');
+    expect(() => loadDeck(tmp)).toThrow('"slides" array');
+    fs.unlinkSync(tmp);
+  });
+
+  test('accepts legacy questions array as fallback', () => {
+    const tmp = writeTempDeck({
+      questions: [{ id: 'legacy_01', type: 'mcq', prompt: 'Legacy?', image: null, options: ['A', 'B', 'C', 'D'], correctIndex: 0, acceptedAnswers: [], suggestionBank: [], timeLimit: 20000 }],
+    });
+    const deck = loadDeck(tmp);
+    expect(Array.isArray(deck.slides)).toBe(true);
+    expect(deck.slides).toHaveLength(1);
     fs.unlinkSync(tmp);
   });
 });
@@ -56,35 +67,39 @@ describe('loadDeck()', () => {
 
 describe('sanitizeQuestion()', () => {
   const raw = {
-    q_id: 'q_01',
-    type: 'text_only',
+    id: 'slide_01',
+    type: 'mcq',
     prompt: 'Who directed Inception?',
+    image: null,
     options: ['Nolan', 'Spielberg', 'Scott', 'Cameron'],
-    correct_answer: 'Nolan',
-    fuzzy_allowances: ['nolan', 'christopher nolan'],
-    time_limit_ms: 20000,
+    correctIndex: 0,
+    acceptedAnswers: ['Nolan'],
+    suggestionBank: ['Nolan', 'Scott'],
+    timeLimit: 20000,
   };
 
-  test('removes correct_answer from the output', () => {
+  test('removes correctIndex from the output', () => {
     const safe = sanitizeQuestion(raw);
-    expect(safe).not.toHaveProperty('correct_answer');
+    expect(safe).not.toHaveProperty('correctIndex');
   });
 
-  test('removes fuzzy_allowances from the output', () => {
+  test('removes acceptedAnswers from the output', () => {
     const safe = sanitizeQuestion(raw);
-    expect(safe).not.toHaveProperty('fuzzy_allowances');
+    expect(safe).not.toHaveProperty('acceptedAnswers');
   });
 
-  test('preserves all other fields', () => {
+  test('preserves allowed public fields', () => {
     const safe = sanitizeQuestion(raw);
-    expect(safe.q_id).toBe(raw.q_id);
+    expect(safe.id).toBe(raw.id);
     expect(safe.prompt).toBe(raw.prompt);
     expect(safe.options).toEqual(raw.options);
-    expect(safe.time_limit_ms).toBe(raw.time_limit_ms);
+    expect(safe.timeLimit).toBe(raw.timeLimit);
+    expect(safe.suggestionBank).toEqual(raw.suggestionBank);
   });
 
   test('does not mutate the original question object', () => {
     sanitizeQuestion(raw);
-    expect(raw).toHaveProperty('correct_answer', 'Nolan');
+    expect(raw).toHaveProperty('correctIndex', 0);
+    expect(raw).toHaveProperty('acceptedAnswers');
   });
 });

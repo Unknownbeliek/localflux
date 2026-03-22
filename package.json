@@ -1,8 +1,12 @@
 {
   "devDependencies": {
+    "concurrently": "^9.2.1",
     "vitepress": "^1.6.4"
   },
   "scripts": {
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "cd server && npm start",
+    "dev:client": "cd client && npm run dev",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"

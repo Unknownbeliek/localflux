@@ -1,7 +1,7 @@
 /**
  * deckLoader.js
  *
- * Loads a quiz deck from disk and exposes the question list.
+ * Loads a quiz deck from disk and exposes the slide list.
  * Keeps all file-system concerns isolated from game logic.
  */
 
@@ -11,11 +11,14 @@ const path = require('path');
 const fs = require('fs');
 
 /**
- * Load a deck JSON file and return its questions array.
+ * Load a deck JSON file and require at least one slide source.
+ *
+ * Canonical source is `slides`.
+ * Backward-compatible fallback source is `questions`.
  *
  * @param {string} deckPath - Absolute path to the deck JSON file.
- * @returns {{ questions: object[] }} Parsed deck with a `questions` array.
- * @throws {Error} If the file cannot be read or is missing the `questions` key.
+ * @returns {{ slides: object[] }} Parsed deck with a `slides` array.
+ * @throws {Error} If the file cannot be read or has no valid slide/question array.
  */
 function loadDeck(deckPath) {
   if (!fs.existsSync(deckPath)) {
@@ -30,30 +33,44 @@ function loadDeck(deckPath) {
     throw new Error(`Invalid JSON in deck at ${deckPath}: ${err.message}`);
   }
 
-  if (!Array.isArray(deck.questions)) {
-    throw new Error(`Deck at "${deckPath}" is missing a "questions" array.`);
+  const slides = Array.isArray(deck.slides) ? deck.slides : Array.isArray(deck.questions) ? deck.questions : null;
+  if (!Array.isArray(slides)) {
+    throw new Error(`Deck at "${deckPath}" is missing a "slides" array (or legacy "questions" fallback).`);
   }
 
-  return deck;
+  return {
+    ...deck,
+    slides,
+    // Keep legacy key for compatibility with existing startup wiring.
+    questions: slides,
+  };
 }
 
 /**
- * Remove answer-critical fields before broadcasting a question to players.
- * Uses an allowlist of safe fields instead of blocklist for better security.
- * Only sends: q_id, type, prompt, options, time_limit_ms, image_url, video_url.
+ * Remove answer-critical fields before broadcasting a slide to players.
+ * Uses a strict allowlist and explicitly strips correctness data.
  *
- * @param {object} question - A raw question object from the deck.
- * @returns {object} A safe copy with only whitelisted fields.
+ * Allowed outbound fields:
+ * id, type, prompt, image, options, suggestionBank, timeLimit
+ *
+ * @param {object} slide - Raw slide object.
+ * @returns {object} Safe public slide payload.
  */
-function sanitizeQuestion(question) {
-  const SAFE_FIELDS = ['q_id', 'type', 'prompt', 'options', 'time_limit_ms', 'image_url', 'video_url', 'answer_mode'];
+function sanitizeQuestion(slide) {
+  const SAFE_FIELDS = ['id', 'type', 'prompt', 'image', 'options', 'suggestionBank', 'timeLimit', 'answer_mode'];
   const safe = {};
-  SAFE_FIELDS.forEach(field => {
-    if (field in question) safe[field] = question[field];
+
+  SAFE_FIELDS.forEach((field) => {
+    if (field in (slide || {})) safe[field] = slide[field];
   });
+
+  // Explicitly strip cheat-sensitive fields even if present in source object.
+  delete safe.correctIndex;
+  delete safe.acceptedAnswers;
+
   return safe;
 }
 
-const DEFAULT_DECK_PATH = path.join(__dirname, '..', '..', 'data', 'decks', 'movie.json');
+const DEFAULT_DECK_PATH = path.join(__dirname, '..', 'data', 'decks', 'movie.json');
 
 module.exports = { loadDeck, sanitizeQuestion, DEFAULT_DECK_PATH };

@@ -1,6 +1,22 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
-/* Slide-in animation for player cards */
+/* ── Design System: Fonts ── */
+.font-outfit {
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+}
+
+/* ── Scrollbar Hide Utility ── */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* ── Original Animations ── */
+
 @keyframes slide-in {
   from {
     opacity: 0;
@@ -58,4 +74,262 @@
 
 .status-dot:nth-child(3) {
   animation-delay: 0.3s;
+}
+
+/* ── New Animations: UI Modernization ── */
+
+/* Pulsing glow for waiting / empty states */
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+    text-shadow: 0 0 8px rgba(139, 92, 246, 0.3);
+  }
+  50% {
+    opacity: 1;
+    text-shadow: 0 0 20px rgba(139, 92, 246, 0.6), 0 0 40px rgba(139, 92, 246, 0.2);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 2.4s ease-in-out infinite;
+}
+
+/* Spinning gradient border for QR code highlight */
+@keyframes gradient-spin {
+  from { --angle: 0deg; }
+  to   { --angle: 360deg; }
+}
+
+@property --angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+.qr-gradient-border {
+  --angle: 0deg;
+  background: conic-gradient(from var(--angle), #8b5cf6, #06b6d4, #10b981, #8b5cf6);
+  animation: gradient-spin 3s linear infinite;
+  padding: 3px;
+  border-radius: 1rem;
+}
+
+.qr-gradient-border > * {
+  border-radius: calc(1rem - 3px);
+}
+
+/* Player card entry: slide-in from left with bounce */
+@keyframes player-enter {
+  0% {
+    opacity: 0;
+    transform: translateX(-30px) scale(0.92);
+  }
+  60% {
+    opacity: 1;
+    transform: translateX(6px) scale(1.02);
+  }
+  80% {
+    transform: translateX(-2px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.animate-player-enter {
+  animation: player-enter 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Shimmer sweep for the START button */
+@keyframes shimmer {
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
+}
+
+.animate-shimmer {
+  background-size: 200% auto;
+  animation: shimmer 2.5s linear infinite;
+}
+
+/* Gradient text utility */
+.text-gradient-brand {
+  background: linear-gradient(135deg, #10b981, #06b6d4);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Elevated panel base style */
+.panel-elevated {
+  background: #161B22;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 1rem;
+  box-shadow: 0 4px 24px rgba(0, 229, 255, 0.04), 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Section header style */
+.section-header {
+  font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 0.8125rem;
+  letter-spacing: 0.04em;
+  color: #94a3b8;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ANIMATED BACKGROUND — Landing Page
+   ═══════════════════════════════════════════════════════════ */
+
+/* Floating orb drift animation */
+@keyframes orb-float-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(60px, -80px) scale(1.1); }
+  50% { transform: translate(-40px, -150px) scale(0.95); }
+  75% { transform: translate(80px, -60px) scale(1.05); }
+}
+
+@keyframes orb-float-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  25% { transform: translate(-70px, 60px) scale(1.08); }
+  50% { transform: translate(50px, 120px) scale(0.92); }
+  75% { transform: translate(-90px, 40px) scale(1.04); }
+}
+
+@keyframes orb-float-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(100px, -40px) scale(1.12); }
+  66% { transform: translate(-60px, 80px) scale(0.9); }
+}
+
+@keyframes orb-float-4 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  20% { transform: translate(-50px, -100px) scale(1.06); }
+  40% { transform: translate(80px, -50px) scale(0.94); }
+  60% { transform: translate(30px, 60px) scale(1.1); }
+  80% { transform: translate(-80px, 30px) scale(0.98); }
+}
+
+/* Slow rotation for grid overlay */
+@keyframes grid-rotate {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Shimmer sweep for particles */
+@keyframes shimmer-sweep {
+  0% { opacity: 0; transform: translateY(0) scale(0.5); }
+  50% { opacity: 1; transform: translateY(-20px) scale(1); }
+  100% { opacity: 0; transform: translateY(-40px) scale(0.5); }
+}
+
+/* Subtle pulse glow for the main title */
+@keyframes title-glow {
+  0%, 100% { text-shadow: 0 0 20px rgba(16, 185, 129, 0.0); }
+  50% { text-shadow: 0 0 40px rgba(16, 185, 129, 0.25), 0 0 80px rgba(16, 185, 129, 0.1); }
+}
+
+/* ── Animated Background Container ── */
+.animated-bg {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ── Floating Orbs ── */
+.animated-bg .orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.35;
+  will-change: transform;
+}
+
+.animated-bg .orb-1 {
+  width: 500px;
+  height: 500px;
+  top: -10%;
+  left: -5%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.5), rgba(6, 182, 212, 0.2), transparent 70%);
+  animation: orb-float-1 20s ease-in-out infinite;
+}
+
+.animated-bg .orb-2 {
+  width: 400px;
+  height: 400px;
+  top: 50%;
+  right: -8%;
+  background: radial-gradient(circle, rgba(139, 92, 246, 0.4), rgba(236, 72, 153, 0.15), transparent 70%);
+  animation: orb-float-2 25s ease-in-out infinite;
+}
+
+.animated-bg .orb-3 {
+  width: 350px;
+  height: 350px;
+  bottom: -5%;
+  left: 30%;
+  background: radial-gradient(circle, rgba(245, 158, 11, 0.35), rgba(251, 146, 60, 0.1), transparent 70%);
+  animation: orb-float-3 18s ease-in-out infinite;
+}
+
+.animated-bg .orb-4 {
+  width: 300px;
+  height: 300px;
+  top: 20%;
+  left: 55%;
+  background: radial-gradient(circle, rgba(6, 182, 212, 0.3), rgba(16, 185, 129, 0.1), transparent 70%);
+  animation: orb-float-4 22s ease-in-out infinite;
+}
+
+/* ── Dot Grid Overlay ── */
+.animated-bg .dot-grid {
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  background-image: radial-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
+  animation: grid-rotate 240s linear infinite;
+}
+
+/* ── Shimmer Particles ── */
+.animated-bg .particles {
+  position: absolute;
+  inset: 0;
+}
+
+.animated-bg .particle {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(16, 185, 129, 0.6);
+  animation: shimmer-sweep 4s ease-in-out infinite;
+}
+
+.animated-bg .particle:nth-child(1) { top: 20%; left: 15%; animation-delay: 0s; animation-duration: 5s; }
+.animated-bg .particle:nth-child(2) { top: 60%; left: 75%; animation-delay: 1s; animation-duration: 4.5s; background: rgba(139, 92, 246, 0.6); }
+.animated-bg .particle:nth-child(3) { top: 80%; left: 40%; animation-delay: 2s; animation-duration: 5.5s; background: rgba(245, 158, 11, 0.5); }
+.animated-bg .particle:nth-child(4) { top: 35%; left: 85%; animation-delay: 0.5s; animation-duration: 4s; background: rgba(6, 182, 212, 0.5); }
+.animated-bg .particle:nth-child(5) { top: 10%; left: 55%; animation-delay: 1.5s; animation-duration: 6s; }
+.animated-bg .particle:nth-child(6) { top: 70%; left: 20%; animation-delay: 3s; animation-duration: 4.8s; background: rgba(236, 72, 153, 0.4); }
+.animated-bg .particle:nth-child(7) { top: 45%; left: 50%; animation-delay: 2.5s; animation-duration: 5.2s; background: rgba(139, 92, 246, 0.5); }
+.animated-bg .particle:nth-child(8) { top: 90%; left: 65%; animation-delay: 0.8s; animation-duration: 4.2s; }
+
+/* ── Vignette ── */
+.animated-bg .vignette {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse 80% 60% at 50% 50%, transparent 30%, rgba(2, 6, 23, 0.6) 100%);
+}
+
+/* ── Title Glow Effect ── */
+.title-glow {
+  animation: title-glow 4s ease-in-out infinite;
 }

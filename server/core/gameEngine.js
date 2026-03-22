@@ -12,6 +12,80 @@
 'use strict';
 
 const { sanitizeQuestion } = require('./deckLoader');
+const { shuffle } = require('./shuffle');
+
+function applyModeToSlide(slide, mode) {
+  if (!slide) return null;
+  const cloned = JSON.parse(JSON.stringify(slide));
+  const defaultMode = cloned.type === 'typing' ? 'type_guess' : 'multiple_choice';
+  const targetMode = mode === 'auto' || !mode ? defaultMode : mode;
+
+  cloned.answer_mode = targetMode;
+
+  if (targetMode === 'multiple_choice' && cloned.type === 'typing') {
+    const correctLabel = cloned.acceptedAnswers && cloned.acceptedAnswers[0] ? cloned.acceptedAnswers[0] : 'Correct Answer';
+    let distractors = (cloned.suggestionBank || []).filter((s) => normalizeText(s) !== normalizeText(correctLabel));
+    
+    if (distractors.length < 3) {
+      const backups = ['A', 'B', 'C', 'D'].filter((x) => normalizeText(x) !== normalizeText(correctLabel));
+      while (distractors.length < 3) distractors.push(backups.shift() || 'Unknown');
+    }
+    distractors = distractors.slice(0, 3);
+    
+    const unselected = shuffle([correctLabel, ...distractors]);
+    cloned.options = unselected;
+    cloned.correctIndex = unselected.findIndex((opt) => opt === correctLabel);
+  } else if (targetMode === 'type_guess' && cloned.type === 'mcq') {
+    const correctIndex = Number(cloned.correctIndex);
+    const correctText = Array.isArray(cloned.options) && correctIndex >= 0 ? cloned.options[correctIndex] : 'Correct Answer';
+    cloned.acceptedAnswers = [correctText];
+    cloned.suggestionBank = Array.isArray(cloned.options) ? [...cloned.options] : [];
+  }
+
+  return cloned;
+}
+
+function normalizeText(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function parseSubmittedIndex(answer) {
+  if (typeof answer === 'number' && Number.isInteger(answer)) return answer;
+
+  const asNumber = Number(answer);
+  if (Number.isInteger(asNumber) && String(answer).trim() !== '') return asNumber;
+
+  return null;
+}
+
+function isMcqCorrect(slide, answer) {
+  const options = Array.isArray(slide?.options) ? slide.options : [];
+  const correctIndex = Number(slide?.correctIndex);
+
+  if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex >= options.length) return false;
+
+  const submittedIndex = parseSubmittedIndex(answer);
+  if (submittedIndex !== null) return submittedIndex === correctIndex;
+
+  const submittedText = normalizeText(answer);
+  const correctText = normalizeText(options[correctIndex]);
+  return submittedText.length > 0 && submittedText === correctText;
+}
+
+function isTypingCorrect(slide, answer) {
+  const accepted = Array.isArray(slide?.acceptedAnswers) ? slide.acceptedAnswers : [];
+  const submitted = normalizeText(answer);
+  if (!submitted) return false;
+
+  return accepted.some((item) => normalizeText(item) === submitted);
+}
+
+function calculateScoreForCorrect(slide) {
+  const raw = Number(slide?.timeLimit);
+  const safe = Number.isFinite(raw) && raw > 0 ? raw : 20000;
+  const derived = Math.round(safe / 200); // 20s => 100
+  return Math.max(50, Math.min(300, derived));
+}
 
 /**
  * Start a game in the given room.
@@ -21,7 +95,7 @@ const { sanitizeQuestion } = require('./deckLoader');
  * @param {object[]} questions - Full QUESTIONS array from the loaded deck
  * @returns {{ question: object, index: number, total: number }}
  */
-function startGame(room, questions) {
+function startGame(room, slides) {
   if (room.status !== 'lobby') throw new Error('Game is already in progress.');
   if (room.players.length === 0) throw new Error('Need at least one player.');
 
@@ -29,10 +103,13 @@ function startGame(room, questions) {
   room.currentQ = 0;
   room.answersIn = {};
 
+  const transformedSlide = applyModeToSlide(slides[0], room.answerMode);
+  room.activeSlide = transformedSlide;
+
   return {
-    question: sanitizeQuestion(questions[0]),
+    question: sanitizeQuestion(transformedSlide),
     index: 0,
-    total: questions.length,
+    total: slides.length,
   };
 }
 
@@ -47,7 +124,7 @@ function startGame(room, questions) {
  * @param {string} answer
  * @returns {{ correct: boolean, alreadyAnswered: boolean, answerCount: number, totalPlayers: number }}
  */
-function submitAnswer(room, questions, socketId, answer) {
+function submitAnswer(room, slides, socketId, answer) {
   if (room.status !== 'started') {
     return { correct: false, alreadyAnswered: false, answerCount: 0, totalPlayers: room.players.length };
   }
@@ -61,12 +138,19 @@ function submitAnswer(room, questions, socketId, answer) {
     };
   }
 
-  const q = questions[room.currentQ];
-  const correct = answer === q.correct_answer;
+  const slide = room.activeSlide || slides[room.currentQ];
+  const type = String(slide?.answer_mode === 'type_guess' ? 'typing' : 'mcq').trim().toLowerCase();
+
+  let correct = false;
+  if (type === 'typing') {
+    correct = isTypingCorrect(slide, answer);
+  } else {
+    correct = isMcqCorrect(slide, answer);
+  }
 
   if (correct) {
     const player = room.players.find((p) => p.id === socketId);
-    if (player) player.score += 100;
+    if (player) player.score += calculateScoreForCorrect(slide);
   }
 
   room.answersIn[socketId] = answer;
@@ -92,20 +176,32 @@ function submitAnswer(room, questions, socketId, answer) {
  *   gameOver: { scores: Array<{name,score}> } | null,
  * }}
  */
-function advanceQuestion(room, questions) {
+function advanceQuestion(room, slides) {
   if (room.status !== 'started') throw new Error('Game is not in progress.');
-  if (room.currentQ >= questions.length) throw new Error('Game is already finished.');
+  if (room.currentQ >= slides.length) throw new Error('Game is already finished.');
 
-  const prevQ = questions[room.currentQ];
+  const prevSlide = room.activeSlide || slides[room.currentQ];
+  const prevType = String(prevSlide?.answer_mode === 'type_guess' ? 'typing' : 'mcq').trim().toLowerCase();
+  let reveal = null;
+
+  if (prevType === 'typing') {
+    const accepted = Array.isArray(prevSlide?.acceptedAnswers) ? prevSlide.acceptedAnswers : [];
+    reveal = accepted[0] || '';
+  } else {
+    const options = Array.isArray(prevSlide?.options) ? prevSlide.options : [];
+    const correctIndex = Number(prevSlide?.correctIndex);
+    reveal = Number.isInteger(correctIndex) && correctIndex >= 0 && correctIndex < options.length ? options[correctIndex] : '';
+  }
+
   const result = {
-    correct_answer: prevQ.correct_answer,
+    correct_answer: reveal,
     scores: room.players.map((p) => ({ id: p.id, name: p.name, score: p.score })),
   };
 
   room.currentQ += 1;
   room.answersIn = {};
 
-  if (room.currentQ >= questions.length) {
+  if (room.currentQ >= slides.length) {
     room.status = 'finished';
     const sorted = [...room.players].sort((a, b) => b.score - a.score);
     return {
@@ -117,12 +213,15 @@ function advanceQuestion(room, questions) {
     };
   }
 
+  const transformedSlide = applyModeToSlide(slides[room.currentQ], room.answerMode);
+  room.activeSlide = transformedSlide;
+
   return {
     result,
     next: {
-      question: sanitizeQuestion(questions[room.currentQ]),
+      question: sanitizeQuestion(transformedSlide),
       index: room.currentQ,
-      total: questions.length,
+      total: slides.length,
     },
     gameOver: null,
   };

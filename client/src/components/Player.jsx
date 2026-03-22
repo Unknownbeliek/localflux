@@ -1,5 +1,6 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Chat from './Chat';
+import AnimatedBackground from './AnimatedBackground';
 import { createGameSocket } from '../backendUrl';
 import PingIndicator from './PingIndicator';
 
@@ -36,6 +37,15 @@ function resolvePresetPath(value) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return '/avatars/1.png';
   return trimmed.includes('.') ? `/avatars/${trimmed}` : `/avatars/${trimmed}.png`;
+}
+
+function resolveImageUrl(image) {
+  if (!image) return null;
+  const trimmed = String(image).trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.includes('/')) return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
+  return `/deck-images/${trimmed}`;
 }
 
 function getOrCreatePlayerSessionId() {
@@ -632,7 +642,8 @@ export default function Player({ onBack }) {
     const myRank = finalScores.findIndex(p => p.id === selfPlayerId) + 1;
     const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col p-5 pt-8 animate-phase-in">
+      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-5 pt-8 animate-phase-in z-0">
+        <AnimatedBackground />
         {renderLeaveAndPing()}
         <p className="mb-5 text-[11px] uppercase tracking-[0.28em] text-slate-500">Game Over</p>
         <h2 className="text-4xl font-black tracking-tight mb-2">Final Standings</h2>
@@ -649,33 +660,33 @@ export default function Player({ onBack }) {
             const isMe = p.id === selfPlayerId;
             const placementClass =
               isTopOne
-                ? 'border-amber-300/50 bg-amber-300/15 text-amber-100'
+                ? 'border-amber-300/60 bg-amber-400/20 text-amber-100 shadow-[0_0_30px_rgba(251,191,36,0.3)] ring-2 ring-amber-300/30'
                 : isTopTwo
-                  ? 'border-slate-300/40 bg-slate-200/10 text-slate-100'
+                  ? 'border-slate-300/50 bg-slate-200/15 text-slate-100 shadow-xl'
                   : isTopThree
-                    ? 'border-orange-300/40 bg-orange-300/10 text-orange-100'
+                    ? 'border-orange-300/60 bg-orange-400/15 text-orange-100 shadow-lg'
                     : isMe
-                      ? 'border-emerald-400/50 bg-emerald-400/15 text-emerald-100'
-                      : 'border-slate-800 bg-slate-900/80 text-white';
+                      ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/40'
+                      : 'border-white/10 bg-slate-900/60 text-white/90 backdrop-blur-md';
             const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
 
             return (
               <div
                 key={p.id || `${p.name}_${i}`}
-                className={`flex items-center justify-between rounded-2xl px-4 py-4 border ${placementClass}`}
+                className={`flex items-center justify-between rounded-3xl px-6 py-5 border ${placementClass}`}
               >
-                <div className="flex items-center gap-2">
-                  <span className="font-mono text-sm w-6 tabular-nums">{i + 1}</span>
-                  {medal && <span className="text-base leading-none">{medal}</span>}
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-lg w-8 tabular-nums opacity-80">{i + 1}</span>
+                  {medal && <span className="text-2xl leading-none drop-shadow-md">{medal}</span>}
                 </div>
-                <span className="flex-1 font-semibold">{p.name}</span>
-                <span className="font-black tabular-nums">{p.score}</span>
+                <span className="flex-1 font-black text-xl tracking-tight">{p.name}</span>
+                <span className="font-black text-2xl tabular-nums drop-shadow-sm">{p.score}</span>
               </div>
             );
           })}
         </div>
         {error && (
-          <p className="mt-4 rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{error}</p>
+          <p className="mt-4 rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-3 text-sm font-medium text-rose-200 backdrop-blur-md">{error}</p>
         )}
         <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <button onClick={handleBackToLobby} className="w-full rounded-2xl bg-emerald-400 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95">
@@ -691,8 +702,8 @@ export default function Player({ onBack }) {
 
   if (phase === 'ending') {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex items-center justify-center p-6 animate-phase-in">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_100%,rgba(14,165,233,0.18),rgba(2,6,23,0)_70%)]" />
+      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex items-center justify-center p-6 animate-phase-in z-0">
+        <AnimatedBackground />
         <div className="relative w-full max-w-md rounded-3xl border border-sky-500/30 bg-slate-900/80 px-6 py-10 text-center shadow-2xl shadow-black/40">
           <div className="mx-auto mb-5 h-16 w-16 rounded-full border-2 border-sky-400/60 border-t-sky-200 animate-spin" />
           <p className="text-xs uppercase tracking-[0.28em] text-sky-300/80">Round Complete</p>
@@ -714,8 +725,9 @@ export default function Player({ onBack }) {
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
     const gotIt = hasAnswered && (answeredCorrect === true || (!isTypeGuessQuestion && selected === correctAnswer));
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col p-4 pt-6 pb-10 animate-phase-in">
-        <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-4 pt-6 pb-10 animate-phase-in z-0">
+        <AnimatedBackground />
+        <div className="mb-4 flex items-start justify-between gap-3 relative z-10">
           <div>
             {renderLeaveAndPing({ inline: true })}
             <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
@@ -726,9 +738,15 @@ export default function Player({ onBack }) {
           </div>
         </div>
 
-        <div className="mb-4 rounded-2xl border border-slate-800 bg-slate-900/80 px-5 py-6">
-          <p className="text-2xl font-black leading-tight">{question?.prompt}</p>
+        <div className="mb-6 rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl px-6 py-8 shadow-2xl shadow-black/50">
+          <p className="text-2xl md:text-3xl font-black leading-tight text-white/90 drop-shadow-md">{question?.prompt}</p>
         </div>
+
+        {question?.image && (
+          <div className="mb-6 flex justify-center">
+            <img src={resolveImageUrl(question.image)} alt="Question visual" className="max-h-56 rounded-2xl object-contain opacity-95 shadow-2xl shadow-black/50 ring-1 ring-white/10" />
+          </div>
+        )}
 
         {isTypeGuessQuestion ? (
           <div className="grid grid-cols-1 gap-3 content-start">
@@ -751,16 +769,18 @@ export default function Player({ onBack }) {
               let feedbackClass = baseClass;
               if (isSelected && hasAnswered) {
                 feedbackClass = gotIt
-                  ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100'
-                  : 'border-rose-400 bg-rose-500/20 text-rose-100';
+                  ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
+                  : 'border-rose-400 bg-rose-500/20 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.3)] opacity-70';
               } else if (isCorrect) {
-                feedbackClass = 'border-emerald-500/50 bg-emerald-500/10 text-emerald-200';
+                feedbackClass = 'border-emerald-500/60 bg-emerald-500/20 text-emerald-100 shadow-[0_0_25px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50';
+              } else {
+                feedbackClass = 'border-white/5 bg-slate-900/40 text-slate-400 opacity-50 backdrop-blur-md';
               }
 
               return (
                 <div
                   key={`${question?.q_id || 'q'}_${idx}_${opt}`}
-                  className={`w-full rounded-2xl border px-5 py-6 text-left text-xl font-black ${feedbackClass}`}
+                  className={`w-full rounded-3xl border-2 px-6 py-7 text-left text-xl md:text-2xl font-black transition-all duration-300 ${feedbackClass}`}
                 >
                   {opt}
                 </div>
@@ -782,8 +802,8 @@ export default function Player({ onBack }) {
 
   if (phase === 'starting') {
     return (
-      <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex items-center justify-center p-6 animate-phase-in">
-        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(80%_60%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
+      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex items-center justify-center p-6 animate-phase-in z-0">
+        <AnimatedBackground />
         <div className="relative w-full max-w-md rounded-3xl border border-emerald-500/30 bg-slate-900/80 px-6 py-10 text-center shadow-2xl shadow-black/40">
           <div className="mx-auto mb-5 h-16 w-16 rounded-full border-2 border-emerald-400/60 border-t-emerald-200 animate-spin" />
           <p className="text-xs uppercase tracking-[0.28em] text-emerald-300/80">Match Started</p>
@@ -801,9 +821,12 @@ export default function Player({ onBack }) {
 
   if (phase === 'answered') {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6 gap-4 animate-phase-in">
-        {renderLeaveAndPing()}
-        <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Answer Submitted</p>
+      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 gap-4 animate-phase-in z-0">
+        <AnimatedBackground />
+        <div className="relative z-10 w-full flex flex-col items-center">
+          {renderLeaveAndPing()}
+        </div>
+        <p className="relative z-10 text-sm uppercase tracking-[0.24em] text-slate-500">Answer Submitted</p>
         <p className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">{selected}</p>
         <div className={`mt-2 text-3xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</div>
         <div className="mt-3 flex gap-2">
@@ -820,14 +843,15 @@ export default function Player({ onBack }) {
     const progress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
     return (
-      <div className={`min-h-screen bg-slate-950 text-white flex flex-col p-4 pt-6 md:pb-6 animate-phase-in ${isTypeGuessQuestion ? 'pb-[50vh]' : 'pb-24'}`}>
-        <div className="mb-4 flex items-start justify-between gap-3">
+      <div className={`relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-4 pt-6 md:pb-6 animate-phase-in z-0 ${isTypeGuessQuestion ? 'pb-[50vh]' : 'pb-24'}`}>
+        <AnimatedBackground />
+        <div className="relative z-10 mb-6 flex items-start justify-between gap-3">
           <div>
             {renderLeaveAndPing({ inline: true })}
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
           </div>
           <div
-            className={`rounded-xl border px-3 py-2 text-right transition-colors duration-150 ${
+            className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
               timeLeft <= 2
                 ? 'border-red-500/60 bg-red-500/10'
                 : timeLeft <= 5
@@ -847,16 +871,22 @@ export default function Player({ onBack }) {
           />
         </div>
 
-        <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/80 px-5 py-6">
-          <p className="text-2xl font-black leading-tight">{question.prompt}</p>
+        <div className="mb-6 rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl px-6 py-8 shadow-2xl shadow-black/50">
+          <p className="text-2xl md:text-3xl font-black leading-tight text-white/95 drop-shadow-md">{question.prompt}</p>
         </div>
 
+        {question.image && (
+          <div className="mb-8 flex justify-center">
+            <img src={resolveImageUrl(question.image)} alt="Question visual" className="max-h-56 md:max-h-72 rounded-2xl object-contain shadow-2xl shadow-black/60 ring-1 ring-white/10" />
+          </div>
+        )}
+
         {isTypeGuessQuestion ? (
-          <div className="hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-4 md:block">
-            <p className="mb-3 text-xs uppercase tracking-[0.2em] text-slate-500">Type Your Guess</p>
+          <div className="hidden rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl p-6 md:block shadow-2xl shadow-black/50">
+            <p className="mb-4 text-xs font-black uppercase tracking-[0.25em] text-emerald-400">Type Your Guess</p>
             {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
-              <div className="mb-3">
-                <p className="mb-2 text-[11px] uppercase tracking-[0.16em] text-slate-500">Your Attempts (Private)</p>
+              <div className="mb-4">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Your Attempts (Private)</p>
                 <div className="flex flex-wrap gap-2">
                   {privateGuessHistory.map((entry, idx) => (
                     <button
@@ -865,7 +895,7 @@ export default function Player({ onBack }) {
                       onClick={() => handleReusePrivateGuess(entry)}
                       title={entry}
                       disabled={answeredCorrect === true}
-                      className="max-w-full rounded-full border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="max-w-full rounded-full border border-slate-600 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-200 transition-all hover:border-emerald-500/60 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <span className="block max-w-48 truncate">{entry}</span>
                     </button>
@@ -873,7 +903,7 @@ export default function Player({ onBack }) {
                 </div>
               </div>
             )}
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <input
                 ref={desktopGuessInputRef}
                 type="text"
@@ -884,11 +914,11 @@ export default function Player({ onBack }) {
                 }}
                 placeholder="Type your guess..."
                 disabled={answeredCorrect === true}
-                className={`flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none ${answeredCorrect === true ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`flex-1 rounded-full border border-white/20 bg-slate-950/60 px-6 py-4 text-base font-semibold text-white placeholder:text-slate-400 shadow-inner focus:border-emerald-400/80 focus:ring-4 focus:ring-emerald-400/20 focus:outline-none transition-all ${answeredCorrect === true ? 'opacity-40 cursor-not-allowed' : ''}`}
               />
               <button
                 onClick={handleGuessSubmit}
-                className="rounded-xl bg-emerald-400 px-5 py-3 text-sm font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-emerald-400 disabled:hover:translate-y-0"
+                className="rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 px-8 py-4 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(52,211,153,0.5)] active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
                 disabled={!guessText.trim() || answeredCorrect === true}
               >
                 GUESS
@@ -902,17 +932,17 @@ export default function Player({ onBack }) {
               <button
                 key={`${question?.q_id || 'q'}_${idx}_${opt}`}
                 onClick={() => handleAnswer(opt)}
-                className={`w-full rounded-2xl border px-5 py-6 text-left text-xl font-black transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-95 ${
+                className={`group relative overflow-hidden w-full rounded-3xl border-2 px-6 py-7 text-left text-xl md:text-2xl font-black transition-all duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] shadow-lg hover:shadow-2xl backdrop-blur-md ${
                   idx % 4 === 0
-                    ? 'border-sky-500/40 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20'
+                    ? 'border-sky-500/30 bg-sky-500/10 text-sky-50 hover:border-sky-400 hover:bg-sky-500/20 hover:shadow-sky-500/20'
                     : idx % 4 === 1
-                      ? 'border-violet-500/40 bg-violet-500/10 text-violet-100 hover:bg-violet-500/20'
+                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-50 hover:border-violet-400 hover:bg-violet-500/20 hover:shadow-violet-500/20'
                       : idx % 4 === 2
-                        ? 'border-rose-500/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20'
-                        : 'border-amber-500/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20'
+                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-50 hover:border-rose-400 hover:bg-rose-500/20 hover:shadow-rose-500/20'
+                        : 'border-amber-500/30 bg-amber-500/10 text-amber-50 hover:border-amber-400 hover:bg-amber-500/20 hover:shadow-amber-500/20'
                 }`}
               >
-                {opt}
+                <div className="relative z-10">{opt}</div>
               </button>
             ))}
           </div>
@@ -933,12 +963,12 @@ export default function Player({ onBack }) {
 
         {isTypeGuessQuestion && (
           <div
-            className="fixed inset-x-0 bottom-0 z-40 flex h-[40vh] flex-col border-t border-slate-700 bg-slate-950/98 p-2 shadow-2xl shadow-black/60 md:hidden"
+            className="fixed inset-x-0 bottom-0 z-40 flex h-[40vh] flex-col border-t border-white/10 bg-black/60 backdrop-blur-2xl p-3 shadow-[0_-8px_30px_rgba(0,0,0,0.5)] md:hidden"
             style={{ paddingBottom: 'max(0.6rem, env(safe-area-inset-bottom))' }}
           >
-            <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Guess + Chat</p>
+            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Guess + Chat</p>
 
-            <div className="min-h-0 flex-1 rounded-2xl border border-slate-800 bg-slate-900/40 p-1.5">
+            <div className="min-h-0 flex-1 rounded-2xl border border-white/5 bg-white/5 p-1.5 overflow-hidden">
               <Chat
                 socket={chatSocket}
                 roomPin={LAN_ROOM}
@@ -951,10 +981,10 @@ export default function Player({ onBack }) {
               />
             </div>
 
-            <div className="mt-1 border-t border-slate-800 pt-1">
-              <p className="mb-1.5 text-[11px] uppercase tracking-[0.2em] text-slate-500">Type Your Guess</p>
+            <div className="mt-1.5 border-t border-white/10 pt-2">
+              <p className="mb-1.5 text-[11px] font-black uppercase tracking-[0.25em] text-white/50">Type Your Guess</p>
               {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
-                <div className="mb-1 flex flex-wrap gap-1.5">
+                <div className="mb-1.5 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                   {privateGuessHistory.map((entry, idx) => (
                     <button
                       key={`${entry}_${idx}`}
@@ -962,7 +992,7 @@ export default function Player({ onBack }) {
                       onClick={() => handleReusePrivateGuess(entry)}
                       title={entry}
                       disabled={answeredCorrect === true}
-                      className="max-w-full rounded-full border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] text-slate-300 transition hover:border-emerald-500/40 hover:text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 transition-all hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       <span className="block max-w-36 truncate">{entry}</span>
                     </button>
@@ -970,7 +1000,7 @@ export default function Player({ onBack }) {
                 </div>
               )}
               {guessFeedback && <p className="mb-1.5 text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
-              <div className="flex gap-1.5">
+              <div className="flex gap-2">
                 <input
                   ref={mobileGuessInputRef}
                   type="text"
@@ -981,11 +1011,11 @@ export default function Player({ onBack }) {
                   }}
                   placeholder={answeredCorrect ? 'Answer submitted' : 'Type your guess here...'}
                   disabled={answeredCorrect === true}
-                  className={`min-h-12 flex-1 rounded-xl border border-slate-700 bg-slate-950 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none ${answeredCorrect === true ? 'cursor-not-allowed opacity-50' : ''}`}
+                  className={`min-h-14 flex-1 rounded-full border border-white/20 bg-slate-950/60 px-5 py-3 text-sm font-semibold text-white shadow-inner placeholder:text-slate-400 focus:border-emerald-400/80 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none transition-all ${answeredCorrect === true ? 'cursor-not-allowed opacity-40' : ''}`}
                 />
                 <button
                   onClick={handleGuessSubmit}
-                  className="min-h-12 rounded-xl bg-emerald-400 px-5 py-3 text-sm font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
+                  className="min-h-14 rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 px-6 py-3 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(52,211,153,0.4)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
                   disabled={!guessText.trim() || answeredCorrect === true}
                 >
                   GUESS
@@ -998,7 +1028,8 @@ export default function Player({ onBack }) {
         {!isTypeGuessQuestion && (
           <button
             onClick={() => setChatDrawerOpen(true)}
-            className="fixed bottom-4 right-4 z-30 rounded-full border border-emerald-500/40 bg-slate-900/95 px-5 py-3 text-sm font-black tracking-[0.16em] text-emerald-300 shadow-lg shadow-black/40 transition-all duration-150 hover:-translate-y-0.5 hover:bg-slate-800 active:translate-y-0 active:scale-95 md:hidden"
+            className="fixed bottom-4 right-4 z-30 rounded-full border-2 border-emerald-400/40 bg-black/50 backdrop-blur-xl px-6 py-3.5 text-sm font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.2)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(52,211,153,0.3)] active:translate-y-0 active:scale-95 md:hidden"
+            style={{ marginBottom: 'max(0px, env(safe-area-inset-bottom))' }}
           >
             CHAT
           </button>
@@ -1009,14 +1040,14 @@ export default function Player({ onBack }) {
             <button
               aria-label="Close chat drawer"
               onClick={() => setChatDrawerOpen(false)}
-              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-[2px] md:hidden"
+              className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden"
             />
-            <div className="fixed inset-x-0 bottom-0 z-50 flex h-[62vh] max-h-140 flex-col rounded-t-3xl border border-slate-700 bg-slate-950 p-3 shadow-2xl shadow-black/60 md:hidden">
-              <div className="mb-2 flex items-center justify-between px-1">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">Room Chat</p>
+            <div className="fixed inset-x-0 bottom-0 z-50 flex h-[62vh] max-h-140 flex-col rounded-t-[2rem] border-t border-white/10 bg-black/60 backdrop-blur-2xl p-4 shadow-[0_-8px_40px_rgba(0,0,0,0.6)] md:hidden">
+              <div className="mb-3 flex items-center justify-between px-1">
+                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Room Chat</p>
                 <button
                   onClick={() => setChatDrawerOpen(false)}
-                  className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 transition hover:bg-slate-800"
+                  className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-black text-white/80 transition-all hover:bg-white/10"
                 >
                   Close
                 </button>
@@ -1033,30 +1064,33 @@ export default function Player({ onBack }) {
 
   if (phase === 'waiting') {
     return (
-      <div className="min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center gap-3 p-5 animate-phase-in">
-        {renderLeaveAndPing()}
-        <p className="text-3xl font-black tracking-tight">{roomDisplayName}</p>
-        <p className="text-slate-400 text-sm font-mono">Waiting for host to start...</p>
-        <p className={`text-xs font-semibold ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
+      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center gap-4 p-5 animate-phase-in z-0">
+        <AnimatedBackground />
+        <div className="relative z-10 w-full flex flex-col items-center">
+          {renderLeaveAndPing()}
+        </div>
+        <p className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-md">{roomDisplayName}</p>
+        <p className="text-white/50 text-sm font-medium">Waiting for host to start...</p>
+        <p className={`text-xs font-black uppercase tracking-[0.15em] ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
           {isLobbyDeckReady ? 'Deck selected! Get ready.' : 'Waiting for host to choose a deck...'}
         </p>
-        <p className={`text-xs font-mono mt-2 ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
+        <p className={`text-xs font-mono mt-1 ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           {connected ? 'connected' : 'reconnecting...'}
         </p>
 
-        <section className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900/75 p-4 shadow-xl shadow-black/30">
-          <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Player ID Card</p>
-          <div className="mt-3 rounded-2xl border border-slate-700 bg-slate-950/80 p-4">
+        <section className="w-full max-w-md rounded-3xl border border-white/10 bg-black/30 backdrop-blur-2xl p-5 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+          <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Player ID Card</p>
+          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Username</p>
-                  <p className="text-base font-black text-emerald-200">{name || 'Player'}</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Username</p>
+                  <p className="text-lg font-black text-emerald-200 drop-shadow-sm">{name || 'Player'}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setIsEditingName((v) => !v)}
-                    className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-slate-200 transition hover:border-emerald-500/40 hover:text-white"
+                    className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-white/80 transition-all hover:bg-white/10 hover:text-white"
                   >
                     {isEditingName ? 'Close' : 'Edit'}
                   </button>
@@ -1066,13 +1100,13 @@ export default function Player({ onBack }) {
 
               {isEditingName && (
                 <>
-                  <label className="mb-2 block text-xs uppercase tracking-[0.2em] text-slate-500">Display Name</label>
+                  <label className="mb-2 block text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Display Name</label>
                   <input
                     type="text"
                     value={name}
                     onChange={(e) => setName(e.target.value.slice(0, 24))}
                     placeholder="Your hacker alias"
-                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm font-semibold text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
+                    className="w-full rounded-full border border-white/15 bg-black/30 px-5 py-3 text-sm font-semibold text-white placeholder-white/30 transition-all focus:border-emerald-400/60 focus:ring-2 focus:ring-emerald-400/20 focus:outline-none"
                   />
                 </>
               )}
@@ -1085,12 +1119,12 @@ export default function Player({ onBack }) {
                       <button
                         key={presetId}
                         onClick={() => setAvatarObject({ type: 'preset', value: presetId })}
-                        className={`rounded-xl border p-1 transition ${
+                        className={`rounded-2xl border-2 p-1.5 transition-all duration-200 ${
                           avatarObject.value === presetId
-                            ? 'border-emerald-400 ring-2 ring-emerald-500/40'
-                            : 'border-slate-700 hover:border-slate-500'
+                            ? 'border-emerald-400 ring-2 ring-emerald-500/30 shadow-[0_0_12px_rgba(52,211,153,0.25)] scale-105'
+                            : 'border-white/10 hover:border-white/30 hover:scale-105'
                         }`}
-                        style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e293b 100%)' }}
+                        style={{ background: 'linear-gradient(145deg, rgba(15,23,42,0.8) 0%, rgba(30,41,59,0.6) 100%)' }}
                       >
                         <img
                           src={resolvePresetPath(presetId)}
@@ -1102,7 +1136,7 @@ export default function Player({ onBack }) {
                               return next;
                             });
                           }}
-                          className="h-14 w-full rounded-lg object-contain p-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] overflow-hidden"
+                          className="h-14 w-full rounded-xl object-contain p-1 drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] overflow-hidden"
                         />
                       </button>
                     ))}
@@ -1110,21 +1144,21 @@ export default function Player({ onBack }) {
 
                   <button
                     onClick={handleSaveProfile}
-                    className="mt-4 w-full rounded-xl bg-emerald-400 py-3 text-sm font-black tracking-[0.16em] text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
+                    className="mt-4 w-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 py-3.5 text-sm font-black tracking-[0.16em] text-teal-950 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(52,211,153,0.4)] active:translate-y-0 active:scale-95"
                   >
                     SAVE PROFILE
                   </button>
                 </>
               ) : (
-                <p className="mt-3 text-xs text-slate-500">Click Edit to change your name or profile picture.</p>
+                <p className="mt-3 text-xs text-white/40">Click Edit to change your name or profile picture.</p>
               )}
             {profileSaved && (
-              <p className="mt-2 text-center text-xs text-emerald-300">Profile saved.</p>
+              <p className="mt-3 text-center text-xs font-bold text-emerald-300">Profile saved.</p>
             )}
           </div>
         </section>
 
-        <div className="w-full max-w-md mt-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
+        <div className="w-full max-w-md mt-4 rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-4 shadow-xl shadow-black/40">
           <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
         </div>
       </div>
@@ -1132,16 +1166,16 @@ export default function Player({ onBack }) {
   }
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
-      <button onClick={handleBack} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm transition-colors">back</button>
-      <div className="z-10 w-full max-w-sm animate-phase-in rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-black/30">
-        <h1 className="text-5xl font-black tracking-tight mb-8">Joining Game</h1>
-        <div className="w-full flex flex-col gap-3 items-center justify-center">
-          <p className="text-slate-400 mb-4">One moment...</p>
-          {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300 w-full text-center">{error}</p>}
+    <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 z-0">
+      <AnimatedBackground />
+      <button onClick={handleBack} className="absolute top-5 left-5 z-20 rounded-full border border-white/10 bg-white/5 backdrop-blur-md px-4 py-2 text-sm font-semibold text-white/60 transition-all hover:bg-white/10 hover:text-white">← back</button>
+      <div className="z-10 w-full max-w-sm animate-phase-in rounded-3xl border border-white/10 bg-black/40 backdrop-blur-2xl p-8 shadow-[0_0_60px_rgba(0,0,0,0.6)]">
+        <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-6 drop-shadow-md">Joining Game</h1>
+        <div className="w-full flex flex-col gap-4 items-center justify-center">
+          <p className="text-white/50 font-medium">One moment...</p>
+          {error && <p className="rounded-2xl border border-rose-500/40 bg-rose-500/15 backdrop-blur-md px-4 py-3 text-xs font-semibold text-rose-200 w-full text-center shadow-[0_0_15px_rgba(244,63,94,0.15)]">{error}</p>}
           {connected && phase === 'joining' && (
-            <p className="text-xs font-mono text-slate-400">Auto retry in {joinRetryIn || 1}s</p>
+            <p className="text-xs font-mono text-white/40">Auto retry in {joinRetryIn || 1}s</p>
           )}
           <button
             onClick={() => {
@@ -1149,11 +1183,11 @@ export default function Player({ onBack }) {
               setJoinRetryIn(3);
             }}
             disabled={!connected}
-            className="mt-1 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-black text-slate-100 transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1 w-full rounded-full border-2 border-white/15 bg-white/5 px-4 py-3.5 text-sm font-black tracking-[0.1em] text-white/90 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
             RETRY NOW
           </button>
-          <div className={`flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
+          <div className={`flex items-center justify-center gap-2 text-xs font-bold ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
             {connected ? (
               <span>connected</span>
             ) : (

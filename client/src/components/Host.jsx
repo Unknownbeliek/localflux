@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Papa from 'papaparse';
 import { createGameSocket, getBackendUrl } from '../backendUrl';
 import { useHostToken } from '../context/HostTokenProvider';
@@ -53,16 +53,8 @@ function clearHostState() {
 }
 
 function studioSlidesToQuestions(slides = []) {
-  return slides.map((slide, index) => ({
-    q_id: `q_${String(index + 1).padStart(2, '0')}`,
-    type: slide.imageUrl ? 'image_guess' : 'text_only',
-    prompt: String(slide.prompt || '').trim(),
-    asset_ref: slide.imageUrl || null,
-    options: Array.isArray(slide.options) ? slide.options.map((opt) => String(opt || '').trim()) : ['', '', '', ''],
-    correct_answer: Array.isArray(slide.options) ? String(slide.options[slide.correctIndex] || slide.options[0] || '').trim() : '',
-    time_limit_ms: 20000,
-    fuzzy_allowances: [],
-  }));
+  // Canonical schema pass-through. Kept for call-site compatibility.
+  return Array.isArray(slides) ? slides.map((slide) => ({ ...slide })) : [];
 }
 
 function uid() {
@@ -71,31 +63,37 @@ function uid() {
 }
 
 function questionsToDeck(raw, fallbackTitle = 'Imported Deck') {
-  const questions = Array.isArray(raw?.questions) ? raw.questions : [];
   const meta = raw?.deck_meta || {};
+  const slides = Array.isArray(raw?.slides)
+    ? raw.slides
+    : Array.isArray(raw?.questions)
+      ? raw.questions.map((q, idx) => {
+          const options = Array.isArray(q?.options) ? q.options.map((opt) => String(opt || '').trim()) : [];
+          const normalized = options.slice(0, 4);
+          while (normalized.length < 4) normalized.push('');
 
-  const slides = questions.map((q, idx) => {
-    const options = Array.isArray(q?.options) ? q.options.map((opt) => String(opt || '').trim()) : [];
-    const normalized = options.slice(0, 4);
-    while (normalized.length < 4) normalized.push('');
+          const correctAnswer = String(q?.correct_answer || '').trim();
+          let correctIndex = normalized.findIndex((opt) => opt.toLowerCase() === correctAnswer.toLowerCase());
+          if (correctIndex < 0) correctIndex = 0;
 
-    const correctAnswer = String(q?.correct_answer || '').trim();
-    let correctIndex = normalized.findIndex((opt) => opt.toLowerCase() === correctAnswer.toLowerCase());
-    if (correctIndex < 0) correctIndex = 0;
-
-    return {
-      id: String(q?.q_id || `q_${idx + 1}_${uid()}`),
-      prompt: String(q?.prompt || '').trim(),
-      options: normalized,
-      correctIndex,
-      imageUrl: String(q?.asset_ref || '').trim(),
-    };
-  });
+          return {
+            id: String(q?.id || q?.q_id || `slide_${idx + 1}_${uid()}`),
+            type: q?.type === 'typing' ? 'typing' : 'mcq',
+            prompt: String(q?.prompt || '').trim(),
+            image: String(q?.image || q?.asset_ref || '').trim() || null,
+            options: normalized,
+            correctIndex,
+            acceptedAnswers: Array.isArray(q?.acceptedAnswers) ? q.acceptedAnswers : [],
+            suggestionBank: Array.isArray(q?.suggestionBank) ? q.suggestionBank : [],
+            timeLimit: Number.isFinite(Number(q?.timeLimit)) ? Number(q.timeLimit) : 20000,
+          };
+        })
+      : [];
 
   return {
-    id: String(meta.id || `import_${uid()}`),
-    title: String(meta.title || fallbackTitle).trim(),
-    version: String(meta.version || '1.0.0').trim(),
+    id: String(raw?.id || meta.id || `import_${uid()}`),
+    title: String(raw?.title || meta.title || fallbackTitle).trim(),
+    version: String(raw?.version || meta.version || '1.0.0').trim(),
     slides,
     updatedAt: Date.now(),
   };
@@ -118,10 +116,14 @@ function csvRowsToDeck(rows, fallbackTitle = 'CSV Import') {
 
       return {
         id: `csv_${idx + 1}_${uid()}`,
+        type: 'mcq',
         prompt: String(row.prompt || row.question || '').trim(),
+        image: String(row.image || row.imageUrl || '').trim() || null,
         options,
         correctIndex,
-        imageUrl: String(row.imageUrl || row.image || '').trim(),
+        acceptedAnswers: [],
+        suggestionBank: [],
+        timeLimit: 20000,
       };
     })
     .filter((slide) => slide.prompt.length > 0);
@@ -203,8 +205,9 @@ export default function Host({ onBack, studioQuestions = null }) {
   const profilePulseTimersRef = useRef(new Map());
   const modeOptions = ['FREE', 'RESTRICTED', 'OFF'];
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
-  const answerModeOptions = ['multiple_choice', 'type_guess'];
+  const answerModeOptions = ['auto', 'multiple_choice', 'type_guess'];
   const answerModeLabels = {
+    auto: 'AUTO (DECK-DRIVEN)',
     multiple_choice: '4 OPTIONS',
     type_guess: 'TYPE GUESS',
   };
@@ -333,7 +336,7 @@ export default function Host({ onBack, studioQuestions = null }) {
       setAnswerCount(0);
       setResultData(null);
       setAutoAdvanceIn(0);
-      const limitMs = Number(durationMs ?? question?.time_limit_ms);
+      const limitMs = Number(durationMs ?? question?.timeLimit);
       const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
       const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
       setTimeTotal(Math.ceil(normalizedMs / 1000));
@@ -549,7 +552,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
   };
 
-  const emitSelectedDeck = (deckName, deckSource, deckQuestions, deckFile = null) => {
+  const emitSelectedDeck = (deckName, deckSource, deckSlides, deckFile = null) => {
     if (!socketRef.current?.connected) {
       setError('Room is not connected yet. Try again.');
       return;
@@ -561,7 +564,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         hostSessionId: hostSessionIdRef.current,
         deckName,
         deckSource,
-        deckQuestions,
+        deckSlides,
         deckFile,
       },
       (ack) => {
@@ -592,11 +595,11 @@ export default function Host({ onBack, studioQuestions = null }) {
     if (value.startsWith('studio:')) {
       const id = value.replace('studio:', '');
       const draft = studioDecks.find((item) => item.id === id);
-      const deckQuestions = studioSlidesToQuestions(draft?.slides || []);
+      const deckSlides = studioSlidesToQuestions(draft?.slides || []);
       setSelectedDeckSource('studio');
       setSelectedDeckCount(draft?.slides?.length || 0);
       setDeckLabel(draft?.title || 'Studio Draft');
-      emitSelectedDeck(draft?.title || 'Studio Draft', 'studio', deckQuestions);
+      emitSelectedDeck(draft?.title || 'Studio Draft', 'studio', deckSlides);
       return;
     }
 
@@ -706,7 +709,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         }
 
         const validatedDeck = checked.data;
-        const deckQuestions = studioSlidesToQuestions(validatedDeck.slides || []);
+        const deckSlides = studioSlidesToQuestions(validatedDeck.slides || []);
 
         await saveDraft(validatedDeck);
 
@@ -728,7 +731,7 @@ export default function Host({ onBack, studioQuestions = null }) {
               hostSessionId: hostSessionIdRef.current,
               deckName: validatedDeck.title,
               deckSource: 'drop',
-              deckQuestions,
+              deckSlides,
             },
             (ack) => {
               if (!ack?.ok) {
@@ -762,7 +765,7 @@ export default function Host({ onBack, studioQuestions = null }) {
 
     try {
       const savedDeck = await downloadDeckToLocal(deckMeta.deckUrl);
-      const deckQuestions = studioSlidesToQuestions(savedDeck.slides || []);
+      const deckSlides = studioSlidesToQuestions(savedDeck.slides || []);
 
       setStudioDecks((prev) => {
         const remaining = prev.filter((entry) => entry.id !== savedDeck.id);
@@ -773,7 +776,7 @@ export default function Host({ onBack, studioQuestions = null }) {
       setSelectedDeckCount(savedDeck.slides.length);
       setDeckLabel(savedDeck.title);
 
-      emitSelectedDeck(savedDeck.title, 'cloud', deckQuestions);
+      emitSelectedDeck(savedDeck.title, 'cloud', deckSlides);
       setDropNotice(`Downloaded ${savedDeck.title} and set it as the active room deck.`);
     } catch (err) {
       setError(err?.message || 'Cloud deck download failed.');
@@ -1239,11 +1242,11 @@ export default function Host({ onBack, studioQuestions = null }) {
   }
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
-      <button onClick={handleBack} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm transition-colors">back</button>
-      <div className="z-10 w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-black/30 animate-phase-in">
-        <h1 className="mb-8 text-5xl font-black tracking-tight">New Room</h1>
+    <div className="relative min-h-screen bg-[#0D1117] text-white flex flex-col items-center justify-center p-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(139,92,246,0.12),rgba(13,17,23,0)_70%)]" />
+      <button onClick={handleBack} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm font-semibold transition-colors font-outfit">← back</button>
+      <div className="z-10 w-full max-w-sm panel-elevated p-8 animate-phase-in">
+        <h1 className="mb-8 text-5xl font-black tracking-tight font-outfit text-gradient-brand">New Room</h1>
         <div className="w-full">
         <input
           type="text"
@@ -1251,13 +1254,13 @@ export default function Host({ onBack, studioQuestions = null }) {
           value={roomName}
           onChange={(e) => setRoomName(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
+          className="mb-3 w-full rounded-2xl border border-slate-700/50 bg-[#0D1117] px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-violet-400 focus:outline-none font-outfit"
         />
-        {error && <p className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300">{error}</p>}
-        <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-emerald-400 py-5 text-xl font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
+        {error && <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/8 px-4 py-2.5 text-xs font-mono text-red-300">{error}</p>}
+        <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-violet-500 py-5 text-xl font-black text-white font-outfit transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:from-slate-700 disabled:via-slate-700 disabled:to-slate-700 animate-shimmer">
           CREATE
         </button>
-        <div className={`mt-3 flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
+        <div className={`mt-3 flex items-center justify-center gap-2 text-xs font-outfit font-semibold ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           {connected ? (
             <span>connected</span>
           ) : (
@@ -1269,7 +1272,7 @@ export default function Host({ onBack, studioQuestions = null }) {
             </>
           )}
         </div>
-        {resumeNotice && <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{resumeNotice}</p>}
+        {resumeNotice && <p className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-2.5 text-xs text-emerald-200">{resumeNotice}</p>}
         </div>
       </div>
     </div>

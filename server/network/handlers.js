@@ -1,7 +1,7 @@
 /**
  * handlers.js
  *
- * Socket.IO event handlers — the thin wiring layer between the network and
+ * Socket.IO event handlers G�� the thin wiring layer between the network and
  * the game engine.  Each handler validates ownership / state then delegates
  * all mutations to core modules.
  */
@@ -13,51 +13,74 @@ const path = require('path');
 
 const {
   LAN_ROOM_ID,
+  initLanRoom,
   getRoom,
+  deleteRoom,
+  addPlayer,
+  removePlayer,
+  getHostId,
+} = require('../core/roomStore');
+
+const { startGame, submitAnswer, advanceQuestion } = require('../core/gameEngine');
+const { ChatManager } = require('../core/chatManager');
+const { sanitizeQuestion } = require('../core/deckLoader');
+const { registerTypeGuessHandlers } = require('./typeGuessHandlers');
+
+let chatInstance = null;
+const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: '1.jpg' };
+const PRESET_AVATAR_POOL = [
+  '1.jpg',
+  '2.jpg',
+  '4.jpg',
+  '5.jpg',
+  '11.jpg',
+  '15.jpg',
+  '16.jpg',
+  '18.jpg',
+  '19.jpg',
+  '21.jpg',
+  '22.jpg',
+  '23.jpg',
+  '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
+  'e55afb4aea57bced165fb55ad92addf5.jpg',
+];
+const NAME_PREFIXES = ['Neo', 'Turbo', 'Solar', 'Nova', 'Glitch', 'Echo', 'Pixel', 'Drift', 'Axel', 'Flux'];
 const NAME_SUFFIXES = ['Rider', 'Nomad', 'Spark', 'Cipher', 'Pilot', 'Comet', 'Vector', 'Pulse', 'Ghost', 'Runner'];
 const LAN_ROOM = 'local_flux_main';
 const HOST_RECONNECT_GRACE_MS = 45000;
-      if (activeSession) {
-        if (!hasValidHostSession(currentRoom, hostSessionId)) {
-          return rejectHost(socket, callback);
-        }
+const hostDisconnectTimers = new Map();
+const PLAYER_RECONNECT_GRACE_MS = 45000;
+const pendingPlayerReconnect = new Map();
+const playerDisconnectTimers = new Map();
+const questionTimeoutTimers = new Map();
+const roundLockTimers = new Map();
+const roundTransitionTimers = new Map();
+const ROUND_LOCK_DELAY_MS = 700;
+const ROUND_TRANSITION_DELAY_MS = 3000;
+const HOST_REJECTED_MESSAGE = 'A game is already being hosted on this network.';
+const ENFORCE_HOST_SESSION = false;
+let lastRoomClosedReason = null;
+let lastRoomClosedAt = 0;
 
-        // In non-strict mode, transfer host control to the latest valid host token holder.
-        if (previousHostId && previousHostId !== socket.id) {
-          io.to(previousHostId).emit('host:rejected', { message: 'Host control transferred to a new host session.' });
-        }
-        currentRoom.hostSessionId = incomingSession || currentRoom.hostSessionId || `legacy_${socket.id}`;
+function markRoomClosed(reason) {
+  lastRoomClosedReason = reason;
+  lastRoomClosedAt = Date.now();
+}
 
-        const existingTimer = hostDisconnectTimers.get(LAN_ROOM_ID);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
-          hostDisconnectTimers.delete(LAN_ROOM_ID);
-        }
+function getJoinUnavailableMessage() {
+  const isRecentClosure = lastRoomClosedAt > 0 && Date.now() - lastRoomClosedAt < 6 * 60 * 60 * 1000;
+  if (!isRecentClosure) {
+    return 'Room is not created yet. Wait for the host to create a room.';
+  }
 
-        currentRoom.hostId = socket.id;
-        socket.join(LAN_ROOM_ID);
-        socket.playerName = 'Host';
-        socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
-        io.to(LAN_ROOM_ID).emit('player_joined', { players: currentRoom.players });
-
-        return callback({
-          success: true,
-          roomId: LAN_ROOM_ID,
-          deckSource: currentRoom.deckMeta?.source || 'none',
-          roomName: currentRoom.roomName,
-          status: currentRoom.status,
-          deckSelected: Array.isArray(currentRoom.questions) && currentRoom.questions.length > 0,
-          answerMode: currentRoom.answerMode || 'multiple_choice',
-        });
-      }
-
-      // Legacy/stale room without a host session lock: clear and allow fresh create.
-      const existingTimer = hostDisconnectTimers.get(LAN_ROOM_ID);
-      if (existingTimer) {
-        clearTimeout(existingTimer);
-        hostDisconnectTimers.delete(LAN_ROOM_ID);
-      }
-      deleteRoom();
+  if (lastRoomClosedReason === 'ended') {
+    return 'Room has ended. Wait for the host to create a new room.';
+  }
+  if (lastRoomClosedReason === 'host_disconnected') {
+    return 'Room closed because the host disconnected. Wait for the host to create a new room.';
+  }
+  return 'Room is not created yet. Wait for the host to create a room.';
+}
 
 function pickRandom(list) {
   if (!Array.isArray(list) || list.length === 0) return '';
@@ -86,33 +109,60 @@ function generateJoinProfile(room) {
   };
 }
 
-function normalizeCustomQuestions(input) {
+function normalizeSlides(input) {
   if (!Array.isArray(input)) return null;
   if (input.length === 0 || input.length > 200) return null;
 
   const normalized = [];
   for (let i = 0; i < input.length; i += 1) {
-    const q = input[i] || {};
-    const prompt = String(q.prompt || '').trim();
-    const options = Array.isArray(q.options) ? q.options.map((opt) => String(opt || '').trim()) : [];
-    const correctAnswer = String(q.correct_answer || '').trim();
-    const timeLimitMsRaw = Number(q.time_limit_ms);
-    const timeLimitMs = Number.isFinite(timeLimitMsRaw) && timeLimitMsRaw >= 3000 ? timeLimitMsRaw : 20000;
+    const raw = input[i] || {};
+    const id = String(raw.id || `slide_${String(i + 1).padStart(2, '0')}`).trim();
+    const type = String(raw.type || 'mcq').trim().toLowerCase();
+    const prompt = String(raw.prompt || '').trim();
+    const image = raw.image == null ? null : String(raw.image).trim();
+    const options = Array.isArray(raw.options) ? raw.options.map((opt) => String(opt || '').trim()) : [];
+    const acceptedAnswers = Array.isArray(raw.acceptedAnswers)
+      ? raw.acceptedAnswers.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    const suggestionBank = Array.isArray(raw.suggestionBank)
+      ? raw.suggestionBank.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    const timeLimitRaw = Number(raw.timeLimit);
+    const timeLimit = Number.isFinite(timeLimitRaw) && timeLimitRaw >= 3000 ? timeLimitRaw : 20000;
 
-    if (!prompt) return null;
-    if (options.length !== 4) return null;
-    if (options.some((opt) => !opt)) return null;
-    if (!options.includes(correctAnswer)) return null;
+    if (!id || !prompt) return null;
+    if (type !== 'mcq' && type !== 'typing') return null;
 
+    if (type === 'mcq') {
+      if (options.length !== 4 || options.some((opt) => !opt)) return null;
+      const correctIndex = Number(raw.correctIndex);
+      if (!Number.isInteger(correctIndex) || correctIndex < 0 || correctIndex > 3) return null;
+
+      normalized.push({
+        id,
+        type,
+        prompt,
+        image,
+        options,
+        correctIndex,
+        acceptedAnswers: [],
+        suggestionBank,
+        timeLimit,
+      });
+      continue;
+    }
+
+    if (acceptedAnswers.length === 0) return null;
     normalized.push({
-      q_id: String(q.q_id || `q_${String(i + 1).padStart(2, '0')}`),
-      type: q.type === 'image_guess' ? 'image_guess' : 'text_only',
+      id,
+      type,
       prompt,
-      options,
-      correct_answer: correctAnswer,
-      time_limit_ms: timeLimitMs,
-      asset_ref: q.asset_ref || null,
-      fuzzy_allowances: Array.isArray(q.fuzzy_allowances) ? q.fuzzy_allowances : [],
+      image,
+      options: [],
+      correctIndex: -1,
+      acceptedAnswers,
+      suggestionBank,
+      timeLimit,
     });
   }
 
@@ -121,8 +171,8 @@ function normalizeCustomQuestions(input) {
 
 function withQuestionTiming(payload) {
   const now = Date.now();
-  const limitMsRaw = Number(payload?.question?.time_limit_ms);
-  const durationMs = Number.isFinite(limitMsRaw) && limitMsRaw > 0 ? limitMsRaw : 20000;
+  const limitRaw = Number(payload?.question?.timeLimit);
+  const durationMs = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 20000;
   return {
     ...payload,
     durationMs,
@@ -131,17 +181,7 @@ function withQuestionTiming(payload) {
   };
 }
 
-function withAnswerMode(payload, answerMode = 'multiple_choice') {
-  if (!payload || !payload.question) return payload;
-  const nextMode = payload.question.answer_mode || answerMode || 'multiple_choice';
-  return {
-    ...payload,
-    question: {
-      ...payload.question,
-      answer_mode: nextMode,
-    },
-  };
-}
+
 
 function normalizeAvatarObject(input) {
   if (!input || typeof input !== 'object') {
@@ -165,20 +205,22 @@ function normalizeAvatarObject(input) {
   };
 }
 
-function loadDeckQuestionsFromFile(deckFile) {
+function loadDeckSlidesFromFile(deckFile) {
   const requested = String(deckFile || '').trim();
   if (!requested.endsWith('.json') || requested.includes('/') || requested.includes('\\')) {
     return null;
   }
 
-  const decksDir = path.resolve(__dirname, '..', '..', 'data', 'decks');
+  const decksDir = path.resolve(__dirname, '..', 'data', 'decks');
   const resolvedDeckPath = path.resolve(decksDir, requested);
   if (!resolvedDeckPath.startsWith(decksDir)) return null;
   if (!fs.existsSync(resolvedDeckPath)) return null;
 
   try {
     const data = JSON.parse(fs.readFileSync(resolvedDeckPath, 'utf8'));
-    return Array.isArray(data?.questions) ? data.questions : null;
+    if (Array.isArray(data?.slides)) return data.slides;
+    if (Array.isArray(data?.questions)) return data.questions;
+    return null;
   } catch {
     return null;
   }
@@ -228,7 +270,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
   }
 
   const emitNextQuestionForRound = (room, nextQuestionPayload) => {
-    const timedPayload = withQuestionTiming(withAnswerMode(nextQuestionPayload, room.answerMode));
+    const timedPayload = withQuestionTiming(nextQuestionPayload);
     room.roundSettled = false;
     room.roundId = Number(room.roundId || 0) + 1;
 
@@ -337,7 +379,15 @@ function registerHandlers(socket, io, questions, tokenManager) {
     getChatMode: () => chatInstance?.mode || 'FREE',
   });
 
-  // ── client_ping ────────────────────────────────────────────────────────
+  const isHostAuthorized = (room, hostToken, hostSessionId) => {
+    const hasValidToken = Boolean(hostToken) && tokenManager.validateToken(hostToken, socket.id);
+    if (hasValidToken) return true;
+
+    // Allow resumed host sessions to continue controlling room without forcing token refresh.
+    return Boolean(room && room.hostId === socket.id && hasValidHostSession(room, hostSessionId));
+  };
+
+  // G��G�� client_ping G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   const emitPong = ({ clientTime } = {}, callback) => {
     const normalizedClientTime = Number.isFinite(Number(clientTime)) ? Number(clientTime) : Date.now();
     const payload = { clientTime: normalizedClientTime };
@@ -352,7 +402,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     emitPong({ clientTime: timestamp }, callback);
   });
 
-  // ── admin:generate-host-token ──────────────────────────────────────────
+  // G��G�� admin:generate-host-token G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('admin:generate-host-token', (payload, callback) => {
     try {
       const token = tokenManager.generateToken();
@@ -375,7 +425,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     }
   });
 
-  // ── create_room ─────────────────────────────────────────────────────────
+  // G��G�� create_room G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('create_room', ({ roomName, hostSessionId, hostToken }, callback) => {
     // Validate host token
     if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
@@ -389,21 +439,27 @@ function registerHandlers(socket, io, questions, tokenManager) {
 
     const currentRoom = getRoom();
     if (currentRoom) {
-      if (!hasValidHostSession(currentRoom, hostSessionId)) {
-        return rejectHost(socket, callback);
+      const previousHostId = currentRoom.hostId;
+      const incomingSession = String(hostSessionId || '').trim();
+
+      // In non-strict mode, transfer host control to the latest valid host token holder.
+      if (previousHostId && previousHostId !== socket.id) {
+        io.to(previousHostId).emit('host:rejected', { message: 'Host control transferred to a new host session.' });
       }
 
-        const existingTimer = hostDisconnectTimers.get(LAN_ROOM_ID);
-        if (existingTimer) {
-          clearTimeout(existingTimer);
-          hostDisconnectTimers.delete(LAN_ROOM_ID);
-        }
+      currentRoom.hostSessionId = incomingSession || currentRoom.hostSessionId || `legacy_${socket.id}`;
 
-        currentRoom.hostId = socket.id;
-        socket.join(LAN_ROOM_ID);
-        socket.playerName = 'Host';
-        socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
-        io.to(LAN_ROOM_ID).emit('player_joined', { players: currentRoom.players });
+      const existingTimer = hostDisconnectTimers.get(LAN_ROOM_ID);
+      if (existingTimer) {
+        clearTimeout(existingTimer);
+        hostDisconnectTimers.delete(LAN_ROOM_ID);
+      }
+
+      currentRoom.hostId = socket.id;
+      socket.join(LAN_ROOM_ID);
+      socket.playerName = 'Host';
+      socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
+      io.to(LAN_ROOM_ID).emit('player_joined', { players: currentRoom.players });
 
       return callback({
         success: true,
@@ -412,6 +468,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
         roomName: currentRoom.roomName,
         status: currentRoom.status,
         deckSelected: Array.isArray(currentRoom.questions) && currentRoom.questions.length > 0,
+        answerMode: currentRoom.answerMode || 'multiple_choice',
       });
     }
 
@@ -428,19 +485,18 @@ function registerHandlers(socket, io, questions, tokenManager) {
     lastRoomClosedAt = 0;
     socket.join(lanRoomId);
     socket.playerName = 'Host';
-    console.log(`[Host] "${roomName}" initialized room — LAN_ROOM: ${lanRoomId}`);
+    console.log(`[Host] "${roomName}" initialized room G�� LAN_ROOM: ${lanRoomId}`);
     socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
     callback({ success: true, roomId: lanRoomId, deckSource: 'none', answerMode: room?.answerMode || 'multiple_choice' });
   });
 
-  // ── host:set_deck ────────────────────────────────────────────────────────
-  socket.on('host:set_deck', ({ deckQuestions, deckName, deckSource, deckFile, hostToken, hostSessionId }, callback) => {
-    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+  // G��G�� host:set_deck G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
+  socket.on('host:set_deck', ({ deckSlides, deckQuestions, deckName, deckSource, deckFile, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
       console.warn(`[Warn] Unauthorized host:set_deck attempt from ${socket.id}`);
       return callback?.({ ok: false, reason: 'unauthorized' });
     }
-
-    const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (!hasValidHostSession(room, hostSessionId)) {
       rejectHost(socket, null);
@@ -449,17 +505,21 @@ function registerHandlers(socket, io, questions, tokenManager) {
     if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
     if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
 
-    const sourceQuestions = deckFile ? loadDeckQuestionsFromFile(deckFile) : deckQuestions;
-    const customQuestions = normalizeCustomQuestions(sourceQuestions);
-    if (!customQuestions) {
+    const sourceSlides = deckFile
+      ? loadDeckSlidesFromFile(deckFile)
+      : Array.isArray(deckSlides)
+        ? deckSlides
+        : deckQuestions;
+    const normalizedSlides = normalizeSlides(sourceSlides);
+    if (!normalizedSlides) {
       return callback?.({ ok: false, reason: 'invalid_deck_payload' });
     }
 
-    room.questions = customQuestions;
+    room.questions = normalizedSlides;
     room.deckMeta = {
       name: String(deckName || 'Imported Deck').trim(),
       source: String(deckSource || 'host').trim(),
-      count: customQuestions.length,
+      count: normalizedSlides.length,
       updatedAt: Date.now(),
     };
 
@@ -470,10 +530,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
       questionCount: room.deckMeta.count,
     });
 
-    callback?.({ ok: true, questionCount: customQuestions.length });
+    callback?.({ ok: true, questionCount: normalizedSlides.length });
   });
 
-  // ── host:resume ─────────────────────────────────────────────────────────
+  // G��G�� host:resume G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('host:resume', ({ hostSessionId }, callback) => {
     const room = getRoom();
     if (!room) return callback?.({ success: false, error: 'Room not found.' });
@@ -514,16 +574,16 @@ function registerHandlers(socket, io, questions, tokenManager) {
       currentQ: room.currentQ,
       totalQ: roomQuestions.length,
       activeQuestion: canSyncQuestion
-        ? withQuestionTiming(withAnswerMode({
-            question: roomQuestions[currentIndex],
+        ? withQuestionTiming({
+            question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
             index: currentIndex,
             total: roomQuestions.length,
-          }, room.answerMode))
+          })
         : null,
     });
   });
 
-  // ── join_room ────────────────────────────────────────────────────────────
+  // G��G�� join_room G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('join_room', ({ playerName, playerSessionId }, callback) => {
     const room = getRoom();
     if (!room) {
@@ -541,7 +601,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     socket.playerName = assigned.name;
     socket.playerSessionId = playerSessionId || null;
     socket.join(LAN_ROOM_ID);
-    console.log(`[Join] "${assigned.name}" → LAN_ROOM`);
+    console.log(`[Join] "${assigned.name}" G�� LAN_ROOM`);
 
     io.to(LAN_ROOM_ID).emit('player_joined', { players: room.players });
     socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
@@ -558,7 +618,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     });
   });
 
-  // ── join (LAN mode) ──────────────────────────────────────────────────────
+  // G��G�� join (LAN mode) G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('join', ({ playerName, playerSessionId }, callback) => {
     const room = getRoom();
 
@@ -582,7 +642,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     socket.playerName = assigned.name;
     socket.playerSessionId = playerSessionId || null;
     socket.join(LAN_ROOM_ID);
-    console.log(`[LAN Join] "${assigned.name}" → LAN_ROOM`);
+    console.log(`[LAN Join] "${assigned.name}" G�� LAN_ROOM`);
 
     io.to(LAN_ROOM_ID).emit('player_joined', { players: room.players });
     socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
@@ -599,7 +659,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     });
   });
 
-  // ── player:resume ───────────────────────────────────────────────────────
+  // G��G�� player:resume G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('player:resume', ({ sessionId, playerSessionId }, callback) => {
     const effectiveSessionId = String(sessionId || playerSessionId || '').trim();
     if (!effectiveSessionId) {
@@ -672,22 +732,21 @@ function registerHandlers(socket, io, questions, tokenManager) {
       hasAnswered,
       answeredValue: hasAnswered ? room.answersIn[socket.id] : pending.lastAnswer,
       activeQuestion: canSyncQuestion
-        ? withQuestionTiming(withAnswerMode({
-            question: sanitizeQuestion(roomQuestions[currentIndex]),
+        ? withQuestionTiming({
+            question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
             index: currentIndex,
             total: roomQuestions.length,
-          }, room.answerMode))
+          })
         : null,
     });
   });
 
-  // ── host:set_answer_mode ───────────────────────────────────────────────
+  // G��G�� host:set_answer_mode G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('host:set_answer_mode', ({ mode, hostToken, hostSessionId }, callback) => {
-    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
       return callback?.({ ok: false, reason: 'unauthorized' });
     }
-
-    const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (!hasValidHostSession(room, hostSessionId)) {
       rejectHost(socket, null);
@@ -697,7 +756,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
 
     const nextMode = String(mode || '').trim();
-    if (!['multiple_choice', 'type_guess'].includes(nextMode)) {
+    if (!['auto', 'multiple_choice', 'type_guess'].includes(nextMode)) {
       return callback?.({ ok: false, reason: 'invalid_mode' });
     }
 
@@ -706,7 +765,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     callback?.({ ok: true, mode: nextMode });
   });
 
-  // ── player:updateProfile ───────────────────────────────────────────────
+  // G��G�� player:updateProfile G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('player:updateProfile', ({ newName, avatarObject }, callback) => {
     const room = getRoom();
     if (!room) {
@@ -738,7 +797,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     return callback?.({ success: true, player: { ...target } });
   });
 
-  // ── start_game ───────────────────────────────────────────────────────────
+  // G��G�� start_game G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('start_game', ({ hostSessionId } = {}, callback) => {
     const room = getRoom();
     if (!room) return callback({ success: false, error: 'Room not found.' });
@@ -767,18 +826,15 @@ function registerHandlers(socket, io, questions, tokenManager) {
     }
   });
 
-  // ── submit_answer ────────────────────────────────────────────────────────
+  // G��G�� submit_answer G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('submit_answer', ({ answer }, callback) => {
     const room = getRoom();
     if (!room) return callback?.({ success: false, error: 'Room not found.' });
-    if ((room.answerMode || 'multiple_choice') === 'type_guess') {
-      return callback?.({ success: false, error: 'This round uses type guess input.' });
-    }
 
     const roomQuestions = Array.isArray(room.questions) ? room.questions : [];
 
     const result = submitAnswer(room, roomQuestions, socket.id, answer);
-    console.log(`[Answer] LAN_ROOM Q${room.currentQ} — "${answer}" (${result.correct ? 'correct' : 'wrong'})`);
+    console.log(`[Answer] LAN_ROOM Q${room.currentQ} G�� "${answer}" (${result.correct ? 'correct' : 'wrong'})`);
 
     if (result.alreadyAnswered) {
       return callback?.({ success: false, error: 'Already answered.' });
@@ -796,7 +852,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     }
   });
 
-  // ── next_question (host advances) ────────────────────────────────────────
+  // G��G�� next_question (host advances) G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('next_question', ({ hostSessionId } = {}, callback) => {
     const room = getRoom();
     if (!room) return callback?.({ success: false, error: 'Room not found.' });
@@ -844,13 +900,11 @@ function registerHandlers(socket, io, questions, tokenManager) {
   });
 
   socket.on('host:kick_player', ({ target, hostToken, hostSessionId }, callback) => {
-    // Validate host token
-    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
       console.warn(`[Warn] Unauthorized host:kick_player attempt from ${socket.id}`);
       return callback?.({ ok: false, reason: 'unauthorized' });
     }
-
-    const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (!hasValidHostSession(room, hostSessionId)) {
       rejectHost(socket, null);
@@ -880,13 +934,11 @@ function registerHandlers(socket, io, questions, tokenManager) {
 
   // host sets chat mode (OFF | FREE | RESTRICTED) and optional allowed messages
   socket.on('chat:host_set_mode', ({ mode, allowed, hostToken, hostSessionId }, callback) => {
-    // Validate host token
-    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
       console.warn(`[Warn] Unauthorized chat:host_set_mode attempt from ${socket.id}`);
       return callback?.({ ok: false, reason: 'unauthorized' });
     }
-
-    const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (!hasValidHostSession(room, hostSessionId)) {
       rejectHost(socket, null);
@@ -919,11 +971,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
 
   // host explicitly closes the room when leaving host view
   socket.on('host:close_room', ({ hostToken, hostSessionId }, callback) => {
-    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
       return callback?.({ ok: false, reason: 'unauthorized' });
     }
-
-    const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (!hasValidHostSession(room, hostSessionId)) {
       rejectHost(socket, null);
@@ -945,7 +996,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     return callback?.({ ok: true });
   });
 
-  // ── disconnect ───────────────────────────────────────────────────────────
+  // G��G�� disconnect G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('disconnect', () => {
     console.log(`[-] Disconnected: ${socket.id}`);
 

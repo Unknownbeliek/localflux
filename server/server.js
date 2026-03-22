@@ -1,4 +1,4 @@
-﻿/**
+/**
  * server.js - LocalFlux entry point
  *
  * Responsibilities:
@@ -76,7 +76,7 @@ io.on('connection', (socket) => {
 //  API endpoints
 
 app.get('/api/decks', (req, res) => {
-  const decksDir = path.resolve(__dirname, '..', 'data', 'decks');
+  const decksDir = path.resolve(__dirname, 'data', 'decks');
   if (!fs.existsSync(decksDir)) {
     return res.json([]);
   }
@@ -105,7 +105,7 @@ app.get('/api/decks/:file', (req, res) => {
     return res.status(400).json({ error: 'Invalid deck file.' });
   }
 
-  const decksDir = path.resolve(__dirname, '..', 'data', 'decks');
+  const decksDir = path.resolve(__dirname, 'data', 'decks');
   const deckPath = path.resolve(decksDir, requested);
   if (!deckPath.startsWith(decksDir)) {
     return res.status(400).json({ error: 'Invalid deck path.' });

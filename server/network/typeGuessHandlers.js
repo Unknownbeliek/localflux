@@ -22,7 +22,10 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
     const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
     if (room.status !== 'started') return callback?.({ ok: false, reason: 'game_not_started' });
-    if ((room.answerMode || 'multiple_choice') !== 'type_guess') {
+    const currentQ = room.activeSlide;
+    if (!currentQ) return callback?.({ ok: false, reason: 'question_not_found' });
+    
+    if (currentQ.answer_mode !== 'type_guess') {
       return callback?.({ ok: false, reason: 'type_guess_disabled' });
     }
 
@@ -35,10 +38,6 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
 
     const rawGuess = String(text || '').trim().slice(0, MAX_GUESS_LENGTH);
     if (!rawGuess) return callback?.({ ok: false, reason: 'empty_guess' });
-
-    const roomQuestions = Array.isArray(room.questions) ? room.questions : [];
-    const currentQ = roomQuestions[Number(room.currentQ)];
-    if (!currentQ) return callback?.({ ok: false, reason: 'question_not_found' });
 
     const acceptedAnswers = buildAcceptedAnswers(currentQ);
     const result = evaluateTypeGuess({

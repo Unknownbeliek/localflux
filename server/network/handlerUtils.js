@@ -123,7 +123,7 @@ function loadDeckQuestionsFromFile(deckFile) {
     return null;
   }
 
-  const decksDir = path.resolve(__dirname, '..', '..', 'data', 'decks');
+  const decksDir = path.resolve(__dirname, '..', 'data', 'decks');
   const resolvedDeckPath = path.resolve(decksDir, requested);
   if (!resolvedDeckPath.startsWith(decksDir)) return null;
   if (!fs.existsSync(resolvedDeckPath)) return null;

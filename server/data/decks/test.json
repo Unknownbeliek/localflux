@@ -1,0 +1,96 @@
+{
+  "id": "qa-test-deck-001",
+  "title": "LocalFlux QA Engine Test",
+  "slides": [
+    {
+      "id": "slide-img-1",
+      "type": "mcq",
+      "prompt": "IMAGE TEST 1: Which option is correct?",
+      "image": "deck-images/1.webp",
+      "options": ["Alpha", "Beta", "Gamma", "Delta"],
+      "correctIndex": 0,
+      "timeLimit": 20000
+    },
+    {
+      "id": "slide-img-2",
+      "type": "mcq",
+      "prompt": "IMAGE TEST 2: Select 'Blue'.",
+      "image": "2.webp",
+      "options": ["Red", "Green", "Blue", "Yellow"],
+      "correctIndex": 2,
+      "timeLimit": 20000
+    },
+    {
+      "id": "slide-img-3",
+      "type": "typing",
+      "prompt": "IMAGE TYPING 1: Type the word 'Test'.",
+      "image": "3.webp",
+      "acceptedAnswers": ["Test", "test"],
+      "suggestionBank": ["Test", "Text", "Tent", "Toast"],
+      "timeLimit": 25000
+    },
+    {
+      "id": "slide-img-4",
+      "type": "typing",
+      "prompt": "IMAGE TYPING 2: Type 'Hello' (Try making a typo to test fuzzy match).",
+      "image": "4.webp",
+      "acceptedAnswers": ["Hello"],
+      "suggestionBank": ["Hello", "World", "Hero", "Halo"],
+      "timeLimit": 25000
+    },
+    {
+      "id": "slide-img-5",
+      "type": "mcq",
+      "prompt": "IMAGE TEST 3: Click 'Target'.",
+      "image": "5.webp",
+      "options": ["Decoy 1", "Target", "Decoy 2", "Decoy 3"],
+      "correctIndex": 1,
+      "timeLimit": 20000
+    },
+    {
+      "id": "slide-text-1",
+      "type": "mcq",
+      "prompt": "TEXT ONLY 1: This should have massive font.",
+      "image": null,
+      "options": ["Yes", "No", "Maybe", "Unsure"],
+      "correctIndex": 0,
+      "timeLimit": 15000
+    },
+    {
+      "id": "slide-text-2",
+      "type": "typing",
+      "prompt": "TEXT TYPING 1: Type 'FOSS'.",
+      "image": null,
+      "acceptedAnswers": ["FOSS", "foss"],
+      "suggestionBank": ["FOSS", "BOSS", "LOSS", "MOSS"],
+      "timeLimit": 20000
+    },
+    {
+      "id": "slide-text-3",
+      "type": "mcq",
+      "prompt": "TEXT ONLY 2: Is the UI layout breaking?",
+      "image": null,
+      "options": ["It looks great", "It is broken", "Needs padding", "Too small"],
+      "correctIndex": 0,
+      "timeLimit": 15000
+    },
+    {
+      "id": "slide-text-4",
+      "type": "typing",
+      "prompt": "TEXT TYPING 2: Hard mode test. Type 'LocalFlux'.",
+      "image": null,
+      "acceptedAnswers": ["LocalFlux", "localflux"],
+      "suggestionBank": [],
+      "timeLimit": 25000
+    },
+    {
+      "id": "slide-text-5",
+      "type": "mcq",
+      "prompt": "TEXT ONLY 3: Final sanity check.",
+      "image": null,
+      "options": ["Pass", "Fail", "Retry", "Abort"],
+      "correctIndex": 0,
+      "timeLimit": 15000
+    }
+  ]
+}
