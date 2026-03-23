@@ -71,6 +71,6 @@ function sanitizeQuestion(slide) {
   return safe;
 }
 
-const DEFAULT_DECK_PATH = path.join(__dirname, '..', '..', 'data', 'decks', 'movie.json');
+const DEFAULT_DECK_PATH = path.join(__dirname, '..', 'data', 'decks', 'movie.json');
 
 module.exports = { loadDeck, sanitizeQuestion, DEFAULT_DECK_PATH };
