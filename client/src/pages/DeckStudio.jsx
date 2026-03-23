@@ -3,6 +3,8 @@ import { useDeckStudioStore } from '../deckStudio/store';
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog';
 import CloudDeckCard from '../components/CloudDeckCard';
 import AnimatedBackground from '../components/AnimatedBackground';
+import { getBackendUrl } from '../backendUrl';
+import { compressImageToWebP } from '../utils/imageCompressor';
 
 function isSlideValid(slide) {
   return (
@@ -48,6 +50,38 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   const [cloudStatus, setCloudStatus] = useState('loading');
   const [cloudError, setCloudError] = useState('');
   const [downloadingDeckId, setDownloadingDeckId] = useState('');
+  const [uploadingImage, setUploadingImage] = useState(false);
+
+  const handleImageUpload = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !activeSlide) return;
+    
+    try {
+      setUploadingImage(true);
+      setActionMessage('Compressing and uploading image...');
+      
+      const webpBlob = await compressImageToWebP(file);
+      
+      const res = await fetch(`${getBackendUrl()}/api/upload`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'image/webp'
+        },
+        body: webpBlob
+      });
+      
+      if (!res.ok) throw new Error('Upload failed');
+      
+      const { url } = await res.json();
+      updateImageUrl(activeSlide.id, url);
+      setActionMessage('Image successfully uploaded and optimized.');
+    } catch (err) {
+      setActionMessage(err?.message || 'Failed to upload image.');
+    } finally {
+      setUploadingImage(false);
+      if (event.target) event.target.value = '';
+    }
+  };
 
   const csvTemplate =
     'prompt,optionA,optionB,optionC,optionD,correct,imageUrl\n' +
@@ -248,14 +282,26 @@ export default function DeckStudio({ onBack, onHostDeck }) {
 
           <div className="rounded-3xl border-2 border-dashed border-white/20 bg-slate-900/30 p-8 backdrop-blur-md transition-all hover:border-emerald-400/40 hover:bg-slate-900/50">
             <p className="mb-4 text-center text-[11px] font-black uppercase tracking-[0.25em] text-slate-400">
-              Image Reference (URL)
+              Image Reference (URL or Upload)
             </p>
-            <input
-              value={activeSlide?.imageUrl || ''}
-              onChange={(e) => activeSlide && updateImageUrl(activeSlide.id, e.target.value)}
-              placeholder="Paste image URL here"
-              className="w-full rounded-2xl border border-white/10 bg-black/40 px-5 py-4 text-sm font-medium text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 shadow-inner overflow-hidden"
-            />
+            <div className="flex flex-col gap-3 md:flex-row">
+              <input
+                value={activeSlide?.imageUrl || ''}
+                onChange={(e) => activeSlide && updateImageUrl(activeSlide.id, e.target.value)}
+                placeholder="Paste image URL here"
+                className="flex-1 w-full rounded-2xl border border-white/10 bg-black/40 px-5 py-4 text-sm font-medium text-white placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-emerald-400/60 shadow-inner overflow-hidden"
+              />
+              <label className={`flex cursor-pointer items-center justify-center rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-6 py-4 text-sm font-black tracking-wide text-emerald-300 transition-all hover:bg-emerald-500/20 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] ${uploadingImage ? 'cursor-not-allowed opacity-50' : ''}`}>
+                {uploadingImage ? 'UPLOADING...' : 'BROWSE IMAGE'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={uploadingImage}
+                />
+              </label>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
