@@ -181,7 +181,17 @@ function withQuestionTiming(payload) {
   };
 }
 
-
+function withAnswerMode(payload, answerMode = 'multiple_choice') {
+  if (!payload || !payload.question) return payload;
+  const nextMode = payload.question.answer_mode || answerMode || 'multiple_choice';
+  return {
+    ...payload,
+    question: {
+      ...payload.question,
+      answer_mode: nextMode,
+    },
+  };
+}
 
 function normalizeAvatarObject(input) {
   if (!input || typeof input !== 'object') {
@@ -211,7 +221,7 @@ function loadDeckSlidesFromFile(deckFile) {
     return null;
   }
 
-  const decksDir = path.resolve(__dirname, '..', 'data', 'decks');
+  const decksDir = path.resolve(__dirname, '..', '..', 'data', 'decks');
   const resolvedDeckPath = path.resolve(decksDir, requested);
   if (!resolvedDeckPath.startsWith(decksDir)) return null;
   if (!fs.existsSync(resolvedDeckPath)) return null;
@@ -270,7 +280,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
   }
 
   const emitNextQuestionForRound = (room, nextQuestionPayload) => {
-    const timedPayload = withQuestionTiming(nextQuestionPayload);
+    const timedPayload = withQuestionTiming(withAnswerMode(nextQuestionPayload, room.answerMode));
     room.roundSettled = false;
     room.roundId = Number(room.roundId || 0) + 1;
 
@@ -407,9 +417,9 @@ function registerHandlers(socket, io, questions, tokenManager) {
     try {
       const token = tokenManager.generateToken();
       const ttlMs = tokenManager.getTokenTtl(token);
-
+      
       console.log(`[Admin] Generated host token from ${socket.id} (TTL: ${ttlMs}ms)`);
-
+      
       callback({
         success: true,
         token,
@@ -574,11 +584,11 @@ function registerHandlers(socket, io, questions, tokenManager) {
       currentQ: room.currentQ,
       totalQ: roomQuestions.length,
       activeQuestion: canSyncQuestion
-        ? withQuestionTiming({
-          question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
-          index: currentIndex,
-          total: roomQuestions.length,
-        })
+        ? withQuestionTiming(withAnswerMode({
+            question: roomQuestions[currentIndex],
+            index: currentIndex,
+            total: roomQuestions.length,
+          }, room.answerMode))
         : null,
     });
   });
@@ -732,11 +742,11 @@ function registerHandlers(socket, io, questions, tokenManager) {
       hasAnswered,
       answeredValue: hasAnswered ? room.answersIn[socket.id] : pending.lastAnswer,
       activeQuestion: canSyncQuestion
-        ? withQuestionTiming({
-          question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
-          index: currentIndex,
-          total: roomQuestions.length,
-        })
+        ? withQuestionTiming(withAnswerMode({
+            question: sanitizeQuestion(roomQuestions[currentIndex]),
+            index: currentIndex,
+            total: roomQuestions.length,
+          }, room.answerMode))
         : null,
     });
   });
@@ -756,7 +766,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
 
     const nextMode = String(mode || '').trim();
-    if (!['auto', 'multiple_choice', 'type_guess'].includes(nextMode)) {
+    if (!['multiple_choice', 'type_guess'].includes(nextMode)) {
       return callback?.({ ok: false, reason: 'invalid_mode' });
     }
 
@@ -1035,7 +1045,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     // Check if this is a player
     const disconnectedPlayer = room?.players.find((p) => p.id === socket.id);
     const wasPlayerRemoved = removePlayer(socket.id);
-
+    
     if (wasPlayerRemoved && room) {
       if (room) {
         let lastAnswer;

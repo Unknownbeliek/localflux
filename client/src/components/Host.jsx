@@ -68,26 +68,26 @@ function questionsToDeck(raw, fallbackTitle = 'Imported Deck') {
     ? raw.slides
     : Array.isArray(raw?.questions)
       ? raw.questions.map((q, idx) => {
-        const options = Array.isArray(q?.options) ? q.options.map((opt) => String(opt || '').trim()) : [];
-        const normalized = options.slice(0, 4);
-        while (normalized.length < 4) normalized.push('');
+          const options = Array.isArray(q?.options) ? q.options.map((opt) => String(opt || '').trim()) : [];
+          const normalized = options.slice(0, 4);
+          while (normalized.length < 4) normalized.push('');
 
-        const correctAnswer = String(q?.correct_answer || '').trim();
-        let correctIndex = normalized.findIndex((opt) => opt.toLowerCase() === correctAnswer.toLowerCase());
-        if (correctIndex < 0) correctIndex = 0;
+          const correctAnswer = String(q?.correct_answer || '').trim();
+          let correctIndex = normalized.findIndex((opt) => opt.toLowerCase() === correctAnswer.toLowerCase());
+          if (correctIndex < 0) correctIndex = 0;
 
-        return {
-          id: String(q?.id || q?.q_id || `slide_${idx + 1}_${uid()}`),
-          type: q?.type === 'typing' ? 'typing' : 'mcq',
-          prompt: String(q?.prompt || '').trim(),
-          image: String(q?.image || q?.asset_ref || '').trim() || null,
-          options: normalized,
-          correctIndex,
-          acceptedAnswers: Array.isArray(q?.acceptedAnswers) ? q.acceptedAnswers : [],
-          suggestionBank: Array.isArray(q?.suggestionBank) ? q.suggestionBank : [],
-          timeLimit: Number.isFinite(Number(q?.timeLimit)) ? Number(q.timeLimit) : 20000,
-        };
-      })
+          return {
+            id: String(q?.id || q?.q_id || `slide_${idx + 1}_${uid()}`),
+            type: q?.type === 'typing' ? 'typing' : 'mcq',
+            prompt: String(q?.prompt || '').trim(),
+            image: String(q?.image || q?.asset_ref || '').trim() || null,
+            options: normalized,
+            correctIndex,
+            acceptedAnswers: Array.isArray(q?.acceptedAnswers) ? q.acceptedAnswers : [],
+            suggestionBank: Array.isArray(q?.suggestionBank) ? q.suggestionBank : [],
+            timeLimit: Number.isFinite(Number(q?.timeLimit)) ? Number(q.timeLimit) : 20000,
+          };
+        })
       : [];
 
   return {
@@ -205,9 +205,8 @@ export default function Host({ onBack, studioQuestions = null }) {
   const profilePulseTimersRef = useRef(new Map());
   const modeOptions = ['FREE', 'RESTRICTED', 'OFF'];
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
-  const answerModeOptions = ['auto', 'multiple_choice', 'type_guess'];
+  const answerModeOptions = ['multiple_choice', 'type_guess'];
   const answerModeLabels = {
-    auto: 'AUTO (DECK-DRIVEN)',
     multiple_choice: '4 OPTIONS',
     type_guess: 'TYPE GUESS',
   };
@@ -290,7 +289,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     });
     // keep host view of chat mode in sync
     socket.on('chat:mode', ({ mode, allowed }) => { setChatMode(mode); if (allowed) setAllowedList(allowed); });
-
+    
     socket.on('player_joined', ({ players }) => setPlayers(players));
     socket.on('player:profileUpdated', ({ player, players }) => {
       if (Array.isArray(players)) setPlayers(players);
@@ -371,8 +370,8 @@ export default function Host({ onBack, studioQuestions = null }) {
     socket.on('host_reconnecting', ({ message }) => {
       if (message) setError(message);
     });
-    socket.on('chat:muted', () => { });
-    socket.on('chat:unmuted', () => { });
+    socket.on('chat:muted', () => {});
+    socket.on('chat:unmuted', () => {});
     // listen for moderator updates if server emits them
     socket.on('chat:moderation', ({ action, target }) => {
       setMutedSet((s) => {
@@ -694,12 +693,12 @@ export default function Host({ onBack, studioQuestions = null }) {
           const hasSlides = Array.isArray(parsedJson?.slides);
           candidateDeck = hasSlides
             ? {
-              id: String(parsedJson.id || `import_${uid()}`),
-              title: String(parsedJson.title || lowerName || 'Imported Deck').trim(),
-              version: String(parsedJson.version || '1.0.0').trim(),
-              slides: parsedJson.slides,
-              updatedAt: Date.now(),
-            }
+                id: String(parsedJson.id || `import_${uid()}`),
+                title: String(parsedJson.title || lowerName || 'Imported Deck').trim(),
+                version: String(parsedJson.version || '1.0.0').trim(),
+                slides: parsedJson.slides,
+                updatedAt: Date.now(),
+              }
             : questionsToDeck(parsedJson, lowerName.replace(/\.(json|flux)$/i, '') || 'Imported Deck');
         }
 
@@ -981,7 +980,7 @@ export default function Host({ onBack, studioQuestions = null }) {
       if (!confirmed) return;
 
       if (socketRef.current?.connected && hostToken) {
-        socketRef.current.emit('host:close_room', { hostToken, hostSessionId: hostSessionIdRef.current }, () => { });
+        socketRef.current.emit('host:close_room', { hostToken, hostSessionId: hostSessionIdRef.current }, () => {});
       }
     }
     clearHostState();
@@ -1242,37 +1241,37 @@ export default function Host({ onBack, studioQuestions = null }) {
   }
 
   return (
-    <div className="relative min-h-screen bg-[#0D1117] text-white flex flex-col items-center justify-center p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(139,92,246,0.12),rgba(13,17,23,0)_70%)]" />
-      <button onClick={handleBack} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm font-semibold transition-colors font-outfit">← back</button>
-      <div className="z-10 w-full max-w-sm panel-elevated p-8 animate-phase-in">
-        <h1 className="mb-8 text-5xl font-black tracking-tight font-outfit text-gradient-brand">New Room</h1>
+    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
+      <button onClick={handleBack} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm transition-colors">back</button>
+      <div className="z-10 w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-black/30 animate-phase-in">
+        <h1 className="mb-8 text-5xl font-black tracking-tight">New Room</h1>
         <div className="w-full">
-          <input
-            type="text"
-            placeholder="Room name"
-            value={roomName}
-            onChange={(e) => setRoomName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-            className="mb-3 w-full rounded-2xl border border-slate-700/50 bg-[#0D1117] px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-violet-400 focus:outline-none font-outfit"
-          />
-          {error && <p className="mb-3 rounded-xl border border-red-500/30 bg-red-500/8 px-4 py-2.5 text-xs font-mono text-red-300">{error}</p>}
-          <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-gradient-to-r from-violet-500 via-fuchsia-500 to-violet-500 py-5 text-xl font-black text-white font-outfit transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_30px_rgba(139,92,246,0.4)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400 disabled:from-slate-700 disabled:via-slate-700 disabled:to-slate-700 animate-shimmer">
-            CREATE
-          </button>
-          <div className={`mt-3 flex items-center justify-center gap-2 text-xs font-outfit font-semibold ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
-            {connected ? (
-              <span>connected</span>
-            ) : (
-              <>
-                <span>connecting</span>
-                <span className="status-dot" />
-                <span className="status-dot" />
-                <span className="status-dot" />
-              </>
-            )}
-          </div>
-          {resumeNotice && <p className="mt-3 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-4 py-2.5 text-xs text-emerald-200">{resumeNotice}</p>}
+        <input
+          type="text"
+          placeholder="Room name"
+          value={roomName}
+          onChange={(e) => setRoomName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
+          className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
+        />
+        {error && <p className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300">{error}</p>}
+        <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-emerald-400 py-5 text-xl font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
+          CREATE
+        </button>
+        <div className={`mt-3 flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
+          {connected ? (
+            <span>connected</span>
+          ) : (
+            <>
+              <span>connecting</span>
+              <span className="status-dot" />
+              <span className="status-dot" />
+              <span className="status-dot" />
+            </>
+          )}
+        </div>
+        {resumeNotice && <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{resumeNotice}</p>}
         </div>
       </div>
     </div>

@@ -57,7 +57,7 @@ function loadDeck(deckPath) {
  * @returns {object} Safe public slide payload.
  */
 function sanitizeQuestion(slide) {
-  const SAFE_FIELDS = ['id', 'type', 'prompt', 'image', 'options', 'suggestionBank', 'timeLimit', 'answer_mode'];
+  const SAFE_FIELDS = ['id', 'type', 'prompt', 'image', 'options', 'suggestionBank', 'timeLimit'];
   const safe = {};
 
   SAFE_FIELDS.forEach((field) => {
@@ -71,6 +71,6 @@ function sanitizeQuestion(slide) {
   return safe;
 }
 
-const DEFAULT_DECK_PATH = path.join(__dirname, '..', 'data', 'decks', 'movie.json');
+const DEFAULT_DECK_PATH = path.join(__dirname, '..', '..', 'data', 'decks', 'movie.json');
 
 module.exports = { loadDeck, sanitizeQuestion, DEFAULT_DECK_PATH };
