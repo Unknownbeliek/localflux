@@ -407,9 +407,9 @@ function registerHandlers(socket, io, questions, tokenManager) {
     try {
       const token = tokenManager.generateToken();
       const ttlMs = tokenManager.getTokenTtl(token);
-      
+
       console.log(`[Admin] Generated host token from ${socket.id} (TTL: ${ttlMs}ms)`);
-      
+
       callback({
         success: true,
         token,
@@ -575,10 +575,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
       totalQ: roomQuestions.length,
       activeQuestion: canSyncQuestion
         ? withQuestionTiming({
-            question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
-            index: currentIndex,
-            total: roomQuestions.length,
-          })
+          question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
+          index: currentIndex,
+          total: roomQuestions.length,
+        })
         : null,
     });
   });
@@ -733,10 +733,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
       answeredValue: hasAnswered ? room.answersIn[socket.id] : pending.lastAnswer,
       activeQuestion: canSyncQuestion
         ? withQuestionTiming({
-            question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
-            index: currentIndex,
-            total: roomQuestions.length,
-          })
+          question: room.activeSlide ? sanitizeQuestion(room.activeSlide) : sanitizeQuestion(roomQuestions[currentIndex]),
+          index: currentIndex,
+          total: roomQuestions.length,
+        })
         : null,
     });
   });
@@ -1035,7 +1035,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     // Check if this is a player
     const disconnectedPlayer = room?.players.find((p) => p.id === socket.id);
     const wasPlayerRemoved = removePlayer(socket.id);
-    
+
     if (wasPlayerRemoved && room) {
       if (room) {
         let lastAnswer;

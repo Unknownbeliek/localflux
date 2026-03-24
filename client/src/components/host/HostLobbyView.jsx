@@ -186,11 +186,10 @@ export default function HostLobbyView({
 
             {/* Choose Deck Panel */}
             <div
-              className={`relative panel-elevated p-6 transition-all ${
-                isDragging
+              className={`relative panel-elevated p-6 transition-all ${isDragging
                   ? 'ring-2 ring-violet-500/40 shadow-[0_0_30px_rgba(139,92,246,0.2)]'
                   : ''
-              }`}
+                }`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleFileDrop}
@@ -358,11 +357,10 @@ export default function HostLobbyView({
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
                 {players.map((p, i) => (
                   <div key={p.id} className="group relative animate-player-enter" style={{ animationDelay: `${i * 60}ms` }}>
-                    <div className={`rounded-2xl border bg-[#0D1117]/80 p-3.5 text-center transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-lg ${
-                      recentlyUpdatedPlayerIds.has(p.id)
+                    <div className={`rounded-2xl border bg-[#0D1117]/80 p-3.5 text-center transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-lg ${recentlyUpdatedPlayerIds.has(p.id)
                         ? 'border-violet-400 ring-2 ring-violet-500/30 shadow-[0_0_28px_rgba(139,92,246,0.2)] animate-pulse'
                         : 'border-slate-700/50 hover:border-violet-500/40 hover:shadow-violet-500/10'
-                    }`}>
+                      }`}>
                       {renderLobbyAvatar(p)}
                       <p className={`truncate text-sm font-bold font-outfit ${recentlyUpdatedPlayerIds.has(p.id) ? 'text-violet-200' : 'text-slate-200'}`}>{p.name}</p>
                       <p className="mt-1 text-xs text-slate-500">#{i + 1}</p>
@@ -394,13 +392,12 @@ export default function HostLobbyView({
                 <button
                   onClick={handleStart}
                   disabled={!startReady || isStartingGame}
-                  className={`rounded-2xl px-10 py-5 text-lg font-black transition-all duration-200 font-outfit ${
-                    !startReady
+                  className={`rounded-2xl px-10 py-5 text-lg font-black transition-all duration-200 font-outfit ${!startReady
                       ? 'cursor-not-allowed bg-slate-700/60 text-slate-500'
                       : isStartConfirmArmed
                         ? 'bg-amber-300 text-black shadow-[0_0_30px_rgba(252,211,77,0.35)] hover:-translate-y-0.5 hover:bg-amber-200 active:translate-y-0 active:scale-95'
                         : 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-violet-500 text-white shadow-[0_0_30px_rgba(139,92,246,0.35)] hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(139,92,246,0.5)] active:translate-y-0 active:scale-95 animate-shimmer'
-                  }`}
+                    }`}
                 >
                   <span className="inline-flex items-center gap-2.5">
                     {isStartingGame && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
@@ -416,11 +413,10 @@ export default function HostLobbyView({
                     <button
                       key={mode}
                       onClick={() => syncAnswerMode(mode)}
-                      className={`rounded-xl px-4 py-2.5 text-[11px] font-black tracking-wide transition-all duration-150 ${
-                        answerMode === mode
+                      className={`rounded-xl px-4 py-2.5 text-[11px] font-black tracking-wide transition-all duration-150 ${answerMode === mode
                           ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
                           : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
-                      }`}
+                        }`}
                     >
                       {answerModeLabels[mode] || mode}
                     </button>
@@ -446,11 +442,10 @@ export default function HostLobbyView({
                 <button
                   key={mode}
                   onClick={() => syncChatMode(mode)}
-                  className={`rounded-xl px-4 py-2.5 text-[11px] font-black tracking-wide transition-all duration-150 ${
-                    chatMode === mode
+                  className={`rounded-xl px-4 py-2.5 text-[11px] font-black tracking-wide transition-all duration-150 ${chatMode === mode
                       ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
                       : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
-                  }`}
+                    }`}
                 >
                   {modeLabels[mode]}
                 </button>
@@ -460,25 +455,25 @@ export default function HostLobbyView({
               <details className="mt-4 rounded-2xl border border-slate-800/60 bg-[#0D1117]/60 p-3.5" open>
                 <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-slate-400 font-outfit">More Options</summary>
                 <div className="mt-3">
-                <p className="mb-2 text-xs text-slate-500">Restricted presets</p>
-                <div className="mb-2 flex gap-2">
-                  <input
-                    value={newAllowedText}
-                    onChange={(e) => setNewAllowedText(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && addAllowedMessage()}
-                    placeholder="Add preset"
-                    className="flex-1 rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
-                  />
-                  <button onClick={addAllowedMessage} className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-emerald-300">Add</button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {allowedList.map((entry) => (
-                    <div key={entry.id} className="flex items-center gap-2 rounded-full border border-slate-700/50 bg-[#0D1117] px-3.5 py-2 text-xs text-slate-200">
-                      <span>{entry.text}</span>
-                      <button onClick={() => removeAllowedMessage(entry.id)} className="text-slate-500 transition hover:text-red-400">Remove</button>
-                    </div>
-                  ))}
-                </div>
+                  <p className="mb-2 text-xs text-slate-500">Restricted presets</p>
+                  <div className="mb-2 flex gap-2">
+                    <input
+                      value={newAllowedText}
+                      onChange={(e) => setNewAllowedText(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && addAllowedMessage()}
+                      placeholder="Add preset"
+                      className="flex-1 rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
+                    />
+                    <button onClick={addAllowedMessage} className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-emerald-300">Add</button>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {allowedList.map((entry) => (
+                      <div key={entry.id} className="flex items-center gap-2 rounded-full border border-slate-700/50 bg-[#0D1117] px-3.5 py-2 text-xs text-slate-200">
+                        <span>{entry.text}</span>
+                        <button onClick={() => removeAllowedMessage(entry.id)} className="text-slate-500 transition hover:text-red-400">Remove</button>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </details>
             )}
