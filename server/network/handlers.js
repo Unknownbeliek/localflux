@@ -720,6 +720,12 @@ function registerHandlers(socket, io, questions, tokenManager) {
       return callback?.({ success: false, error: 'No resumable player session.' });
     }
 
+    const existingTimer = playerDisconnectTimers.get(effectiveSessionId);
+    if (existingTimer) {
+      clearTimeout(existingTimer);
+      playerDisconnectTimers.delete(effectiveSessionId);
+    }
+
     const room = getRoom();
     if (!room) {
       pendingPlayerReconnect.delete(effectiveSessionId);
@@ -734,12 +740,6 @@ function registerHandlers(socket, io, questions, tokenManager) {
     if (room.status === 'finished') {
       pendingPlayerReconnect.delete(effectiveSessionId);
       return callback?.({ success: false, error: 'Game already finished.' });
-    }
-
-    const existingTimer = playerDisconnectTimers.get(effectiveSessionId);
-    if (existingTimer) {
-      clearTimeout(existingTimer);
-      playerDisconnectTimers.delete(effectiveSessionId);
     }
 
     addPlayer({

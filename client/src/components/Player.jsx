@@ -51,12 +51,12 @@ function resolveImageUrl(image) {
 function getOrCreatePlayerSessionId() {
   if (typeof window === 'undefined') return '';
   try {
-    const fromStateRaw = window.localStorage.getItem(PLAYER_STATE_KEY);
+    const fromStateRaw = window.sessionStorage.getItem(PLAYER_STATE_KEY);
     if (fromStateRaw) {
       const parsed = JSON.parse(fromStateRaw);
       const stateSession = String(parsed?.playerSessionId || '').trim();
       if (stateSession) {
-        window.localStorage.setItem(PLAYER_SESSION_KEY, stateSession);
+        window.sessionStorage.setItem(PLAYER_SESSION_KEY, stateSession);
         return stateSession;
       }
     }
@@ -64,13 +64,13 @@ function getOrCreatePlayerSessionId() {
     // ignore state parsing errors and continue with fallback key path
   }
 
-  const existing = window.localStorage.getItem(PLAYER_SESSION_KEY);
+  const existing = window.sessionStorage.getItem(PLAYER_SESSION_KEY);
   if (existing) return existing;
   const next =
     typeof crypto !== 'undefined' && crypto.randomUUID
       ? crypto.randomUUID()
       : `ps_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  window.localStorage.setItem(PLAYER_SESSION_KEY, next);
+  window.sessionStorage.setItem(PLAYER_SESSION_KEY, next);
   return next;
 }
 
@@ -86,12 +86,12 @@ function readPlayerState() {
 
 function persistPlayerState(next) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(PLAYER_STATE_KEY, JSON.stringify(next));
+  window.sessionStorage.setItem(PLAYER_STATE_KEY, JSON.stringify(next));
 }
 
 function clearPlayerState() {
   if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(PLAYER_STATE_KEY);
+  window.sessionStorage.removeItem(PLAYER_STATE_KEY);
 }
 
 function displayRoomName(name) {
@@ -246,6 +246,7 @@ export default function Player({ onBack }) {
 
         setError('');
         setJoinRetryIn(0);
+        shouldTryResumeRef.current = true;
         if (typeof res.playerName === 'string' && res.playerName.trim()) {
           setName(res.playerName.trim());
         }
