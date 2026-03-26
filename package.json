@@ -1,7 +1,8 @@
 {
   "devDependencies": {
     "concurrently": "^9.2.1",
-    "vitepress": "^0.1.1"
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.31"
   },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
