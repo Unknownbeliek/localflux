@@ -7,6 +7,7 @@ import Footer from "./components/Footer";
 import { DynamicBackground } from "./components/DynamicBackground";
 import { DeveloperExperience } from "./components/DeveloperExperience";
 import { SocialProof } from "./components/SocialProof";
+import Contributors from "./components/Contributors";
 
 /* ─────────────────────────────────────────
    GLOBAL KEYFRAME STYLES (injected once)
@@ -899,6 +900,7 @@ export default function LocalFluxSections() {
 
         <HowItWorks />
         <SocialProof />
+        <Contributors />
         <Footer />
       </div>
     </div>
