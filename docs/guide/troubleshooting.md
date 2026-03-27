@@ -17,7 +17,7 @@ The client cannot reach the backend WebSocket server.
    # should print: LocalFlux server -> http://localhost:3000
    ```
 2. Check `client/.env`:
-   ```env
+   ```bash
    VITE_BACKEND_URL=http://localhost:3000
    ```
 3. Restart the Vite dev server **after** changing the `.env` file — Vite bakes env
@@ -54,7 +54,7 @@ The output will be something like `192.168.1.42`. Use that IP in the next step.
 
 **Step 2 — Update `client/.env`:**
 
-```env
+```bash
 VITE_BACKEND_URL=http://192.168.1.42:3000
 ```
 
@@ -71,7 +71,7 @@ server container directly.
    at least to your account).
 2. Copy the forwarded HTTPS URL (e.g. `https://xxx-3000.app.github.dev`).
 3. Paste it into `client/.env`:
-   ```env
+   ```bash
    VITE_BACKEND_URL=https://xxx-3000.app.github.dev
    ```
 4. Restart the client dev server.

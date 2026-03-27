@@ -63,7 +63,7 @@ Note the IP address shown (e.g. `192.168.1.42`). You will use it in every URL in
 
 Set `VITE_BACKEND_URL` in `client/.env` to the LAN IP:
 
-```env
+```bash
 VITE_BACKEND_URL=http://192.168.1.42:3000
 ```
 

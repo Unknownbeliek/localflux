@@ -124,14 +124,14 @@ frontend URL and the socket connects automatically.
 
 ### `server/.env` (example)
 
-```env
+```bash
 PORT=3000
 DECK_PATH=data/decks/movie.json
 ```
 
 ### `client/.env` (example)
 
-```env
+```bash
 VITE_BACKEND_URL=http://localhost:3000
 ```
 
@@ -278,7 +278,7 @@ When implemented, these will be configurable via `VIP_SOFT_CAP` and `VIP_HARD_CA
 
 ### Development (Local Machine)
 
-```env
+```bash
 # server/.env
 PORT=3000
 DECK_PATH=data/decks/movie.json
@@ -316,7 +316,7 @@ ipconfig | findstr /i "IPv4"
 
 :::
 
-```env
+```bash
 # server/.env
 PORT=3000
 DECK_PATH=data/decks/event-quiz.json
