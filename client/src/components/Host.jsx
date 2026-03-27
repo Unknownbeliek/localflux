@@ -920,6 +920,28 @@ export default function Host({ onBack, studioQuestions = null }) {
     });
   };
 
+  const sendHostAnnouncement = (text, done) => {
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      done?.({ ok: false, reason: 'not_connected' });
+      return;
+    }
+
+    socket.emit(
+      'chat:host_announce',
+      { text, hostToken, hostSessionId: hostSessionIdRef.current },
+      (ack) => {
+        if (!ack?.ok) {
+          setError(ack?.reason || 'Failed to send announcement.');
+          done?.({ ok: false, reason: ack?.reason || 'send_failed' });
+          return;
+        }
+        setError('');
+        done?.({ ok: true });
+      }
+    );
+  };
+
   const syncChatMode = (mode, nextAllowed = allowedList) => {
     setChatMode(mode);
     if (!roomId || !socketRef.current?.connected) return;
@@ -1142,7 +1164,22 @@ export default function Host({ onBack, studioQuestions = null }) {
   }
 
   if (phase === 'result' && resultData) {
-    return <HostResultView resultData={resultData} qIndex={qIndex} qTotal={qTotal} connected={connected} autoAdvanceIn={autoAdvanceIn} />;
+    return (
+      <HostResultView
+        resultData={resultData}
+        qIndex={qIndex}
+        qTotal={qTotal}
+        connected={connected}
+        autoAdvanceIn={autoAdvanceIn}
+        socket={hostSocket}
+        roomId={LAN_ROOM}
+        chatMode={chatMode}
+        allowedList={allowedList}
+        handleMute={handleMute}
+        mutedSet={mutedSet}
+        onHostAnnouncement={sendHostAnnouncement}
+      />
+    );
   }
 
   if (phase === 'question' && question) {
@@ -1171,6 +1208,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         mutedSet={mutedSet}
         answerMode={answerMode}
         answerModeLabels={answerModeLabels}
+        onHostAnnouncement={sendHostAnnouncement}
       />
     );
   }
@@ -1242,6 +1280,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         removeAllowedMessage={removeAllowedMessage}
         socket={hostSocket}
         roomId={LAN_ROOM}
+        onHostAnnouncement={sendHostAnnouncement}
       />
     );
   }

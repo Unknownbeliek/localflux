@@ -1009,6 +1009,36 @@ function registerHandlers(socket, io, questions, tokenManager) {
     callback?.({ ok: true });
   });
 
+  socket.on('chat:host_announce', ({ text, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
+      console.warn(`[Warn] Unauthorized chat:host_announce attempt from ${socket.id}`);
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (!hasValidHostSession(room, hostSessionId)) {
+      rejectHost(socket, null);
+      return callback?.({ ok: false, reason: 'host_locked' });
+    }
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+
+    const cleanText = String(text || '').trim().slice(0, 280);
+    if (!cleanText) return callback?.({ ok: false, reason: 'empty_message' });
+
+    const message = {
+      id: `host_announce_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      from: 'host',
+      name: 'Host',
+      text: cleanText,
+      event: 'host_announcement',
+      isAnnouncement: true,
+      ts: Date.now(),
+    };
+
+    emitRoomChatMessage(LAN_ROOM_ID, message);
+    callback?.({ ok: true });
+  });
+
   socket.on('host:kick_player', ({ target, hostToken, hostSessionId }, callback) => {
     const room = getRoom();
     if (!isHostAuthorized(room, hostToken, hostSessionId)) {

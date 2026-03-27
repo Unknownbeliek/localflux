@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Chat from '../Chat';
 import PingIndicator from '../PingIndicator';
 import { QRCodeSVG } from 'qrcode.react';
@@ -81,8 +82,11 @@ export default function HostLobbyView({
   removeAllowedMessage,
   socket,
   roomId,
+  onHostAnnouncement,
 }) {
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
+  const [announcementText, setAnnouncementText] = useState('');
+  const [announcementFeedback, setAnnouncementFeedback] = useState('');
 
   const renderLobbyAvatar = (player) => {
     const avatarObject = normalizeAvatarObject(player?.avatarObject);
@@ -113,6 +117,20 @@ export default function HostLobbyView({
     } catch (e) {
       console.error('copy failed', e);
     }
+  };
+
+  const handleSendAnnouncement = () => {
+    const text = announcementText.trim();
+    if (!text || !onHostAnnouncement) return;
+    onHostAnnouncement(text, (ack) => {
+      if (!ack?.ok) {
+        setAnnouncementFeedback('Could not send announcement.');
+        return;
+      }
+      setAnnouncementText('');
+      setAnnouncementFeedback('Announcement sent.');
+      window.setTimeout(() => setAnnouncementFeedback(''), 1800);
+    });
   };
 
   return (
@@ -481,6 +499,29 @@ export default function HostLobbyView({
                 </div>
               </details>
             )}
+          </section>
+
+          <section className="panel-elevated p-4">
+            <p className="section-header">Host Announcement</p>
+            <p className="mt-1 text-xs text-slate-400">Send a broadcast message to all players.</p>
+            <div className="mt-3 flex gap-2">
+              <input
+                value={announcementText}
+                onChange={(event) => setAnnouncementText(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && handleSendAnnouncement()}
+                placeholder="Type an announcement..."
+                className="flex-1 rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
+                maxLength={280}
+              />
+              <button
+                onClick={handleSendAnnouncement}
+                disabled={!announcementText.trim()}
+                className="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                Send
+              </button>
+            </div>
+            {announcementFeedback && <p className="mt-2 text-xs text-emerald-300">{announcementFeedback}</p>}
           </section>
 
           <section className="min-h-72 panel-elevated p-3 overflow-hidden">

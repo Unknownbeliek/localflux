@@ -105,9 +105,12 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
       const prevSender = prev ? `${prev.from || ''}|${prev.name || ''}` : '';
       const currentSender = `${message.from || ''}|${message.name || ''}`;
       const showSender = index === 0 || prevSender !== currentSender;
+      const fromValue = String(message?.from || '').toLowerCase();
+      const nameValue = String(message?.name || '').toLowerCase();
       return {
         ...message,
-        _isSystem: String(message?.from || '').toLowerCase() === 'system' || String(message?.name || '').toLowerCase() === 'system',
+        _isSystem: fromValue === 'system' || nameValue === 'system',
+        _isHost: fromValue === 'host' || nameValue === 'host',
         _showSender: showSender,
       };
     });
@@ -194,9 +197,15 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                   {message._showSender ? (
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="inline-block max-w-full rounded-2xl border border-slate-600/40 bg-transparent px-2.5 py-1.5 text-xs leading-4 text-slate-100 break-words">
+                        <p className={`inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 break-words ${
+                          message._isHost
+                            ? 'border-violet-400/45 bg-violet-500/12 text-violet-100'
+                            : 'border-slate-600/40 bg-transparent text-slate-100'
+                        }`}>
                           {!message._isSystem && (
-                            <span className="mr-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-emerald-300/90">{message.name}</span>
+                            <span className={`mr-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${message._isHost ? 'text-violet-300' : 'text-emerald-300/90'}`}>
+                              {message.name}
+                            </span>
                           )}
                           <span className={message.isCorrectGuess ? 'text-green-400 font-semibold' : ''}>{message.text}</span>
                         </p>
@@ -216,8 +225,12 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                       </div>
                     </div>
                   ) : (
-                    <p className={`ml-0.5 inline-block max-w-full rounded-2xl border border-slate-600/40 bg-transparent px-2.5 py-1.5 text-xs leading-4 break-words ${
-                      message.isCorrectGuess ? 'text-green-400 font-semibold' : 'text-slate-100'
+                    <p className={`ml-0.5 inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 break-words ${
+                      message._isHost
+                        ? 'border-violet-400/45 bg-violet-500/12 text-violet-100'
+                        : message.isCorrectGuess
+                          ? 'border-slate-600/40 bg-transparent text-green-400 font-semibold'
+                          : 'border-slate-600/40 bg-transparent text-slate-100'
                     }`}>{message.text}</p>
                   )}
                 </div>

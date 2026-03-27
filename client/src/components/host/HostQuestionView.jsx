@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import Chat from '../Chat';
 import AnimatedBackground from '../AnimatedBackground';
 
@@ -34,9 +35,26 @@ export default function HostQuestionView({
   mutedSet,
   answerMode,
   answerModeLabels,
+  onHostAnnouncement,
 }) {
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const timerProgress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
+  const [announcementText, setAnnouncementText] = useState('');
+  const [announcementFeedback, setAnnouncementFeedback] = useState('');
+
+  const handleSendAnnouncement = () => {
+    const text = announcementText.trim();
+    if (!text || !onHostAnnouncement) return;
+    onHostAnnouncement(text, (ack) => {
+      if (!ack?.ok) {
+        setAnnouncementFeedback('Could not send announcement.');
+        return;
+      }
+      setAnnouncementText('');
+      setAnnouncementFeedback('Announcement sent.');
+      window.setTimeout(() => setAnnouncementFeedback(''), 1800);
+    });
+  };
 
   return (
     <div className="relative min-h-[100dvh] bg-slate-950 text-white p-4 md:p-8 overflow-x-hidden flex flex-col animate-phase-in z-0">
@@ -157,6 +175,27 @@ export default function HostQuestionView({
           </section>
 
           <section className="min-h-[400px] flex-1 flex flex-col rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl p-3 shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="mb-3 rounded-2xl border border-slate-700/40 bg-black/30 p-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Host Announcement</p>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={announcementText}
+                  onChange={(event) => setAnnouncementText(event.target.value)}
+                  onKeyDown={(event) => event.key === 'Enter' && handleSendAnnouncement()}
+                  placeholder="Broadcast to all players..."
+                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                  maxLength={280}
+                />
+                <button
+                  onClick={handleSendAnnouncement}
+                  disabled={!announcementText.trim()}
+                  className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                  Send
+                </button>
+              </div>
+              {announcementFeedback && <p className="mt-2 text-xs text-emerald-300">{announcementFeedback}</p>}
+            </div>
             <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
               <Chat
                 socket={socket}
