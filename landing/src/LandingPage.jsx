@@ -5,6 +5,7 @@ import Features from "./components/Features";
 import HowItWorks from "./components/HowItWorks";
 import Footer from "./components/Footer";
 import { DynamicBackground } from "./components/DynamicBackground";
+import { LightBackground } from "./components/LightBackground";
 import Contributors from "./components/Contributors";
 
 /* ─────────────────────────────────────────
@@ -699,9 +700,29 @@ const ArrowConnector = () => (
    ROOT EXPORT
 ───────────────────────────────────────── */
 export default function LocalFluxSections() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    setIsMobile(isMobile);
+
+    const handleChange = (event) => setIsMobile(event.matches);
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
   return (
     <div className="min-h-screen relative font-geist">
-      <DynamicBackground />
+      {isMobile ? <LightBackground /> : <DynamicBackground />}
 
       <div style={{ position: "relative", zIndex: 1 }}>
         <GlobalStyles />
