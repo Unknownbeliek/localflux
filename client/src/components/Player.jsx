@@ -3,6 +3,7 @@ import Chat from './Chat';
 import AnimatedBackground from './AnimatedBackground';
 import { createGameSocket } from '../backendUrl';
 import PingIndicator from './PingIndicator';
+import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
@@ -686,54 +687,20 @@ export default function Player({ onBack }) {
   if (phase === 'gameover') {
     const myEntry = finalScores.find(p => p.id === selfPlayerId);
     const myRank = finalScores.findIndex(p => p.id === selfPlayerId) + 1;
-    const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
+
     return (
       <div className="relative h-screen w-screen overflow-hidden bg-slate-950 text-white animate-phase-in">
         <AnimatedBackground />
-        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4">
-          <div className="w-full max-w-3xl rounded-3xl border border-white/15 bg-slate-900/55 p-6 shadow-2xl shadow-black/50 backdrop-blur-xl md:p-8">
+        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4 md:p-8">
+          <div className="relative w-full max-w-3xl">
             {renderLeaveAndPing()}
-            <p className="text-center text-[11px] uppercase tracking-[0.28em] text-slate-400">Game Over</p>
-            <h2 className="mt-3 text-center text-4xl font-black tracking-tight md:text-5xl">Final Standings</h2>
-            {myEntry && (
-              <p className="mt-2 text-center text-sm font-mono tabular-nums text-slate-300">
-                You placed #{myRank} with {myEntry.score} pts
-              </p>
-            )}
-
-            <div className="mt-6 w-full max-w-2xl mx-auto flex flex-col gap-3">
-              {rankedFinalScores.map((p, i) => {
-                const isTopOne = i === 0;
-                const isTopTwo = i === 1;
-                const isTopThree = i === 2;
-                const isMe = p.id === selfPlayerId;
-                const podiumClass =
-                  isTopOne
-                    ? 'bg-yellow-500/10 border-yellow-500 text-yellow-100 text-xl py-6 shadow-[0_0_35px_rgba(234,179,8,0.35)]'
-                    : isTopTwo
-                      ? 'bg-slate-300/10 border-slate-300/70 text-slate-100 py-5'
-                      : isTopThree
-                        ? 'bg-orange-500/10 border-orange-500/70 text-orange-100 py-5'
-                        : isMe
-                          ? 'bg-emerald-500/15 border-emerald-400/70 text-emerald-100 py-4'
-                          : 'bg-slate-900/70 border-white/10 text-white/90 py-4';
-                const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
-
-                return (
-                  <div
-                    key={p.id || `${p.name}_${i}`}
-                    className={`flex items-center justify-between rounded-2xl border px-5 ${podiumClass}`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="w-7 font-mono text-lg tabular-nums opacity-85">{i + 1}</span>
-                      {medal && <span className="text-2xl leading-none">{medal}</span>}
-                    </div>
-                    <span className="flex-1 truncate font-black tracking-tight">{p.name}</span>
-                    <span className="font-black tabular-nums text-2xl">{p.score}</span>
-                  </div>
-                );
-              })}
-            </div>
+            <LeaderboardResultsCard
+              finalScores={finalScores}
+              highlightPlayerId={selfPlayerId}
+              pretitle="Game Over"
+              title="Leaderboard"
+              subtitle={myEntry ? `You placed #${myRank} with ${myEntry.score} pts` : ''}
+            />
 
             {error && (
               <p className="mt-4 rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-3 text-sm font-medium text-rose-200 backdrop-blur-md">
@@ -741,16 +708,16 @@ export default function Player({ onBack }) {
               </p>
             )}
 
-            <div className="flex items-center justify-center gap-4 mt-12">
+            <div className="flex items-center justify-center gap-3 md:gap-4 mt-10 md:mt-12">
               <button
                 onClick={handleBackToLobby}
-                className="rounded-2xl bg-emerald-400 px-8 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
+                className="rounded-xl bg-emerald-400 px-6 md:px-8 py-3 md:py-4 text-base md:text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
               >
                 BACK TO LOBBY
               </button>
               <button
                 onClick={handleExitToPlay}
-                className="rounded-2xl border border-slate-700 bg-slate-900 px-8 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95"
+                className="rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-3 md:py-4 text-base md:text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95"
               >
                 EXIT
               </button>
