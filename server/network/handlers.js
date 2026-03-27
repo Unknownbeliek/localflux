@@ -29,6 +29,7 @@ const { sanitizeQuestion } = require('../core/deckLoader');
 const { registerTypeGuessHandlers } = require('./typeGuessHandlers');
 
 let chatInstance = null;
+const MAX_CHAT_HISTORY = 300;
 const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: '1.jpg' };
 const PRESET_AVATAR_POOL = [
   '1.jpg',
@@ -296,6 +297,22 @@ function clearRoundTimers(roomId) {
   clearTimerByRoom(roundTransitionTimers, roomId);
 }
 
+function getChatHistorySnapshot(room) {
+  if (!room || !Array.isArray(room.chatHistory)) return [];
+  return room.chatHistory.slice(-MAX_CHAT_HISTORY);
+}
+
+function appendChatMessageToRoom(room, message) {
+  if (!room || !message || typeof message !== 'object') return;
+  if (!Array.isArray(room.chatHistory)) {
+    room.chatHistory = [];
+  }
+  room.chatHistory.push(message);
+  if (room.chatHistory.length > MAX_CHAT_HISTORY) {
+    room.chatHistory = room.chatHistory.slice(-MAX_CHAT_HISTORY);
+  }
+}
+
 /**
  * Register all game event handlers on a connected socket.
  *
@@ -304,9 +321,23 @@ function clearRoundTimers(roomId) {
  * @param {object[]} questions - Pre-loaded QUESTIONS array from the deck
  */
 function registerHandlers(socket, io, questions, tokenManager) {
+  const emitRoomChatMessage = (roomId, message) => {
+    if (!roomId || !message) return;
+    const room = getRoom();
+    if (room) appendChatMessageToRoom(room, message);
+    io.to(roomId).emit('chat:message', message);
+  };
+
   // create ChatManager singleton when first socket connects
   if (!chatInstance) {
-    chatInstance = new ChatManager(io);
+    chatInstance = new ChatManager(io, {
+      onMessage: (roomPin, message) => {
+        if (roomPin !== LAN_ROOM_ID) return;
+        const room = getRoom();
+        if (!room) return;
+        appendChatMessageToRoom(room, message);
+      },
+    });
   }
 
   const emitNextQuestionForRound = (room, nextQuestionPayload) => {
@@ -417,6 +448,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     LAN_ROOM_ID,
     settleCurrentRound,
     getChatMode: () => chatInstance?.mode || 'FREE',
+    emitChatMessage: emitRoomChatMessage,
   });
 
   const isHostAuthorized = (room, hostToken, hostSessionId) => {
@@ -515,6 +547,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
         status: currentRoom.status,
         deckSelected: Array.isArray(currentRoom.questions) && currentRoom.questions.length > 0,
         answerMode: currentRoom.answerMode || 'auto',
+        chatHistory: getChatHistorySnapshot(currentRoom),
       });
     }
 
@@ -619,6 +652,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       players: room.players,
       currentQ: room.currentQ,
       totalQ: roomQuestions.length,
+      chatHistory: getChatHistorySnapshot(room),
       activeQuestion: canSyncQuestion
         ? withQuestionTiming(withAnswerMode({
             question: roomQuestions[currentIndex],
@@ -665,6 +699,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       answerMode: room.answerMode || 'multiple_choice',
       playerName: assigned.name,
       avatarObject: assigned.avatarObject,
+      chatHistory: getChatHistorySnapshot(room),
     });
   });
 
@@ -710,6 +745,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       answerMode: room.answerMode || 'multiple_choice',
       playerName: assigned.name,
       avatarObject: assigned.avatarObject,
+      chatHistory: getChatHistorySnapshot(room),
     });
   });
 
@@ -783,6 +819,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       myScore: me?.score || 0,
       chatMode: chatInstance.mode,
       chatAllowed: chatInstance.allowed,
+      chatHistory: getChatHistorySnapshot(room),
       hasAnswered,
       answeredValue: hasAnswered ? room.answersIn[socket.id] : pending.lastAnswer,
       activeQuestion: canSyncQuestion

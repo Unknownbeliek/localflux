@@ -82,6 +82,8 @@ export default function HostLobbyView({
   socket,
   roomId,
 }) {
+  const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
+
   const renderLobbyAvatar = (player) => {
     const avatarObject = normalizeAvatarObject(player?.avatarObject);
     return (
@@ -433,7 +435,9 @@ export default function HostLobbyView({
             <div className="mb-3.5 flex items-center justify-between gap-3">
               <div>
                 <p className="section-header">Chat Control</p>
-                <p className="mt-1 text-xs text-slate-400">Switch player chat instantly.</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  {roomGameMode === 'guided' ? 'Guided Mode' : 'Open Mode'}
+                </p>
               </div>
               <span className="text-[11px] font-bold tracking-wide text-emerald-300 font-outfit">LIVE</span>
             </div>
@@ -479,16 +483,20 @@ export default function HostLobbyView({
             )}
           </section>
 
-          <section className="min-h-72 panel-elevated p-5">
-            <Chat
-              socket={socket}
-              roomPin={roomId}
-              readOnly
-              title="Chat Monitor"
-              allowHostActions
-              onHostMute={handleMute}
-              mutedSet={mutedSet}
-            />
+          <section className="min-h-72 panel-elevated p-3 overflow-hidden">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
+              <Chat
+                socket={socket}
+                roomPin={roomId}
+                readOnly
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={allowedList}
+                allowHostActions
+                onHostMute={handleMute}
+                mutedSet={mutedSet}
+              />
+            </div>
           </section>
         </aside>
       </div>

@@ -1160,7 +1160,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         addAllowedMessage={addAllowedMessage}
         allowedList={allowedList}
         removeAllowedMessage={removeAllowedMessage}
-        socket={socketRef.current}
+        socket={hostSocket}
         roomId={LAN_ROOM}
         handleMute={handleMute}
         mutedSet={mutedSet}
@@ -1235,7 +1235,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         addAllowedMessage={addAllowedMessage}
         allowedList={allowedList}
         removeAllowedMessage={removeAllowedMessage}
-        socket={socketRef.current}
+        socket={hostSocket}
         roomId={LAN_ROOM}
       />
     );

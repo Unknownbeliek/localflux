@@ -25,6 +25,29 @@ const PRESET_AVATARS = [
   '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
   'e55afb4aea57bced165fb55ad92addf5.jpg',
 ];
+const MAX_CHAT_HISTORY = 300;
+
+function messageKey(message = {}) {
+  return `${message.id || ''}|${message.ts || ''}|${message.from || ''}|${message.name || ''}|${message.text || ''}|${message.event || ''}|${message.cannedId || ''}|${message.isCorrectGuess ? '1' : '0'}`;
+}
+
+function mergeChatHistory(existing, incoming) {
+  const base = Array.isArray(existing) ? existing : [];
+  const extra = Array.isArray(incoming) ? incoming : [];
+  if (extra.length === 0) return base.slice(-MAX_CHAT_HISTORY);
+
+  const merged = [...base];
+  const seen = new Set(base.map((item) => messageKey(item)));
+
+  extra.forEach((item) => {
+    const key = messageKey(item);
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(item);
+  });
+
+  return merged.slice(-MAX_CHAT_HISTORY);
+}
 
 function normalizeAvatarObject(input) {
   if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
@@ -130,6 +153,7 @@ export default function Player({ onBack }) {
   const [myScore, setMyScore] = useState(0);
   const [resultData, setResultData] = useState(null);
   const [finalScores, setFinalScores] = useState([]);
+  const [chatHistory, setChatHistory] = useState([]);
   const [chatMode, setChatMode] = useState('FREE');
   const [chatAllowed, setChatAllowed] = useState([]);
   const [isLobbyDeckReady, setIsLobbyDeckReady] = useState(false);
@@ -186,6 +210,7 @@ export default function Player({ onBack }) {
     setRoomName(res.roomName || 'LocalFlux Game');
     if (res.chatMode) setChatMode(res.chatMode);
     if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+    if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
     setIsLobbyDeckReady(Boolean(res.deckSelected));
     setMyScore(Number(res.myScore) || 0);
 
@@ -256,6 +281,7 @@ export default function Player({ onBack }) {
         setRoomName(res.roomName || 'LocalFlux Game');
         if (res.chatMode) setChatMode(res.chatMode);
         if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+        if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
         setIsLobbyDeckReady(Boolean(res.deckSelected));
         setMyScore(Number(res.myScore) || 0);
         setPhase('waiting');
@@ -335,6 +361,14 @@ export default function Player({ onBack }) {
       if (mode) setChatMode(mode);
       if (Array.isArray(allowed)) setChatAllowed(allowed);
     });
+    socket.on('chat:history', ({ messages }) => {
+      if (!Array.isArray(messages)) return;
+      setChatHistory((current) => mergeChatHistory(current, messages));
+    });
+    socket.on('chat:message', (message) => {
+      if (!message || typeof message !== 'object') return;
+      setChatHistory((current) => mergeChatHistory(current, [message]));
+    });
     socket.on('room:deck_updated', ({ selected }) => {
       if (typeof selected === 'boolean') {
         setIsLobbyDeckReady(selected);
@@ -346,6 +380,7 @@ export default function Player({ onBack }) {
       setError(message || 'Room closed by host.');
       setPhase('joining');
       setRoomName('');
+      setChatHistory([]);
       pendingFinalScoresRef.current = null;
       if (endSplashTimerRef.current) {
         window.clearTimeout(endSplashTimerRef.current);
@@ -416,6 +451,8 @@ export default function Player({ onBack }) {
         endSplashTimerRef.current = null;
       }
       socket.off('chat:mode');
+      socket.off('chat:history');
+      socket.off('chat:message');
       setChatSocket(null);
       socket.disconnect();
     };
@@ -514,6 +551,7 @@ export default function Player({ onBack }) {
         setRoomName(res.roomName || 'LocalFlux Game');
         if (res.chatMode) setChatMode(res.chatMode);
         if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+        if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
         setIsLobbyDeckReady(Boolean(res.deckSelected));
         setMyScore(Number(res.myScore) || 0);
         setFinalScores([]);
@@ -848,6 +886,7 @@ export default function Player({ onBack }) {
                 title="Room Chat"
                 initialMode={chatMode}
                 initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
                 suppressFreeComposer={isTypeGuessQuestion}
                 showMeta={!isTypeGuessQuestion}
                 showModeBadge={!isTypeGuessQuestion}
@@ -1047,6 +1086,7 @@ export default function Player({ onBack }) {
                 title="Room Chat"
                 initialMode={chatMode}
                 initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
                 suppressFreeComposer={isTypeGuessQuestion}
                 showMeta={!isTypeGuessQuestion}
                 showModeBadge={!isTypeGuessQuestion}
@@ -1155,7 +1195,7 @@ export default function Player({ onBack }) {
         </section>
 
         <div className="w-full max-w-md mt-4 rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-4 shadow-xl shadow-black/40">
-          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} initialMessages={chatHistory} />
         </div>
       </div>
     );

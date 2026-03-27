@@ -78,10 +78,10 @@ describe('typeGuessHandlers', () => {
 
     expect(ack.ok).toBe(true);
     expect(ack.matched).toBe(true);
-    expect(room.players[0].score).toBe(100);
+    expect(room.players[0].score).toBe(50);
     expect(room.answersIn.p1).toBe('Interstellar');
     const systemMsg = io.calls.find((c) => c.event === 'chat:message' && c.payload?.event === 'guess_correct');
-    expect(systemMsg?.payload?.text).toContain('+100 pts');
+    expect(systemMsg?.payload?.text).toContain('+50 pts');
   });
 
   test('rejects guesses when mode is multiple choice', () => {

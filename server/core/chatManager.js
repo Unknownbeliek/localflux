@@ -53,6 +53,7 @@ class ChatManager {
 
     // logging
     this.logPath = path.resolve(process.cwd(), 'logs', 'chat.log');
+    this.onMessage = typeof opts.onMessage === 'function' ? opts.onMessage : null;
     try { fs.mkdirSync(path.dirname(this.logPath), { recursive: true }); } catch (e) {}
 
     // load profanity dictionary
@@ -152,6 +153,7 @@ class ChatManager {
     }
     const msg = { from: socket.id, name: socket.playerName || 'Player', text: clean, ts: Date.now() };
     this.writeLog({ action: 'message', socket: socket.id, ip: socket?.handshake?.address || 'unknown', text: clean, ts: Date.now() });
+    if (this.onMessage) this.onMessage(valid.data.roomPin, msg);
     this.io.to(valid.data.roomPin).emit('chat:message', msg);
     ack?.({ ok: true });
   }
@@ -167,6 +169,7 @@ class ChatManager {
     if (!allowed) return ack?.({ ok: false, reason: 'not_allowed' });
     const msg = { from: socket.id, name: socket.playerName || 'Player', text: allowed.text, cannedId: allowed.id, ts: Date.now() };
     this.writeLog({ action: 'canned_message', socket: socket.id, id: allowed.id, ts: Date.now() });
+    if (this.onMessage) this.onMessage(valid.data.roomPin, msg);
     this.io.to(valid.data.roomPin).emit('chat:message', msg);
     ack?.({ ok: true });
   }

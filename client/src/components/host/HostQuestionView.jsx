@@ -34,6 +34,7 @@ export default function HostQuestionView({
   answerMode,
   answerModeLabels,
 }) {
+  const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const progress = players.length > 0 ? Math.round((answerCount / players.length) * 100) : 0;
 
   return (
@@ -105,7 +106,7 @@ export default function HostQuestionView({
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Chat Mode</p>
-                <p className="text-xs text-slate-500 mt-1">Control room communication in real time.</p>
+                <p className="text-xs text-slate-500 mt-1">{roomGameMode === 'guided' ? 'Guided Mode' : 'Open Mode'}</p>
               </div>
               <span className="rounded-full bg-emerald-500/20 border border-emerald-400/50 px-3 py-1 text-[11px] font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.3)]">LIVE</span>
             </div>
@@ -154,16 +155,20 @@ export default function HostQuestionView({
             )}
           </section>
 
-          <section className="min-h-[400px] flex-1 flex flex-col rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl p-6 shadow-2xl shadow-black/50">
-            <Chat
-              socket={socket}
-              roomPin={roomId}
-              readOnly
-              title="Chat Monitor"
-              allowHostActions
-              onHostMute={handleMute}
-              mutedSet={mutedSet}
-            />
+          <section className="min-h-[400px] flex-1 flex flex-col rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl p-3 shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
+              <Chat
+                socket={socket}
+                roomPin={roomId}
+                readOnly
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={allowedList}
+                allowHostActions
+                onHostMute={handleMute}
+                mutedSet={mutedSet}
+              />
+            </div>
           </section>
         </aside>
       </div>
