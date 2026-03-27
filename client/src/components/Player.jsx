@@ -4,11 +4,12 @@ import AnimatedBackground from './AnimatedBackground';
 import { createGameSocket } from '../backendUrl';
 import PingIndicator from './PingIndicator';
 import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
+import { resolveQuestionTiming } from '../utils/questionTiming';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
 const PLAYER_STATE_KEY = 'lf_player_state';
-const START_SPLASH_MIN_MS = 1200;
+const START_SPLASH_MIN_MS = 0;
 const END_SPLASH_MIN_MS = 1400;
 const PRESET_AVATARS = [
   '1.jpg',
@@ -174,20 +175,7 @@ export default function Player({ onBack }) {
   const desktopGuessInputRef = useRef(null);
   const mobileGuessInputRef = useRef(null);
 
-  const resolveQuestionTiming = ({ durationMs, endsAt, question: incomingQuestion }) => {
-    const limitMs = Number(durationMs ?? incomingQuestion?.time_limit_ms);
-    const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
-    const serverEndsAt = Number(endsAt);
-    const serverRemainingMs = Number.isFinite(serverEndsAt) ? serverEndsAt - Date.now() : NaN;
-    const remainingMs = Number.isFinite(serverRemainingMs) && serverRemainingMs > 0 ? serverRemainingMs : normalizedMs;
-    const targetEndsAt = Date.now() + remainingMs;
-    return {
-      normalizedMs,
-      targetEndsAt,
-    };
-  };
-
-  const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt }) => {
+  const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt, serverNow }) => {
     setQuestion(nextQuestion);
     setSelected(null);
     setGuessText('');
@@ -198,10 +186,16 @@ export default function Player({ onBack }) {
     setResultData(null);
     setNextQuestionIn(0);
     setChatDrawerOpen(false);
-    const { normalizedMs, targetEndsAt } = resolveQuestionTiming({ durationMs, endsAt, question: nextQuestion });
+    const fallbackMs = Number(nextQuestion?.time_limit_ms) || 20000;
+    const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
+      durationMs,
+      endsAt,
+      serverNow,
+      fallbackMs,
+    });
     setTimeTotal(Math.ceil(normalizedMs / 1000));
     setQuestionEndsAt(targetEndsAt);
-    setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
+    setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
     setPhase('question');
   };
 
@@ -225,7 +219,7 @@ export default function Player({ onBack }) {
     }
 
     if (phaseFromServer === 'started' && res.activeQuestion) {
-      const { question: activeQuestion, durationMs, endsAt } = res.activeQuestion;
+      const { question: activeQuestion, durationMs, endsAt, serverNow } = res.activeQuestion;
       const hasAnswered = Boolean(res.hasAnswered);
       setQuestion(activeQuestion);
       setResultData(null);
@@ -241,10 +235,16 @@ export default function Player({ onBack }) {
         setAnsweredCorrect(null);
         setPhase(hasAnswered ? 'answered' : 'question');
       }
-      const { normalizedMs, targetEndsAt } = resolveQuestionTiming({ durationMs, endsAt, question: activeQuestion });
+      const fallbackMs = Number(activeQuestion?.time_limit_ms) || 20000;
+      const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
+        durationMs,
+        endsAt,
+        serverNow,
+        fallbackMs,
+      });
       setTimeTotal(Math.ceil(normalizedMs / 1000));
       setQuestionEndsAt(targetEndsAt);
-      setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
+      setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
       return;
     }
 

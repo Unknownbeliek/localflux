@@ -195,15 +195,22 @@ function normalizeSlides(input) {
   return normalized;
 }
 
-function withQuestionTiming(payload) {
+function withQuestionTiming(payload, timing = null) {
   const now = Date.now();
   const limitRaw = Number(payload?.question?.timeLimit);
   const durationMs = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 20000;
+  const persistedStartedAt = Number(timing?.startedAt);
+  const persistedEndsAt = Number(timing?.endsAt);
+
+  const startedAt = Number.isFinite(persistedStartedAt) ? persistedStartedAt : now;
+  const endsAt = Number.isFinite(persistedEndsAt) ? persistedEndsAt : startedAt + durationMs;
+
   return {
     ...payload,
     durationMs,
-    startedAt: now,
-    endsAt: now + durationMs,
+    startedAt,
+    endsAt,
+    serverNow: now,
   };
 }
 
@@ -344,13 +351,16 @@ function registerHandlers(socket, io, questions, tokenManager) {
     const timedPayload = withQuestionTiming(withAnswerMode(nextQuestionPayload, room.answerMode));
     room.roundSettled = false;
     room.roundId = Number(room.roundId || 0) + 1;
+    room.currentQStartedAt = timedPayload.startedAt;
+    room.currentQEndsAt = timedPayload.endsAt;
+    room.currentQDurationMs = timedPayload.durationMs;
 
     io.to(LAN_ROOM_ID).emit('next_question', timedPayload);
 
     clearTimerByRoom(questionTimeoutTimers, LAN_ROOM_ID);
     const expectedRoundId = room.roundId;
     const expectedQuestionIndex = Number(room.currentQ);
-    const timeoutMs = Number(timedPayload.durationMs) > 0 ? Number(timedPayload.durationMs) : 20000;
+    const timeoutMs = Math.max(0, Number(room.currentQEndsAt || 0) - Date.now());
 
     const timeoutHandle = setTimeout(() => {
       const liveRoom = getRoom();
@@ -410,6 +420,9 @@ function registerHandlers(socket, io, questions, tokenManager) {
         if (gameOver) {
           io.to(LAN_ROOM_ID).emit('game_over', gameOver);
           markRoomClosed('ended');
+          liveRoom.currentQStartedAt = null;
+          liveRoom.currentQEndsAt = null;
+          liveRoom.currentQDurationMs = null;
           clearRoundTimers(LAN_ROOM_ID);
           deleteRoom();
           console.log('[Game] LAN_ROOM finished. Room deleted.');
@@ -658,7 +671,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
             question: roomQuestions[currentIndex],
             index: currentIndex,
             total: roomQuestions.length,
-          }, room.answerMode))
+          }, room.answerMode), {
+            startedAt: room.currentQStartedAt,
+            endsAt: room.currentQEndsAt,
+          })
         : null,
     });
   });
@@ -827,7 +843,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
             question: sanitizeQuestion(roomQuestions[currentIndex]),
             index: currentIndex,
             total: roomQuestions.length,
-          }, room.answerMode))
+          }, room.answerMode), {
+            startedAt: room.currentQStartedAt,
+            endsAt: room.currentQEndsAt,
+          })
         : null,
     });
   });

@@ -10,6 +10,7 @@ import HostResultView from './host/HostResultView';
 import HostQuestionView from './host/HostQuestionView';
 import HostGameOverView from './host/HostGameOverView';
 import HostLobbyView from './host/HostLobbyView';
+import { resolveQuestionTiming } from '../utils/questionTiming';
 
 const HOST_SESSION_KEY = 'lf_host_session_id';
 const HOST_STATE_KEY = 'lf_host_state';
@@ -261,16 +262,15 @@ export default function Host({ onBack, studioQuestions = null }) {
           if (res.deckMeta?.source) setSelectedDeckSource(res.deckMeta.source);
 
           if (res.status === 'started' && res.activeQuestion) {
-            const { question, index, total, durationMs, endsAt } = res.activeQuestion;
+            const { question, index, total, durationMs, endsAt, serverNow } = res.activeQuestion;
             setQuestion(question);
             setQIndex(index);
             setQTotal(total);
             setResultData(null);
-            const normalizedMs = Number.isFinite(Number(durationMs)) && Number(durationMs) > 0 ? Number(durationMs) : 20000;
-            const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
+            const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({ durationMs, endsAt, serverNow });
             setTimeTotal(Math.ceil(normalizedMs / 1000));
             setQuestionEndsAt(targetEndsAt);
-            setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
+            setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
             setPhase('question');
           } else {
             setPhase('lobby');
@@ -329,19 +329,23 @@ export default function Host({ onBack, studioQuestions = null }) {
       setIsStartConfirmArmed(false);
       setPhase('question');
     });
-    socket.on('next_question', ({ question, index, total, durationMs, endsAt }) => {
+    socket.on('next_question', ({ question, index, total, durationMs, endsAt, serverNow }) => {
       setQuestion(question);
       setQIndex(index);
       setQTotal(total);
       setAnswerCount(0);
       setResultData(null);
       setAutoAdvanceIn(0);
-      const limitMs = Number(durationMs ?? question?.timeLimit);
-      const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
-      const targetEndsAt = Number(endsAt) || Date.now() + normalizedMs;
+      const fallbackMs = Number(question?.timeLimit) || 20000;
+      const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
+        durationMs,
+        endsAt,
+        serverNow,
+        fallbackMs,
+      });
       setTimeTotal(Math.ceil(normalizedMs / 1000));
       setQuestionEndsAt(targetEndsAt);
-      setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
+      setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
       setPhase('question');
     });
     socket.on('answer_count', ({ count }) => setAnswerCount(count));
@@ -1150,6 +1154,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         answerCount={answerCount}
         players={players}
         timeLeft={timeLeft}
+        timeTotal={timeTotal}
         timerTone={timerTone}
         modeOptions={modeOptions}
         chatMode={chatMode}

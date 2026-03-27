@@ -17,6 +17,7 @@ export default function HostQuestionView({
   answerCount,
   players,
   timeLeft,
+  timeTotal,
   timerTone,
   modeOptions,
   chatMode,
@@ -35,7 +36,7 @@ export default function HostQuestionView({
   answerModeLabels,
 }) {
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
-  const progress = players.length > 0 ? Math.round((answerCount / players.length) * 100) : 0;
+  const timerProgress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
 
   return (
     <div className="relative min-h-[100dvh] bg-slate-950 text-white p-4 md:p-8 overflow-x-hidden flex flex-col animate-phase-in z-0">
@@ -61,7 +62,7 @@ export default function HostQuestionView({
           </div>
 
           <div className="mb-8 h-2.5 w-full overflow-hidden rounded-full bg-slate-900/80 shadow-inner">
-            <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 shadow-[0_0_10px_rgba(52,211,153,0.5)] transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 shadow-[0_0_10px_rgba(52,211,153,0.5)] transition-all duration-500" style={{ width: `${timerProgress}%` }} />
           </div>
 
           <div className="mb-8 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-lg px-8 py-8 shadow-inner">
