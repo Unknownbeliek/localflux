@@ -39,10 +39,19 @@ export default function Navigation() {
             {/* Right Side */}
             <div className="flex items-center gap-4">
 
-              <a href="#" className="hidden sm:flex items-center gap-2 text-gray-400 hover:text-white">
-                <GitBranch className="w-5 h-5" />
-                GitHub
-              </a>
+              <motion.a
+                href="https://github.com/Unknownbeliek/localflux"
+                target="_blank"
+                rel="noopener noreferrer"
+                whileHover={{ y: -2 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="group hidden sm:flex items-center gap-2 text-gray-400"
+              >
+                <span className="flex items-center gap-2 transition-transform duration-300 ease-out">
+                  <GitBranch className="w-5 h-5 transition-transform duration-300 ease-out group-hover:translate-x-0.5" />
+                  GitHub
+                </span>
+              </motion.a>
 
               <button className="hidden sm:block px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-400 to-cyan-400 text-black font-semibold transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:translate-y-0 active:scale-[0.98]">
                 Get Started
