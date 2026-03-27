@@ -1,14 +1,33 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
-export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat', allowHostActions = false, onHostMute, mutedSet = new Set(), initialMode = 'FREE', initialAllowed = [], suppressFreeComposer = false, showMeta = true, showModeBadge = true }) {
+function toMessageKey(message = {}) {
+  return `${message.id || ''}|${message.ts || ''}|${message.from || ''}|${message.name || ''}|${message.text || ''}|${message.event || ''}|${message.cannedId || ''}|${message.isCorrectGuess ? '1' : '0'}`;
+}
+
+function mergeMessages(existing, incoming) {
+  const sourceExisting = Array.isArray(existing) ? existing : [];
+  const sourceIncoming = Array.isArray(incoming) ? incoming : [];
+  if (sourceIncoming.length === 0) return sourceExisting.slice(-300);
+
+  const keySet = new Set(sourceExisting.map((item) => toMessageKey(item)));
+  const merged = [...sourceExisting];
+  sourceIncoming.forEach((item) => {
+    const key = toMessageKey(item);
+    if (keySet.has(key)) return;
+    keySet.add(key);
+    merged.push(item);
+  });
+  return merged.slice(-300);
+}
+
+export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat', allowHostActions = false, onHostMute, mutedSet = new Set(), initialMode = 'FREE', initialAllowed = [], initialMessages = [], suppressFreeComposer = false, showMeta = true, showModeBadge = true }) {
   const [mode, setMode] = useState(initialMode || 'FREE');
   const [allowed, setAllowed] = useState(Array.isArray(initialAllowed) ? initialAllowed : []);
-  const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState(Array.isArray(initialMessages) ? initialMessages.slice(-300) : []);
   const [input, setInput] = useState('');
   const [muted, setMuted] = useState(false);
   const [feedback, setFeedback] = useState('');
   const messagesViewportRef = useRef(null);
-  const shouldStickToBottomRef = useRef(true);
   const modeLabels = {
     FREE: 'OPEN',
     RESTRICTED: 'GUIDED',
@@ -22,22 +41,30 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
       setMode(nextMode);
       if (nextAllowed) setAllowed(nextAllowed);
     };
-    const handleMessage = (message) => setMessages((current) => [...current, message].slice(-300));
+    const handleMessage = (message) => setMessages((current) => mergeMessages(current, [message]));
+    const handleHistory = ({ messages: history } = {}) => setMessages((current) => mergeMessages(current, history));
     const handleMuted = () => setMuted(true);
     const handleUnmuted = () => setMuted(false);
 
     socket.on('chat:mode', handleMode);
     socket.on('chat:message', handleMessage);
+    socket.on('chat:history', handleHistory);
     socket.on('chat:muted', handleMuted);
     socket.on('chat:unmuted', handleUnmuted);
 
     return () => {
       socket.off('chat:mode', handleMode);
       socket.off('chat:message', handleMessage);
+      socket.off('chat:history', handleHistory);
       socket.off('chat:muted', handleMuted);
       socket.off('chat:unmuted', handleUnmuted);
     };
   }, [socket]);
+
+  useEffect(() => {
+    if (!Array.isArray(initialMessages)) return;
+    setMessages((current) => mergeMessages(current, initialMessages));
+  }, [initialMessages]);
 
   useEffect(() => {
     if (initialMode) setMode(initialMode);
@@ -55,8 +82,8 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
 
   useEffect(() => {
     const viewport = messagesViewportRef.current;
-    if (!viewport || !shouldStickToBottomRef.current) return;
-    viewport.scrollTop = viewport.scrollHeight;
+    if (!viewport) return;
+    viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
   }, [messages]);
 
   const placeholder = useMemo(() => {
@@ -69,6 +96,8 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
   const isInputDisabled = readOnly || muted || mode !== 'FREE';
   const canSend = !isInputDisabled && input.trim().length > 0;
   const isSocketReady = Boolean(socket?.connected);
+  const canShowFreeComposer = !readOnly && mode === 'FREE' && !suppressFreeComposer;
+  const canShowQuickReplies = !readOnly && (mode === 'FREE' || mode === 'RESTRICTED');
 
   const groupedMessages = useMemo(() => {
     return messages.map((message, index) => {
@@ -76,14 +105,21 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
       const prevSender = prev ? `${prev.from || ''}|${prev.name || ''}` : '';
       const currentSender = `${message.from || ''}|${message.name || ''}`;
       const showSender = index === 0 || prevSender !== currentSender;
+      const fromValue = String(message?.from || '').toLowerCase();
+      const nameValue = String(message?.name || '').toLowerCase();
       return {
         ...message,
+        _isSystem: fromValue === 'system' || nameValue === 'system',
+        _isHost: fromValue === 'host' || nameValue === 'host',
         _showSender: showSender,
       };
     });
   }, [messages]);
 
-  const sendFree = () => {
+  const sendMessage = (text, options = {}) => {
+    const value = String(text || '').trim();
+    const { cannedId = null } = options;
+
     if (!isSocketReady) {
       setFeedback('Reconnecting to chat...');
       return;
@@ -96,34 +132,19 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
       setFeedback('Chat is in silent mode.');
       return;
     }
-    if (mode !== 'FREE') {
-      setFeedback('Free text is unavailable in restricted mode.');
-      return;
-    }
-    if (!input.trim()) return;
+    if (!value) return;
 
-    socket.emit('chat:free', { roomPin, text: input.trim() }, (ack) => {
+    const sendAsCanned = mode === 'RESTRICTED' && cannedId;
+    const eventName = sendAsCanned ? 'chat:pre' : 'chat:free';
+    const payload = sendAsCanned ? { roomPin, id: cannedId } : { roomPin, text: value };
+
+    socket.emit(eventName, payload, (ack) => {
       if (!ack?.ok) {
         setFeedback(ack.reason || 'Message blocked');
         return;
       }
-      setInput('');
+      if (!sendAsCanned) setInput('');
       setFeedback('');
-    });
-  };
-
-  const sendPre = (id) => {
-    if (!isSocketReady) {
-      setFeedback('Reconnecting to chat...');
-      return;
-    }
-    if (muted) {
-      setFeedback('You are muted by the Host.');
-      return;
-    }
-
-    socket.emit('chat:pre', { roomPin, id }, (ack) => {
-      if (!ack?.ok) setFeedback(ack.reason || 'Not allowed');
     });
   };
 
@@ -157,12 +178,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
         <div className="flex h-full flex-col">
           <div
             ref={messagesViewportRef}
-            onScroll={(e) => {
-              const el = e.currentTarget;
-              const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
-              shouldStickToBottomRef.current = distanceFromBottom < 48;
-            }}
-            className="min-h-24 flex-1 space-y-1.5 overflow-y-auto px-2.5 py-2"
+            className="min-h-24 flex-1 space-y-1.5 overflow-y-auto px-2.5 py-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
           >
             {messages.length === 0 ? (
               <div className="flex min-h-16 items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-950/70 px-3 py-3 text-center text-xs text-slate-500">
@@ -181,9 +197,17 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                   {message._showSender ? (
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="inline-block max-w-full rounded-2xl border border-slate-600/40 bg-transparent px-2.5 py-1.5 text-[13px] leading-5 text-slate-100 break-words">
-                          <span className="mr-1.5 text-xs font-semibold uppercase tracking-[0.12em] text-emerald-300/90">{message.name}</span>
-                          <span>{message.text}</span>
+                        <p className={`inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 break-words ${
+                          message._isHost
+                            ? 'border-violet-400/45 bg-violet-500/12 text-violet-100'
+                            : 'border-slate-600/40 bg-transparent text-slate-100'
+                        }`}>
+                          {!message._isSystem && (
+                            <span className={`mr-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${message._isHost ? 'text-violet-300' : 'text-emerald-300/90'}`}>
+                              {message.name}
+                            </span>
+                          )}
+                          <span className={message.isCorrectGuess ? 'text-green-400 font-semibold' : ''}>{message.text}</span>
                         </p>
                         {allowHostActions && readOnly && message.from && onHostMute && message.name !== 'Host' && (
                           <button
@@ -201,7 +225,13 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                       </div>
                     </div>
                   ) : (
-                    <p className="ml-0.5 inline-block max-w-full rounded-2xl border border-slate-600/40 bg-transparent px-2.5 py-1.5 text-[13px] leading-5 text-slate-100 break-words">{message.text}</p>
+                    <p className={`ml-0.5 inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 break-words ${
+                      message._isHost
+                        ? 'border-violet-400/45 bg-violet-500/12 text-violet-100'
+                        : message.isCorrectGuess
+                          ? 'border-slate-600/40 bg-transparent text-green-400 font-semibold'
+                          : 'border-slate-600/40 bg-transparent text-slate-100'
+                    }`}>{message.text}</p>
                   )}
                 </div>
               ))
@@ -212,18 +242,18 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
             <div className="border-t border-slate-800 px-2.5 py-2.5">
               {feedback && <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200">{feedback}</p>}
 
-              {mode === 'FREE' && !suppressFreeComposer && (
+              {canShowFreeComposer && (
                 <div className="flex gap-3">
                   <input
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && sendFree()}
+                    onKeyDown={(e) => e.key === 'Enter' && sendMessage(input)}
                     placeholder={placeholder}
                     className="flex-1 rounded-xl border border-slate-700 bg-slate-900 px-4 py-3 text-sm text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-950 disabled:text-slate-500"
                     disabled={isInputDisabled}
                   />
                   <button
-                    onClick={sendFree}
+                    onClick={() => sendMessage(input)}
                     className="rounded-xl bg-emerald-400 px-5 py-3 text-sm font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                     disabled={!canSend || !isSocketReady}
                   >
@@ -232,7 +262,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                 </div>
               )}
 
-              {mode === 'RESTRICTED' && (
+              {canShowQuickReplies && (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-2">
                   <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-200/70">Quick Replies</p>
                   <div className="overflow-x-auto overflow-y-hidden pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
@@ -240,10 +270,10 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                     {allowed.map((entry) => (
                       <button
                         key={entry.id}
-                        onClick={() => sendPre(entry.id)}
+                        onClick={() => sendMessage(entry.text, { cannedId: entry.id })}
                         title={entry.text}
                         className="shrink-0 whitespace-nowrap rounded-xl border border-amber-500/35 bg-gradient-to-b from-amber-400/12 to-amber-500/5 px-3 py-2 text-xs font-semibold text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-150 hover:-translate-y-0.5 hover:border-amber-300/60 hover:from-amber-400/20 hover:to-amber-500/10 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
-                        disabled={muted || mode !== 'RESTRICTED' || !isSocketReady}
+                        disabled={muted || mode === 'OFF' || !isSocketReady}
                       >
                         <span className="block max-w-36 truncate text-center">{entry.text}</span>
                       </button>

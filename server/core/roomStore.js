@@ -46,6 +46,7 @@ function initLanRoom(roomName, hostId, hostSessionId = null) {
     answersIn: {},
     answerMode: 'auto',
     activeSlide: null,
+    chatHistory: [],
   };
   return LAN_ROOM_ID;
 }

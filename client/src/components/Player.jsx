@@ -3,11 +3,16 @@ import Chat from './Chat';
 import AnimatedBackground from './AnimatedBackground';
 import { createGameSocket } from '../backendUrl';
 import PingIndicator from './PingIndicator';
+import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
+import { resolveQuestionTiming } from '../utils/questionTiming';
+import ConfirmActionModal from './ConfirmActionModal';
+import { triggerHaptic } from '../utils/haptics';
+import { playGameSfx } from '../utils/gameFeel';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
 const PLAYER_STATE_KEY = 'lf_player_state';
-const START_SPLASH_MIN_MS = 1200;
+const START_SPLASH_MIN_MS = 0;
 const END_SPLASH_MIN_MS = 1400;
 const PRESET_AVATARS = [
   '1.jpg',
@@ -25,6 +30,29 @@ const PRESET_AVATARS = [
   '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
   'e55afb4aea57bced165fb55ad92addf5.jpg',
 ];
+const MAX_CHAT_HISTORY = 300;
+
+function messageKey(message = {}) {
+  return `${message.id || ''}|${message.ts || ''}|${message.from || ''}|${message.name || ''}|${message.text || ''}|${message.event || ''}|${message.cannedId || ''}|${message.isCorrectGuess ? '1' : '0'}`;
+}
+
+function mergeChatHistory(existing, incoming) {
+  const base = Array.isArray(existing) ? existing : [];
+  const extra = Array.isArray(incoming) ? incoming : [];
+  if (extra.length === 0) return base.slice(-MAX_CHAT_HISTORY);
+
+  const merged = [...base];
+  const seen = new Set(base.map((item) => messageKey(item)));
+
+  extra.forEach((item) => {
+    const key = messageKey(item);
+    if (seen.has(key)) return;
+    seen.add(key);
+    merged.push(item);
+  });
+
+  return merged.slice(-MAX_CHAT_HISTORY);
+}
 
 function normalizeAvatarObject(input) {
   if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
@@ -130,6 +158,7 @@ export default function Player({ onBack }) {
   const [myScore, setMyScore] = useState(0);
   const [resultData, setResultData] = useState(null);
   const [finalScores, setFinalScores] = useState([]);
+  const [chatHistory, setChatHistory] = useState([]);
   const [chatMode, setChatMode] = useState('FREE');
   const [chatAllowed, setChatAllowed] = useState([]);
   const [isLobbyDeckReady, setIsLobbyDeckReady] = useState(false);
@@ -139,6 +168,14 @@ export default function Player({ onBack }) {
   const [nextQuestionIn, setNextQuestionIn] = useState(0);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [joinRetryIn, setJoinRetryIn] = useState(0);
+  const [awaitingRoomCreation, setAwaitingRoomCreation] = useState(false);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [leaveConfirmChecked, setLeaveConfirmChecked] = useState(false);
+  const [streakCount, setStreakCount] = useState(0);
+  const [correctBurstTick, setCorrectBurstTick] = useState(0);
+  const [timerDangerActive, setTimerDangerActive] = useState(false);
+  const [fireIgniteTick, setFireIgniteTick] = useState(0);
+  const [showFireIgnite, setShowFireIgnite] = useState(false);
   const roomDisplayName = displayRoomName(roomName);
   const latestNameRef = useRef(name);
   const startSplashUntilRef = useRef(0);
@@ -148,21 +185,28 @@ export default function Player({ onBack }) {
   const endSplashTimerRef = useRef(null);
   const desktopGuessInputRef = useRef(null);
   const mobileGuessInputRef = useRef(null);
+  const prevTimeLeftRef = useRef(0);
+  const fireIgniteTimerRef = useRef(null);
 
-  const resolveQuestionTiming = ({ durationMs, endsAt, question: incomingQuestion }) => {
-    const limitMs = Number(durationMs ?? incomingQuestion?.time_limit_ms);
-    const normalizedMs = Number.isFinite(limitMs) && limitMs > 0 ? limitMs : 20000;
-    const serverEndsAt = Number(endsAt);
-    const serverRemainingMs = Number.isFinite(serverEndsAt) ? serverEndsAt - Date.now() : NaN;
-    const remainingMs = Number.isFinite(serverRemainingMs) && serverRemainingMs > 0 ? serverRemainingMs : normalizedMs;
-    const targetEndsAt = Date.now() + remainingMs;
-    return {
-      normalizedMs,
-      targetEndsAt,
-    };
+  const celebrateCorrect = ({ wasStreak = false } = {}) => {
+    setCorrectBurstTick((value) => value + 1);
+    playGameSfx(wasStreak ? 'streak' : 'correct', { intensity: wasStreak ? 1 : 0.8 });
+    triggerHaptic(wasStreak ? 'success' : 'medium');
   };
 
-  const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt }) => {
+  const triggerFireIgnite = () => {
+    setFireIgniteTick((value) => value + 1);
+    setShowFireIgnite(true);
+    if (fireIgniteTimerRef.current) {
+      window.clearTimeout(fireIgniteTimerRef.current);
+    }
+    fireIgniteTimerRef.current = window.setTimeout(() => {
+      setShowFireIgnite(false);
+      fireIgniteTimerRef.current = null;
+    }, 1200);
+  };
+
+  const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt, serverNow }) => {
     setQuestion(nextQuestion);
     setSelected(null);
     setGuessText('');
@@ -173,19 +217,29 @@ export default function Player({ onBack }) {
     setResultData(null);
     setNextQuestionIn(0);
     setChatDrawerOpen(false);
-    const { normalizedMs, targetEndsAt } = resolveQuestionTiming({ durationMs, endsAt, question: nextQuestion });
+    setTimerDangerActive(false);
+    const fallbackMs = Number(nextQuestion?.time_limit_ms) || 20000;
+    const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
+      durationMs,
+      endsAt,
+      serverNow,
+      fallbackMs,
+    });
     setTimeTotal(Math.ceil(normalizedMs / 1000));
     setQuestionEndsAt(targetEndsAt);
-    setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
+    setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
+    prevTimeLeftRef.current = Math.max(0, Math.ceil(remainingMs / 1000));
     setPhase('question');
   };
 
   const applyResumePayload = (res) => {
     setError('');
     setJoinRetryIn(0);
+    setAwaitingRoomCreation(false);
     setRoomName(res.roomName || 'LocalFlux Game');
     if (res.chatMode) setChatMode(res.chatMode);
     if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+    if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
     setIsLobbyDeckReady(Boolean(res.deckSelected));
     setMyScore(Number(res.myScore) || 0);
 
@@ -194,12 +248,13 @@ export default function Player({ onBack }) {
       setQuestion(null);
       setResultData(null);
       setSelected(null);
+      setStreakCount(0);
       setPhase('waiting');
       return;
     }
 
     if (phaseFromServer === 'started' && res.activeQuestion) {
-      const { question: activeQuestion, durationMs, endsAt } = res.activeQuestion;
+      const { question: activeQuestion, durationMs, endsAt, serverNow } = res.activeQuestion;
       const hasAnswered = Boolean(res.hasAnswered);
       setQuestion(activeQuestion);
       setResultData(null);
@@ -210,22 +265,62 @@ export default function Player({ onBack }) {
       const isTypeGuessQuestion = activeQuestion?.answer_mode === 'type_guess';
       if (hasAnswered && isTypeGuessQuestion) {
         setAnsweredCorrect(true);
-        setPhase('question');
       } else {
         setAnsweredCorrect(null);
-        setPhase(hasAnswered ? 'answered' : 'question');
       }
-      const { normalizedMs, targetEndsAt } = resolveQuestionTiming({ durationMs, endsAt, question: activeQuestion });
+      setPhase(hasAnswered ? 'answered' : 'question');
+      const fallbackMs = Number(activeQuestion?.time_limit_ms) || 20000;
+      const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
+        durationMs,
+        endsAt,
+        serverNow,
+        fallbackMs,
+      });
       setTimeTotal(Math.ceil(normalizedMs / 1000));
       setQuestionEndsAt(targetEndsAt);
-      setTimeLeft(Math.max(0, Math.ceil((targetEndsAt - Date.now()) / 1000)));
+      setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
       return;
     }
 
     setPhase('waiting');
   };
 
-  const attemptJoinRoom = () => {
+  const isRoomUnavailableError = (message) => {
+    const text = String(message || '').toLowerCase();
+    return (
+      text.includes('room is not created yet') ||
+      text.includes('wait for the host to create a room') ||
+      text.includes('wait for the host to create a new room') ||
+      text.includes('room closed because the host disconnected')
+    );
+  };
+
+  const processJoinSuccess = (res) => {
+    setError('');
+    setJoinRetryIn(0);
+    setAwaitingRoomCreation(false);
+    shouldTryResumeRef.current = true;
+    if (typeof res.playerName === 'string' && res.playerName.trim()) {
+      setName(res.playerName.trim());
+    }
+    if (res.avatarObject && typeof res.avatarObject === 'object') {
+      setAvatarObject(normalizeAvatarObject(res.avatarObject));
+    }
+    setRoomName(res.roomName || 'LocalFlux Game');
+    if (res.chatMode) setChatMode(res.chatMode);
+    if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+    if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
+    setIsLobbyDeckReady(Boolean(res.deckSelected));
+    setMyScore(Number(res.myScore) || 0);
+    setStreakCount(0);
+    setPhase('waiting');
+  };
+
+  const emitJoin = ({
+    onSuccess,
+    onUnavailable,
+    onFailure,
+  } = {}) => {
     const socket = socketRef.current;
     if (!socket?.connected) {
       setError('Connecting to server...');
@@ -240,27 +335,30 @@ export default function Player({ onBack }) {
       },
       (res) => {
         if (!res?.success) {
-          setError(res?.error || 'Could not join game.');
+          if (isRoomUnavailableError(res?.error)) {
+            onUnavailable?.(res);
+            return;
+          }
+          onFailure?.(res);
           return;
         }
 
-        setError('');
-        setJoinRetryIn(0);
-        shouldTryResumeRef.current = true;
-        if (typeof res.playerName === 'string' && res.playerName.trim()) {
-          setName(res.playerName.trim());
-        }
-        if (res.avatarObject && typeof res.avatarObject === 'object') {
-          setAvatarObject(normalizeAvatarObject(res.avatarObject));
-        }
-        setRoomName(res.roomName || 'LocalFlux Game');
-        if (res.chatMode) setChatMode(res.chatMode);
-        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
-        setIsLobbyDeckReady(Boolean(res.deckSelected));
-        setMyScore(Number(res.myScore) || 0);
-        setPhase('waiting');
+        onSuccess?.(res);
       }
     );
+  };
+
+  const attemptJoinRoom = () => {
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      setError('Connecting to server...');
+      return;
+    }
+
+    emitJoin({
+      onSuccess: processJoinSuccess,
+      onFailure: (res) => setError(res?.error || 'Could not join game.'),
+    });
   };
 
   const attemptResumeRoom = () => {
@@ -325,6 +423,7 @@ export default function Player({ onBack }) {
     socket.on('disconnect', () => {
       setConnected(false);
       setJoinRetryIn(0);
+      setAwaitingRoomCreation(false);
     });
     socket.on('player:profileUpdated', ({ player }) => {
       if (!player || player.id !== socket.id) return;
@@ -334,6 +433,14 @@ export default function Player({ onBack }) {
     socket.on('chat:mode', ({ mode, allowed }) => {
       if (mode) setChatMode(mode);
       if (Array.isArray(allowed)) setChatAllowed(allowed);
+    });
+    socket.on('chat:history', ({ messages }) => {
+      if (!Array.isArray(messages)) return;
+      setChatHistory((current) => mergeChatHistory(current, messages));
+    });
+    socket.on('chat:message', (message) => {
+      if (!message || typeof message !== 'object') return;
+      setChatHistory((current) => mergeChatHistory(current, [message]));
     });
     socket.on('room:deck_updated', ({ selected }) => {
       if (typeof selected === 'boolean') {
@@ -346,6 +453,8 @@ export default function Player({ onBack }) {
       setError(message || 'Room closed by host.');
       setPhase('joining');
       setRoomName('');
+      setChatHistory([]);
+      setStreakCount(0);
       pendingFinalScoresRef.current = null;
       if (endSplashTimerRef.current) {
         window.clearTimeout(endSplashTimerRef.current);
@@ -354,6 +463,9 @@ export default function Player({ onBack }) {
       clearPlayerState();
     });
     socket.on('game_started', () => {
+      playGameSfx('round_start', { intensity: 0.9 });
+      triggerHaptic('medium');
+      setStreakCount(0);
       setPhase('starting');
       startSplashUntilRef.current = Date.now() + START_SPLASH_MIN_MS;
       pendingQuestionRef.current = null;
@@ -416,6 +528,8 @@ export default function Player({ onBack }) {
         endSplashTimerRef.current = null;
       }
       socket.off('chat:mode');
+      socket.off('chat:history');
+      socket.off('chat:message');
       setChatSocket(null);
       socket.disconnect();
     };
@@ -448,6 +562,48 @@ export default function Player({ onBack }) {
   }, [phase, connected]);
 
   useEffect(() => {
+    if (!awaitingRoomCreation || !connected) return undefined;
+
+    let remaining = 3;
+    const kickoffTimer = window.setTimeout(() => {
+      emitJoin({
+        onSuccess: processJoinSuccess,
+        onUnavailable: () => {
+          setError('Waiting for host to create a room...');
+          setPhase('waiting');
+        },
+        onFailure: (res) => {
+          setError(res?.error || 'Could not join lobby.');
+        },
+      });
+      setJoinRetryIn(remaining);
+    }, 0);
+
+    const retryTimer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        emitJoin({
+          onSuccess: processJoinSuccess,
+          onUnavailable: () => {
+            setError('Waiting for host to create a room...');
+            setPhase('waiting');
+          },
+          onFailure: (res) => {
+            setError(res?.error || 'Could not join lobby.');
+          },
+        });
+        remaining = 3;
+      }
+      setJoinRetryIn(remaining);
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(kickoffTimer);
+      window.clearInterval(retryTimer);
+    };
+  }, [awaitingRoomCreation, connected]);
+
+  useEffect(() => {
     if (!(phase === 'question' || phase === 'answered') || !questionEndsAt) return undefined;
     const timer = window.setInterval(() => {
       const remaining = Math.max(0, Math.ceil((questionEndsAt - Date.now()) / 1000));
@@ -456,6 +612,25 @@ export default function Player({ onBack }) {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
+
+  useEffect(() => {
+    if (!(phase === 'question' || phase === 'answered')) {
+      setTimerDangerActive(false);
+      return;
+    }
+
+    const prev = Number(prevTimeLeftRef.current || 0);
+    const current = Number(timeLeft || 0);
+
+    setTimerDangerActive(current > 0 && current <= 5);
+
+    if (current > 0 && current <= 5 && current !== prev) {
+      playGameSfx('timer_warning', { intensity: current <= 2 ? 1 : 0.7 });
+      triggerHaptic(current <= 2 ? 'medium' : 'light');
+    }
+
+    prevTimeLeftRef.current = current;
+  }, [phase, timeLeft]);
 
   useEffect(() => {
     if (phase !== 'result' || nextQuestionIn <= 0) return undefined;
@@ -471,6 +646,24 @@ export default function Player({ onBack }) {
     return () => window.clearInterval(timer);
   }, [phase, nextQuestionIn]);
 
+  useEffect(() => {
+    if (streakCount >= 3) return;
+    setShowFireIgnite(false);
+    if (fireIgniteTimerRef.current) {
+      window.clearTimeout(fireIgniteTimerRef.current);
+      fireIgniteTimerRef.current = null;
+    }
+  }, [streakCount]);
+
+  useEffect(() => {
+    return () => {
+      if (fireIgniteTimerRef.current) {
+        window.clearTimeout(fireIgniteTimerRef.current);
+        fireIgniteTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const handleBack = () => {
     clearPlayerState();
     onBack?.();
@@ -485,6 +678,35 @@ export default function Player({ onBack }) {
     onBack?.();
   };
 
+  const openLeaveGameModal = () => {
+    setIsLeaveModalOpen(true);
+    setLeaveConfirmChecked(false);
+  };
+
+  const closeLeaveGameModal = () => {
+    setIsLeaveModalOpen(false);
+    setLeaveConfirmChecked(false);
+  };
+
+  const handleLeaveGame = () => {
+    if (!leaveConfirmChecked) {
+      setError('Leave cancelled. Please tick the confirmation box.');
+      return;
+    }
+
+    const socket = socketRef.current;
+    if (socket?.connected) {
+      socket.emit('player:leave', () => {
+        closeLeaveGameModal();
+        handleExitToPlay();
+      });
+      return;
+    }
+
+    closeLeaveGameModal();
+    handleExitToPlay();
+  };
+
   const handleBackToLobby = () => {
     if (!socketRef.current?.connected) {
       setError('Not connected. Please retry in a moment.');
@@ -492,38 +714,26 @@ export default function Player({ onBack }) {
     }
 
     setError('');
-    socketRef.current.emit(
-      'join',
-      {
-        playerName: latestNameRef.current || 'Guest',
-        playerSessionId: playerSessionIdRef.current,
-      },
-      (res) => {
-        if (!res?.success) {
-          setError(res?.error || 'Could not rejoin lobby.');
-          return;
-        }
 
-        if (typeof res.playerName === 'string' && res.playerName.trim()) {
-          setName(res.playerName.trim());
-        }
-        if (res.avatarObject && typeof res.avatarObject === 'object') {
-          setAvatarObject(normalizeAvatarObject(res.avatarObject));
-        }
+    setFinalScores([]);
+    setQuestion(null);
+    setSelected(null);
+    setPrivateGuessHistory([]);
+    setResultData(null);
 
-        setRoomName(res.roomName || 'LocalFlux Game');
-        if (res.chatMode) setChatMode(res.chatMode);
-        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
-        setIsLobbyDeckReady(Boolean(res.deckSelected));
-        setMyScore(Number(res.myScore) || 0);
-        setFinalScores([]);
-        setQuestion(null);
-        setSelected(null);
-        setPrivateGuessHistory([]);
-        setResultData(null);
+    emitJoin({
+      onSuccess: processJoinSuccess,
+      onUnavailable: () => {
+        setRoomName('LocalFlux Room');
+        setAwaitingRoomCreation(true);
+        setJoinRetryIn(3);
+        setError('Waiting for host to create a room...');
         setPhase('waiting');
-      }
-    );
+      },
+      onFailure: (res) => {
+        setError(res?.error || 'Could not rejoin lobby.');
+      },
+    });
   };
 
   const handleAnswer = (opt) => {
@@ -534,7 +744,19 @@ export default function Player({ onBack }) {
     setGuessFeedback('');
     setChatDrawerOpen(false);
     setPhase('answered');
-    socketRef.current.emit('submit_answer', { answer: opt }, () => {
+    socketRef.current.emit('submit_answer', { answer: opt }, (res) => {
+      if (res?.success && typeof res.correct === 'boolean') {
+        setAnsweredCorrect(res.correct);
+        if (res.correct) {
+          const nextStreak = streakCount + 1;
+          setStreakCount(nextStreak);
+          celebrateCorrect({ wasStreak: nextStreak >= 3 });
+          if (nextStreak === 3) triggerFireIgnite();
+        } else {
+          setStreakCount(0);
+          playGameSfx('wrong', { intensity: 0.8 });
+        }
+      }
       setIsSubmitting(false);
     });
   };
@@ -557,15 +779,22 @@ export default function Player({ onBack }) {
       }
 
       if (res.matched) {
+        const nextStreak = streakCount + 1;
+        setStreakCount(nextStreak);
+        celebrateCorrect({ wasStreak: nextStreak >= 3 });
+        if (nextStreak === 3) triggerFireIgnite();
         setSelected(payload);
         setAnsweredCorrect(true);
         setGuessText('');
         setChatDrawerOpen(false);
+        setPhase('answered');
         const points = res.scoreAwarded || 100;
         setGuessFeedback(`That is correct! +${points} pts`);
         return;
       }
 
+      setStreakCount(0);
+      playGameSfx('wrong', { intensity: 0.7 });
       setAnsweredCorrect(null);
       setGuessText('');
       setGuessFeedback('');
@@ -629,11 +858,38 @@ export default function Player({ onBack }) {
         ? 'text-amber-300'
         : 'text-emerald-300';
 
-  const renderLeaveAndPing = ({ inline = false } = {}) => {
+  const renderStreakBadge = () => {
+    if (streakCount < 2) return null;
+    const isOnFire = streakCount >= 3;
+
+    return (
+      <div className="ml-2 flex items-center gap-2">
+        {showFireIgnite && isOnFire && (
+          <span key={fireIgniteTick} className="animate-fire-ignite rounded-full border border-orange-300/60 bg-orange-500/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-orange-100">
+            Fire Mode
+          </span>
+        )}
+        <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isOnFire ? 'animate-on-fire-badge border-orange-300/65 bg-orange-500/20 text-orange-50' : 'border-amber-400/60 bg-amber-500/15 text-amber-100'}`}>
+          <span>{isOnFire ? 'On Fire' : 'Streak'}</span>
+          <span className="font-mono tabular-nums">x{streakCount}</span>
+        </div>
+      </div>
+    );
+  };
+
+  const renderLeaveAndPing = ({ inline = false, showLeaveButton = false } = {}) => {
     if (inline) {
       return (
-        <div className="mb-2 flex items-center">
+        <div className="mb-2 flex items-center gap-2">
           <PingIndicator socket={chatSocket} />
+          {showLeaveButton && (
+            <button
+              onClick={openLeaveGameModal}
+              className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-[11px] font-black tracking-[0.12em] text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
+            >
+              LEAVE GAME
+            </button>
+          )}
         </div>
       );
     }
@@ -641,6 +897,14 @@ export default function Player({ onBack }) {
     return (
       <>
         <PingIndicator socket={chatSocket} className="absolute top-5 right-5" />
+        {showLeaveButton && (
+          <button
+            onClick={openLeaveGameModal}
+            className="absolute top-5 right-32 z-20 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-black tracking-[0.12em] text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
+          >
+            LEAVE GAME
+          </button>
+        )}
       </>
     );
   };
@@ -648,61 +912,54 @@ export default function Player({ onBack }) {
   if (phase === 'gameover') {
     const myEntry = finalScores.find(p => p.id === selfPlayerId);
     const myRank = finalScores.findIndex(p => p.id === selfPlayerId) + 1;
-    const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
-    return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-5 pt-8 animate-phase-in z-0">
-        <AnimatedBackground />
-        {renderLeaveAndPing()}
-        <p className="mb-5 text-[11px] uppercase tracking-[0.28em] text-slate-500">Game Over</p>
-        <h2 className="text-4xl font-black tracking-tight mb-2">Final Standings</h2>
-        {myEntry && (
-          <p className="text-slate-400 text-sm mb-6 font-mono tabular-nums">
-            You placed #{myRank} with {myEntry.score} pts
-          </p>
-        )}
-        <div className="flex flex-col gap-3 flex-1">
-          {rankedFinalScores.map((p, i) => {
-            const isTopOne = i === 0;
-            const isTopTwo = i === 1;
-            const isTopThree = i === 2;
-            const isMe = p.id === selfPlayerId;
-            const placementClass =
-              isTopOne
-                ? 'border-amber-300/60 bg-amber-400/20 text-amber-100 shadow-[0_0_30px_rgba(251,191,36,0.3)] ring-2 ring-amber-300/30'
-                : isTopTwo
-                  ? 'border-slate-300/50 bg-slate-200/15 text-slate-100 shadow-xl'
-                  : isTopThree
-                    ? 'border-orange-300/60 bg-orange-400/15 text-orange-100 shadow-lg'
-                    : isMe
-                      ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/40'
-                      : 'border-white/10 bg-slate-900/60 text-white/90 backdrop-blur-md';
-            const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
 
-            return (
-              <div
-                key={p.id || `${p.name}_${i}`}
-                className={`flex items-center justify-between rounded-3xl px-6 py-5 border ${placementClass}`}
+    return (
+      <div className="relative h-screen w-screen overflow-hidden bg-slate-950 text-white animate-phase-in">
+        <AnimatedBackground />
+        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4 md:p-8">
+          <div className="relative w-full max-w-3xl">
+            {renderLeaveAndPing()}
+            <LeaderboardResultsCard
+              finalScores={finalScores}
+              highlightPlayerId={selfPlayerId}
+              pretitle="Game Over"
+              title="Leaderboard"
+              subtitle={myEntry ? `You placed #${myRank} with ${myEntry.score} pts` : ''}
+            />
+
+            {error && (
+              <p className="mt-4 rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-3 text-sm font-medium text-rose-200 backdrop-blur-md">
+                {error}
+              </p>
+            )}
+
+            <div className="flex items-center justify-center gap-3 md:gap-4 mt-10 md:mt-12">
+              <button
+                onClick={handleBackToLobby}
+                className="rounded-xl bg-emerald-400 px-6 md:px-8 py-3 md:py-4 text-base md:text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
               >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-lg w-8 tabular-nums opacity-80">{i + 1}</span>
-                  {medal && <span className="text-2xl leading-none drop-shadow-md">{medal}</span>}
-                </div>
-                <span className="flex-1 font-black text-xl tracking-tight">{p.name}</span>
-                <span className="font-black text-2xl tabular-nums drop-shadow-sm">{p.score}</span>
-              </div>
-            );
-          })}
-        </div>
-        {error && (
-          <p className="mt-4 rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-3 text-sm font-medium text-rose-200 backdrop-blur-md">{error}</p>
-        )}
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <button onClick={handleBackToLobby} className="w-full rounded-2xl bg-emerald-400 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95">
-            BACK TO LOBBY
-          </button>
-          <button onClick={handleExitToPlay} className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
-            EXIT
-          </button>
+                BACK TO LOBBY
+              </button>
+              <button
+                onClick={handleExitToPlay}
+                className="rounded-xl border border-slate-700 bg-slate-900 px-6 md:px-8 py-3 md:py-4 text-base md:text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95"
+              >
+                EXIT
+              </button>
+            </div>
+
+            <ConfirmActionModal
+              open={isLeaveModalOpen}
+              title="Leave Current Game"
+              message="You will leave the active room immediately and return to Play screen."
+              checkboxLabel="I understand I may lose my current round progress and place in the room."
+              checked={leaveConfirmChecked}
+              onCheckedChange={setLeaveConfirmChecked}
+              onCancel={closeLeaveGameModal}
+              onConfirm={handleLeaveGame}
+              confirmLabel="Leave Game"
+            />
+          </div>
         </div>
       </div>
     );
@@ -728,82 +985,107 @@ export default function Player({ onBack }) {
   }
 
   if (phase === 'result' && resultData) {
-    const correctAnswer = resultData.correct_answer;
+    const correctAnswer = resultData.correct_answer || resultData.correctAnswer || '';
     const hasAnswered = Boolean(selected);
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
-    const gotIt = hasAnswered && (answeredCorrect === true || (!isTypeGuessQuestion && selected === correctAnswer));
     return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-4 pt-6 pb-10 animate-phase-in z-0">
+      <div className="relative z-0 flex h-screen w-screen overflow-hidden bg-slate-950 text-white animate-phase-in">
         <AnimatedBackground />
-        <div className="mb-4 flex items-start justify-between gap-3 relative z-10">
-          <div>
-            {renderLeaveAndPing({ inline: true })}
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
-          </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Next</p>
-            <p className="text-2xl font-black tabular-nums text-emerald-300">{nextQuestionIn > 0 ? `${nextQuestionIn}s` : '...'}</p>
-          </div>
-        </div>
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl px-6 py-8 shadow-2xl shadow-black/50">
-          <p className="text-2xl md:text-3xl font-black leading-tight text-white/90 drop-shadow-md">{question?.prompt}</p>
-        </div>
-
-        {question?.image && (
-          <div className="mb-6 flex justify-center">
-            <img src={resolveImageUrl(question.image)} alt="Question visual" className="max-h-56 rounded-2xl object-contain opacity-95 shadow-2xl shadow-black/50 ring-1 ring-white/10" />
-          </div>
-        )}
-
-        {isTypeGuessQuestion ? (
-          <div className="grid grid-cols-1 gap-3 content-start">
-            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-5">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/90">Answer</p>
-              <p className="mt-1 text-xl font-black text-emerald-100">{correctAnswer}</p>
-            </div>
-            <div className={`rounded-2xl border px-5 py-5 ${hasAnswered ? (gotIt ? 'border-emerald-400 bg-emerald-500/10' : 'border-rose-400 bg-rose-500/10') : 'border-slate-700 bg-slate-900/70'}`}>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Your Guess</p>
-              <p className="mt-1 text-lg font-black text-white">{hasAnswered ? selected : 'No guess submitted'}</p>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 content-start">
-            {(Array.isArray(question?.options) ? question.options : []).map((opt, idx) => {
-              const isSelected = selected === opt;
-              const isCorrect = correctAnswer === opt;
-              const baseClass = 'border-slate-700 bg-slate-900 text-slate-200';
-
-              let feedbackClass = baseClass;
-              if (isSelected && hasAnswered) {
-                feedbackClass = gotIt
-                  ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
-                  : 'border-rose-400 bg-rose-500/20 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.3)] opacity-70';
-              } else if (isCorrect) {
-                feedbackClass = 'border-emerald-500/60 bg-emerald-500/20 text-emerald-100 shadow-[0_0_25px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50';
-              } else {
-                feedbackClass = 'border-white/5 bg-slate-900/40 text-slate-400 opacity-50 backdrop-blur-md';
-              }
-
-              return (
-                <div
-                  key={`${question?.q_id || 'q'}_${idx}_${opt}`}
-                  className={`w-full rounded-3xl border-2 px-6 py-7 text-left text-xl md:text-2xl font-black transition-all duration-300 ${feedbackClass}`}
-                >
-                  {opt}
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
+                <div className="flex items-center">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
+                  {renderStreakBadge()}
                 </div>
-              );
-            })}
+              </div>
+              <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Next</p>
+                <p className="text-2xl font-black tabular-nums text-emerald-300">{nextQuestionIn > 0 ? `${nextQuestionIn}s` : '...'}</p>
+              </div>
+            </div>
           </div>
-        )}
 
-        <p className="mt-5 text-center text-sm font-semibold text-slate-300">
-          {hasAnswered ? (gotIt ? 'You answered correctly!' : 'Your selected answer was incorrect.') : 'You did not submit an answer this round.'}
-        </p>
-        <p className="mt-2 text-center font-mono text-sm tabular-nums">Score: <span className="font-black text-amber-300">{myScore}</span></p>
-        <p className="mt-2 text-center text-xs uppercase tracking-[0.24em] text-white/60">
-          {nextQuestionIn > 0 ? `Next question in ${nextQuestionIn}s` : 'Preparing next question'}
-        </p>
+          <div className="flex min-h-0 flex-1 flex-col p-4 md:p-8">
+            <div className="shrink-0 rounded-3xl border border-white/10 bg-slate-950/40 px-6 py-6 shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <p className="text-center text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Answer Reveal</p>
+              <p className="text-2xl md:text-3xl font-black leading-tight text-white/90 drop-shadow-md text-center">{question?.prompt}</p>
+            </div>
+
+            {question?.image && (
+              <div className="mt-4 flex min-h-0 flex-1 items-center justify-center">
+                <img
+                  src={resolveImageUrl(question.image)}
+                  alt="Question visual"
+                  className="max-h-full max-w-full rounded-2xl object-contain opacity-95 shadow-2xl shadow-black/50 ring-1 ring-white/10"
+                />
+              </div>
+            )}
+
+            <div className="mt-4 shrink-0">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-5">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/90">Answer</p>
+                  <p className="mt-1 text-xl font-black text-emerald-100">{correctAnswer || 'Not available'}</p>
+                </div>
+                <div className={`rounded-2xl border px-5 py-5 ${hasAnswered ? 'border-sky-400/60 bg-sky-500/10' : 'border-slate-700 bg-slate-900/70'}`}>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                    {isTypeGuessQuestion ? 'Your Guess' : 'Your Answer'}
+                  </p>
+                  <p className="mt-1 text-lg font-black text-white">{hasAnswered ? selected : 'No answer submitted'}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 shrink-0 text-center">
+              <p className="text-sm font-semibold text-slate-300">
+                {hasAnswered ? 'Answer submitted. Review shown above.' : 'You did not submit an answer this round.'}
+              </p>
+              <p className="mt-2 font-mono text-sm tabular-nums">Score: <span className="font-black text-amber-300">{myScore}</span></p>
+              <p className="mt-2 text-xs uppercase tracking-[0.24em] text-white/60">
+                {nextQuestionIn > 0 ? `Next question in ${nextQuestionIn}s` : 'Preparing next question'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <aside className="hidden lg:flex w-80 lg:w-96 flex-col border-l border-white/10 bg-black/20 backdrop-blur-xl relative z-10">
+          <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300/80">Room Chat</p>
+            <p className="mt-1 text-[11px] text-slate-400">{roomDisplayName}</p>
+          </div>
+          <div className="min-h-0 flex-1 p-3">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
+                suppressFreeComposer={isTypeGuessQuestion}
+                showMeta={!isTypeGuessQuestion}
+                showModeBadge={!isTypeGuessQuestion}
+              />
+            </div>
+          </div>
+        </aside>
+
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Room"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I may lose my score progress in this match."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
+
       </div>
     );
   }
@@ -829,20 +1111,138 @@ export default function Player({ onBack }) {
 
   if (phase === 'answered') {
     return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 gap-4 animate-phase-in z-0">
+      <div className="relative z-0 flex min-h-[100dvh] w-screen overflow-y-auto bg-slate-950 text-white animate-phase-in lg:h-screen lg:overflow-hidden">
         <AnimatedBackground />
-        <div className="relative z-10 w-full flex flex-col items-center">
-          {renderLeaveAndPing()}
+
+        <div className="relative z-10 flex w-full flex-1 flex-col p-4 md:p-8">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
+                <div className="flex items-center">
+                  <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
+                  {renderStreakBadge()}
+                </div>
+            </div>
+            <div
+              className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${timerDangerActive ? 'animate-timer-danger' : ''} ${
+                timeLeft <= 2
+                  ? 'border-red-500/60 bg-red-500/10'
+                  : timeLeft <= 5
+                    ? 'border-amber-500/50 bg-amber-500/10'
+                    : 'border-slate-800 bg-slate-900'
+              }`}
+            >
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
+              <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timeLeft <= 2 ? 'text-red-300' : timerTone}`}>{timeLeft}s</p>
+            </div>
+          </div>
+
+          <div className="mx-auto flex w-full max-w-3xl flex-1 items-start justify-center pt-2 lg:items-center lg:pt-0">
+            <div className="w-full rounded-3xl border border-white/10 bg-black/35 p-6 text-center shadow-2xl shadow-black/40 backdrop-blur-xl md:p-8">
+              <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Answer Submitted</p>
+              <p className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">
+                {selected}
+              </p>
+              {answeredCorrect === true && (
+                <div key={correctBurstTick} className="mt-4 flex items-center justify-center">
+                  <div className="animate-correct-burst rounded-full border border-emerald-300/80 bg-emerald-400/20 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100 shadow-[0_0_24px_rgba(52,211,153,0.35)]">
+                    Perfect hit{streakCount >= 3 ? ` · Streak x${streakCount}` : ''}
+                  </div>
+                </div>
+              )}
+              <p
+                className={`mt-4 text-base font-black uppercase tracking-[0.16em] ${
+                  answeredCorrect === true
+                    ? 'text-emerald-300'
+                    : answeredCorrect === false
+                      ? 'text-rose-300'
+                      : 'text-amber-300'
+                }`}
+              >
+                {answeredCorrect === true ? 'Correct' : answeredCorrect === false ? 'Wrong' : 'Checking...'}
+              </p>
+              <div className="mt-3 flex items-center justify-center">
+                {answeredCorrect === true ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-emerald-200">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/25">
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                        <path d="M4.5 10.5L8.3 14.2L15.5 6.8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    Right Answer
+                  </span>
+                ) : answeredCorrect === false ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-rose-400/50 bg-rose-500/15 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-rose-200">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-rose-400/25">
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                        <path d="M6 6L14 14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                        <path d="M14 6L6 14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    Wrong Answer
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-amber-200">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-400/25">
+                      <span className="h-2 w-2 rounded-full bg-amber-200 animate-pulse" />
+                    </span>
+                    Verifying
+                  </span>
+                )}
+              </div>
+              <p className="mt-4 text-sm text-slate-400">You can chat while waiting for other players to submit.</p>
+              <div className="mt-4 flex justify-center gap-2">
+                <span className="status-dot" />
+                <span className="status-dot" />
+                <span className="status-dot" />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 lg:hidden">
+            <div className="h-[42dvh] min-h-[260px] rounded-2xl border border-white/10 bg-black/25 p-2">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
+              />
+            </div>
+          </div>
         </div>
-        <p className="relative z-10 text-sm uppercase tracking-[0.24em] text-slate-500">Answer Submitted</p>
-        <p className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">{selected}</p>
-        <div className={`mt-2 text-3xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</div>
-        <div className="mt-3 flex gap-2">
-          <span className="status-dot" />
-          <span className="status-dot" />
-          <span className="status-dot" />
-        </div>
-        <p className="text-slate-500 text-sm mt-3">Waiting for others...</p>
+
+        <aside className="hidden lg:flex w-80 lg:w-96 flex-col border-l border-white/10 bg-black/20 backdrop-blur-xl relative z-10">
+          <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300/80">Room Chat</p>
+            <p className="mt-1 text-[11px] text-slate-400">{roomDisplayName}</p>
+          </div>
+          <div className="min-h-0 flex-1 p-3">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
+              />
+            </div>
+          </div>
+        </aside>
+
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Room"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I may lose my score progress in this match."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
       </div>
     );
   }
@@ -850,223 +1250,176 @@ export default function Player({ onBack }) {
   if (phase === 'question' && question) {
     const progress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
+    const answerControlMinHeight = 'clamp(68px, 10vh, 112px)';
     return (
-      <div className={`relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-4 pt-6 md:pb-6 animate-phase-in z-0 ${isTypeGuessQuestion ? 'pb-[50vh]' : 'pb-24'}`}>
+      <div className="flex h-screen w-screen overflow-hidden bg-background bg-slate-950 text-foreground text-white animate-phase-in">
         <AnimatedBackground />
-        <div className="relative z-10 mb-6 flex items-start justify-between gap-3">
-          <div>
-            {renderLeaveAndPing({ inline: true })}
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
-          </div>
-          <div
-            className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
-              timeLeft <= 2
-                ? 'border-red-500/60 bg-red-500/10'
-                : timeLeft <= 5
-                  ? 'border-amber-500/50 bg-amber-500/10'
-                  : 'border-slate-800 bg-slate-900'
-            }`}
-          >
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
-            <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timeLeft <= 2 ? 'text-red-300' : timerTone}`}>{timeLeft}s</p>
-          </div>
-        </div>
 
-        <div className="mb-5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${progress <= 25 ? 'bg-red-400' : progress <= 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-
-        <div className="mb-6 rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl px-6 py-8 shadow-2xl shadow-black/50">
-          <p className="text-2xl md:text-3xl font-black leading-tight text-white/95 drop-shadow-md">{question.prompt}</p>
-        </div>
-
-        {question.image && (
-          <div className="mb-8 flex justify-center">
-            <img src={resolveImageUrl(question.image)} alt="Question visual" className="max-h-56 md:max-h-72 rounded-2xl object-contain shadow-2xl shadow-black/60 ring-1 ring-white/10" />
-          </div>
-        )}
-
-        {isTypeGuessQuestion ? (
-          <div className="hidden rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl p-6 md:block shadow-2xl shadow-black/50">
-            <p className="mb-4 text-xs font-black uppercase tracking-[0.25em] text-emerald-400">Type Your Guess</p>
-            {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
-              <div className="mb-4">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Your Attempts (Private)</p>
-                <div className="flex flex-wrap gap-2">
-                  {privateGuessHistory.map((entry, idx) => (
-                    <button
-                      key={`${entry}_${idx}`}
-                      type="button"
-                      onClick={() => handleReusePrivateGuess(entry)}
-                      title={entry}
-                      disabled={answeredCorrect === true || isSubmitting}
-                      className="max-w-full rounded-full border border-slate-600 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-200 transition-all hover:border-emerald-500/60 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span className="block max-w-48 truncate">{entry}</span>
-                    </button>
-                  ))}
+        <div className="relative z-10 flex flex-1 flex-col">
+          <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
+                <div className="flex items-center">
+                  <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
+                  {renderStreakBadge()}
                 </div>
               </div>
-            )}
-            <div className="flex gap-3">
-              <input
-                ref={desktopGuessInputRef}
-                type="text"
-                value={guessText}
-                onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !answeredCorrect && !isSubmitting) handleGuessSubmit();
-                }}
-                placeholder="Type your guess..."
-                disabled={answeredCorrect === true || isSubmitting}
-                className={`flex-1 rounded-full border border-white/20 bg-slate-950/60 px-6 py-4 text-base font-semibold text-white placeholder:text-slate-400 shadow-inner focus:border-emerald-400/80 focus:ring-4 focus:ring-emerald-400/20 focus:outline-none transition-all ${(answeredCorrect === true || isSubmitting) ? 'opacity-40 cursor-not-allowed' : ''}`}
-              />
-              <button
-                onClick={handleGuessSubmit}
-                className="rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 px-8 py-4 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(52,211,153,0.5)] active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
-                disabled={!guessText.trim() || answeredCorrect === true || isSubmitting}
-              >
-                {isSubmitting ? '...' : 'GUESS'}
-              </button>
-            </div>
-            {guessFeedback && <p className="mt-3 text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 content-start">
-            {question.options.map((opt, idx) => (
-              <button
-                key={`${question?.q_id || 'q'}_${idx}_${opt}`}
-                onClick={() => handleAnswer(opt)}
-                disabled={isSubmitting}
-                className={`group relative overflow-hidden w-full rounded-3xl border-2 px-6 py-7 text-left text-xl md:text-2xl font-black transition-all duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] shadow-lg hover:shadow-2xl backdrop-blur-md ${
-                  idx % 4 === 0
-                    ? 'border-sky-500/30 bg-sky-500/10 text-sky-50 hover:border-sky-400 hover:bg-sky-500/20 hover:shadow-sky-500/20'
-                    : idx % 4 === 1
-                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-50 hover:border-violet-400 hover:bg-violet-500/20 hover:shadow-violet-500/20'
-                      : idx % 4 === 2
-                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-50 hover:border-rose-400 hover:bg-rose-500/20 hover:shadow-rose-500/20'
-                        : 'border-amber-500/30 bg-amber-500/10 text-amber-50 hover:border-amber-400 hover:bg-amber-500/20 hover:shadow-amber-500/20'
+              <div
+                className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${timerDangerActive ? 'animate-timer-danger' : ''} ${
+                  timeLeft <= 2
+                    ? 'border-red-500/60 bg-red-500/10'
+                    : timeLeft <= 5
+                      ? 'border-amber-500/50 bg-amber-500/10'
+                      : 'border-slate-800 bg-slate-900'
                 }`}
               >
-                <div className="relative z-10">{opt}</div>
-              </button>
-            ))}
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
+                <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timeLeft <= 2 ? 'text-red-300' : timerTone}`}>{timeLeft}s</p>
+              </div>
+            </div>
           </div>
-        )}
 
-        <div className="mt-5 hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-3 md:block">
-          <Chat
-            socket={chatSocket}
-            roomPin={LAN_ROOM}
-            title="Room Chat"
-            initialMode={chatMode}
-            initialAllowed={chatAllowed}
-            suppressFreeComposer={isTypeGuessQuestion}
-            showMeta={!isTypeGuessQuestion}
-            showModeBadge={!isTypeGuessQuestion}
-          />
+          <div className="shrink-0 px-4 pb-2 pt-3 md:px-8">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${progress <= 25 ? 'bg-red-400' : progress <= 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex flex-1 min-h-0 flex-col items-center justify-center p-4 md:p-8">
+              {question.image ? (
+                <>
+                  <p className="w-full max-w-5xl text-center text-2xl font-black leading-tight text-white/95 drop-shadow-md md:text-4xl">
+                    {question.prompt}
+                  </p>
+                  <div className="mt-4 flex min-h-0 w-full flex-1 items-center justify-center">
+                    <img
+                      src={resolveImageUrl(question.image)}
+                      alt="Question visual"
+                      className="max-h-full max-w-full rounded-lg object-contain shadow-xl"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 items-center justify-center p-8">
+                  <p className="text-center text-3xl font-bold text-white md:text-5xl lg:text-6xl">
+                    {question.prompt}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {isTypeGuessQuestion ? (
+              <div className="relative z-10 mx-auto grid w-full max-w-5xl shrink-0 grid-cols-1 gap-3 p-4 md:p-8">
+                {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {privateGuessHistory.map((entry, idx) => (
+                      <button
+                        key={`${entry}_${idx}`}
+                        type="button"
+                        onClick={() => handleReusePrivateGuess(entry)}
+                        title={entry}
+                        disabled={answeredCorrect === true || isSubmitting}
+                        className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 transition-all hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span className="block max-w-36 truncate">{entry}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    ref={desktopGuessInputRef}
+                    type="text"
+                    value={guessText}
+                    onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !answeredCorrect && !isSubmitting) handleGuessSubmit();
+                    }}
+                    placeholder={answeredCorrect ? 'Answer submitted' : 'Type your guess here...'}
+                    disabled={answeredCorrect === true || isSubmitting}
+                    className={`flex-1 rounded-xl border border-white/20 bg-slate-950/60 px-5 py-3 text-base font-semibold text-white shadow-inner placeholder:text-slate-400 focus:border-emerald-400/80 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none transition-all ${(answeredCorrect === true || isSubmitting) ? 'cursor-not-allowed opacity-40' : ''}`}
+                    style={{ minHeight: answerControlMinHeight }}
+                  />
+                  <button
+                    onClick={handleGuessSubmit}
+                    data-haptic="medium"
+                    className="rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 px-6 py-3 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                    style={{ minHeight: answerControlMinHeight }}
+                    disabled={!guessText.trim() || answeredCorrect === true || isSubmitting}
+                  >
+                    {isSubmitting ? '...' : 'GUESS'}
+                  </button>
+                </div>
+                {guessFeedback && <p className="text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
+              </div>
+            ) : (
+              <div className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4 p-4 md:p-8 shrink-0">
+                {question.options.map((opt, idx) => {
+                  const colorClass =
+                    idx % 4 === 0
+                      ? 'bg-gradient-to-br from-rose-500 to-pink-600 text-white'
+                      : idx % 4 === 1
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
+                        : idx % 4 === 2
+                          ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white'
+                          : 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white';
+
+                  return (
+                    <button
+                      key={`${question?.q_id || 'q'}_${idx}_${opt}`}
+                      onClick={() => handleAnswer(opt)}
+                      data-haptic="medium"
+                      disabled={isSubmitting}
+                      className={`rounded-xl px-6 py-4 text-left text-lg font-black transition-transform hover:scale-[1.02] active:scale-95 md:py-6 md:text-xl disabled:cursor-not-allowed disabled:opacity-60 ${colorClass}`}
+                      style={{ minHeight: answerControlMinHeight }}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {isTypeGuessQuestion && (
-          <div
-            className="fixed inset-x-0 bottom-0 z-40 flex h-[40vh] flex-col border-t border-white/10 bg-black/60 backdrop-blur-2xl p-3 shadow-[0_-8px_30px_rgba(0,0,0,0.5)] md:hidden"
-            style={{ paddingBottom: 'max(0.6rem, env(safe-area-inset-bottom))' }}
-          >
-            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Guess + Chat</p>
-
-            <div className="min-h-0 flex-1 rounded-2xl border border-white/5 bg-white/5 p-1.5 overflow-hidden">
+        <aside className="hidden lg:flex w-80 lg:w-96 flex-col border-l border-white/10 bg-black/20 backdrop-blur-xl relative z-10">
+          <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300/80">Room Chat</p>
+            <p className="mt-1 text-[11px] text-slate-400">{roomDisplayName}</p>
+          </div>
+          <div className="min-h-0 flex-1 p-3">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
               <Chat
                 socket={chatSocket}
                 roomPin={LAN_ROOM}
                 title="Room Chat"
                 initialMode={chatMode}
                 initialAllowed={chatAllowed}
-                suppressFreeComposer
-                showMeta={false}
-                showModeBadge={false}
+                initialMessages={chatHistory}
+                suppressFreeComposer={isTypeGuessQuestion}
+                showMeta={!isTypeGuessQuestion}
+                showModeBadge={!isTypeGuessQuestion}
               />
             </div>
-
-            <div className="mt-1.5 border-t border-white/10 pt-2">
-              <p className="mb-1.5 text-[11px] font-black uppercase tracking-[0.25em] text-white/50">Type Your Guess</p>
-              {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
-                <div className="mb-1.5 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {privateGuessHistory.map((entry, idx) => (
-                    <button
-                      key={`${entry}_${idx}`}
-                      type="button"
-                      onClick={() => handleReusePrivateGuess(entry)}
-                      title={entry}
-                      disabled={answeredCorrect === true || isSubmitting}
-                      className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 transition-all hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span className="block max-w-36 truncate">{entry}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {guessFeedback && <p className="mb-1.5 text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
-              <div className="flex gap-2">
-                <input
-                  ref={mobileGuessInputRef}
-                  type="text"
-                  value={guessText}
-                  onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !answeredCorrect && !isSubmitting) handleGuessSubmit();
-                  }}
-                  placeholder={answeredCorrect ? 'Answer submitted' : 'Type your guess here...'}
-                  disabled={answeredCorrect === true || isSubmitting}
-                  className={`min-h-14 flex-1 rounded-full border border-white/20 bg-slate-950/60 px-5 py-3 text-sm font-semibold text-white shadow-inner placeholder:text-slate-400 focus:border-emerald-400/80 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none transition-all ${(answeredCorrect === true || isSubmitting) ? 'cursor-not-allowed opacity-40' : ''}`}
-                />
-                <button
-                  onClick={handleGuessSubmit}
-                  className="min-h-14 rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 px-6 py-3 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(52,211,153,0.4)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
-                  disabled={!guessText.trim() || answeredCorrect === true || isSubmitting}
-                >
-                  {isSubmitting ? '...' : 'GUESS'}
-                </button>
-              </div>
-            </div>
           </div>
-        )}
+        </aside>
 
-        {!isTypeGuessQuestion && (
-          <button
-            onClick={() => setChatDrawerOpen(true)}
-            className="fixed bottom-4 right-4 z-30 rounded-full border-2 border-emerald-400/40 bg-black/50 backdrop-blur-xl px-6 py-3.5 text-sm font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.2)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(52,211,153,0.3)] active:translate-y-0 active:scale-95 md:hidden"
-            style={{ marginBottom: 'max(0px, env(safe-area-inset-bottom))' }}
-          >
-            CHAT
-          </button>
-        )}
-
-        {!isTypeGuessQuestion && chatDrawerOpen && (
-          <>
-            <button
-              aria-label="Close chat drawer"
-              onClick={() => setChatDrawerOpen(false)}
-              className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden"
-            />
-            <div className="fixed inset-x-0 bottom-0 z-50 flex h-[62vh] max-h-140 flex-col rounded-t-[2rem] border-t border-white/10 bg-black/60 backdrop-blur-2xl p-4 shadow-[0_-8px_40px_rgba(0,0,0,0.6)] md:hidden">
-              <div className="mb-3 flex items-center justify-between px-1">
-                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Room Chat</p>
-                <button
-                  onClick={() => setChatDrawerOpen(false)}
-                  className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-black text-white/80 transition-all hover:bg-white/10"
-                >
-                  Close
-                </button>
-              </div>
-              <div className="min-h-0 flex-1">
-                <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
-              </div>
-            </div>
-          </>
-        )}
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Room"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I may lose my score progress in this match."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
       </div>
     );
   }
@@ -1076,12 +1429,18 @@ export default function Player({ onBack }) {
       <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center gap-4 p-5 animate-phase-in z-0">
         <AnimatedBackground />
         <div className="relative z-10 w-full flex flex-col items-center">
-          {renderLeaveAndPing()}
+          {renderLeaveAndPing({ showLeaveButton: true })}
         </div>
         <p className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-md">{roomDisplayName}</p>
-        <p className="text-white/50 text-sm font-medium">Waiting for host to start...</p>
+        <p className="text-white/50 text-sm font-medium">
+          {awaitingRoomCreation ? 'Waiting for host to create room...' : 'Waiting for host to start...'}
+        </p>
         <p className={`text-xs font-black uppercase tracking-[0.15em] ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
-          {isLobbyDeckReady ? 'Deck selected! Get ready.' : 'Waiting for host to choose a deck...'}
+          {awaitingRoomCreation
+            ? `Auto-join when room is ready${connected ? ` (${joinRetryIn || 1}s)` : ''}`
+            : isLobbyDeckReady
+              ? 'Deck selected! Get ready.'
+              : 'Waiting for host to choose a deck...'}
         </p>
         <p className={`text-xs font-mono mt-1 ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           {connected ? 'connected' : 'reconnecting...'}
@@ -1168,8 +1527,20 @@ export default function Player({ onBack }) {
         </section>
 
         <div className="w-full max-w-md mt-4 rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-4 shadow-xl shadow-black/40">
-          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
+          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} initialMessages={chatHistory} />
         </div>
+
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Waiting Lobby"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I will stop waiting for this host room."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
       </div>
     );
   }
@@ -1210,6 +1581,18 @@ export default function Player({ onBack }) {
           </div>
         </div>
       </div>
+
+      <ConfirmActionModal
+        open={isLeaveModalOpen}
+        title="Leave Room"
+        message="You are about to leave before joining fully and return to the Play screen."
+        checkboxLabel="I understand this will cancel my current join attempt."
+        checked={leaveConfirmChecked}
+        onCheckedChange={setLeaveConfirmChecked}
+        onCancel={closeLeaveGameModal}
+        onConfirm={handleLeaveGame}
+        confirmLabel="Leave Game"
+      />
     </div>
   );
 }

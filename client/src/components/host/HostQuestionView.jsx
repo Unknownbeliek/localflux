@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import Chat from '../Chat';
 import AnimatedBackground from '../AnimatedBackground';
+import ConfirmActionModal from '../ConfirmActionModal';
 
 function resolveImageUrl(image) {
   if (!image) return null;
@@ -17,6 +19,7 @@ export default function HostQuestionView({
   answerCount,
   players,
   timeLeft,
+  timeTotal,
   timerTone,
   modeOptions,
   chatMode,
@@ -33,8 +36,32 @@ export default function HostQuestionView({
   mutedSet,
   answerMode,
   answerModeLabels,
+  onHostAnnouncement,
+  onEndGameRequest,
+  isEndGameModalOpen,
+  endGameConfirmChecked,
+  setEndGameConfirmChecked,
+  onEndGameCancel,
+  onEndGameConfirm,
 }) {
-  const progress = players.length > 0 ? Math.round((answerCount / players.length) * 100) : 0;
+  const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
+  const timerProgress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
+  const [announcementText, setAnnouncementText] = useState('');
+  const [announcementFeedback, setAnnouncementFeedback] = useState('');
+
+  const handleSendAnnouncement = () => {
+    const text = announcementText.trim();
+    if (!text || !onHostAnnouncement) return;
+    onHostAnnouncement(text, (ack) => {
+      if (!ack?.ok) {
+        setAnnouncementFeedback('Could not send announcement.');
+        return;
+      }
+      setAnnouncementText('');
+      setAnnouncementFeedback('Announcement sent.');
+      window.setTimeout(() => setAnnouncementFeedback(''), 1800);
+    });
+  };
 
   return (
     <div className="relative min-h-[100dvh] bg-slate-950 text-white p-4 md:p-8 overflow-x-hidden flex flex-col animate-phase-in z-0">
@@ -60,7 +87,7 @@ export default function HostQuestionView({
           </div>
 
           <div className="mb-8 h-2.5 w-full overflow-hidden rounded-full bg-slate-900/80 shadow-inner">
-            <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 shadow-[0_0_10px_rgba(52,211,153,0.5)] transition-all duration-500" style={{ width: `${progress}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 shadow-[0_0_10px_rgba(52,211,153,0.5)] transition-all duration-500" style={{ width: `${timerProgress}%` }} />
           </div>
 
           <div className="mb-8 rounded-3xl border border-white/10 bg-black/20 backdrop-blur-lg px-8 py-8 shadow-inner">
@@ -105,9 +132,17 @@ export default function HostQuestionView({
             <div className="mb-5 flex items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Chat Mode</p>
-                <p className="text-xs text-slate-500 mt-1">Control room communication in real time.</p>
+                <p className="text-xs text-slate-500 mt-1">{roomGameMode === 'guided' ? 'Guided Mode' : 'Open Mode'}</p>
               </div>
-              <span className="rounded-full bg-emerald-500/20 border border-emerald-400/50 px-3 py-1 text-[11px] font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.3)]">LIVE</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-500/20 border border-emerald-400/50 px-3 py-1 text-[11px] font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.3)]">LIVE</span>
+                <button
+                  onClick={onEndGameRequest}
+                  className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-black tracking-[0.12em] text-rose-200 transition hover:bg-rose-500/20"
+                >
+                  END GAME
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -154,19 +189,56 @@ export default function HostQuestionView({
             )}
           </section>
 
-          <section className="min-h-[400px] flex-1 flex flex-col rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl p-6 shadow-2xl shadow-black/50">
-            <Chat
-              socket={socket}
-              roomPin={roomId}
-              readOnly
-              title="Chat Monitor"
-              allowHostActions
-              onHostMute={handleMute}
-              mutedSet={mutedSet}
-            />
+          <section className="min-h-[400px] flex-1 flex flex-col rounded-3xl border border-white/10 bg-slate-950/60 backdrop-blur-xl p-3 shadow-2xl shadow-black/50 overflow-hidden">
+            <div className="mb-3 rounded-2xl border border-slate-700/40 bg-black/30 p-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Host Announcement</p>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={announcementText}
+                  onChange={(event) => setAnnouncementText(event.target.value)}
+                  onKeyDown={(event) => event.key === 'Enter' && handleSendAnnouncement()}
+                  placeholder="Broadcast to all players..."
+                  className="flex-1 rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                  maxLength={280}
+                />
+                <button
+                  onClick={handleSendAnnouncement}
+                  disabled={!announcementText.trim()}
+                  className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-black text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                  Send
+                </button>
+              </div>
+              {announcementFeedback && <p className="mt-2 text-xs text-emerald-300">{announcementFeedback}</p>}
+            </div>
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
+              <Chat
+                socket={socket}
+                roomPin={roomId}
+                readOnly
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={allowedList}
+                allowHostActions
+                onHostMute={handleMute}
+                mutedSet={mutedSet}
+              />
+            </div>
           </section>
         </aside>
       </div>
+
+      <ConfirmActionModal
+        open={isEndGameModalOpen}
+        title="End Live Question"
+        message="Ending now will stop this question and close the room for all players."
+        checkboxLabel="I understand everyone will be disconnected from this live room."
+        checked={endGameConfirmChecked}
+        onCheckedChange={setEndGameConfirmChecked}
+        onCancel={onEndGameCancel}
+        onConfirm={onEndGameConfirm}
+        confirmLabel="End Room"
+      />
     </div>
   );
 }

@@ -4,7 +4,17 @@ const { validateAnswer } = require('../core/answerValidation');
 const { calculateScore } = require('../core/scoringEngine');
 const { MAX_GUESS_LENGTH } = require('../config/typeGuessPolicy');
 
-function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCurrentRound, getChatMode }) {
+function createMessageId(prefix, socketId) {
+  return `${prefix}_${socketId || 'unknown'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCurrentRound, getChatMode, emitChatMessage }) {
+  const emitMessage = typeof emitChatMessage === 'function'
+    ? emitChatMessage
+    : (roomId, message) => {
+        io.to(roomId).emit('chat:message', message);
+      };
+
   socket.on('player:chat_guess', ({ text } = {}, callback) => {
     const room = getRoom();
     if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
@@ -48,11 +58,13 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
       const answerCount = Object.keys(room.answersIn || {}).length;
       const totalPlayers = Array.isArray(room.players) ? room.players.length : 0;
 
-      io.to(LAN_ROOM_ID).emit('chat:message', {
+      emitMessage(LAN_ROOM_ID, {
+        id: createMessageId('guess_correct', socket.id),
         from: 'system',
         name: 'System',
         text: `${player.name} guessed correctly! +${scoreResult.points} pts`,
         event: 'guess_correct',
+        isCorrectGuess: true,
         ts: Date.now(),
       });
 
@@ -97,7 +109,8 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
         player.score = Math.max(0, Number(player.score || 0) + scoreResult.penalty);
         player.streak = scoreResult.newStreak;
         
-        io.to(LAN_ROOM_ID).emit('chat:message', {
+        emitMessage(LAN_ROOM_ID, {
+          id: createMessageId('guess_penalty', socket.id),
           from: 'system',
           name: 'System',
           text: `${player.name} got a wrong answer penalty: ${scoreResult.penalty} pts`,
@@ -109,7 +122,8 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
 
     const chatMode = typeof getChatMode === 'function' ? String(getChatMode() || 'FREE') : 'FREE';
     if (chatMode === 'FREE') {
-      io.to(LAN_ROOM_ID).emit('chat:message', {
+      emitMessage(LAN_ROOM_ID, {
+        id: createMessageId('guess_miss', socket.id),
         from: socket.id,
         name: socket.playerName || player.name || 'Player',
         text: rawGuess,

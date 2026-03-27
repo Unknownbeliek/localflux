@@ -29,6 +29,7 @@ const { sanitizeQuestion } = require('../core/deckLoader');
 const { registerTypeGuessHandlers } = require('./typeGuessHandlers');
 
 let chatInstance = null;
+const MAX_CHAT_HISTORY = 300;
 const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: '1.jpg' };
 const PRESET_AVATAR_POOL = [
   '1.jpg',
@@ -194,15 +195,22 @@ function normalizeSlides(input) {
   return normalized;
 }
 
-function withQuestionTiming(payload) {
+function withQuestionTiming(payload, timing = null) {
   const now = Date.now();
   const limitRaw = Number(payload?.question?.timeLimit);
   const durationMs = Number.isFinite(limitRaw) && limitRaw > 0 ? limitRaw : 20000;
+  const persistedStartedAt = Number(timing?.startedAt);
+  const persistedEndsAt = Number(timing?.endsAt);
+
+  const startedAt = Number.isFinite(persistedStartedAt) ? persistedStartedAt : now;
+  const endsAt = Number.isFinite(persistedEndsAt) ? persistedEndsAt : startedAt + durationMs;
+
   return {
     ...payload,
     durationMs,
-    startedAt: now,
-    endsAt: now + durationMs,
+    startedAt,
+    endsAt,
+    serverNow: now,
   };
 }
 
@@ -296,6 +304,22 @@ function clearRoundTimers(roomId) {
   clearTimerByRoom(roundTransitionTimers, roomId);
 }
 
+function getChatHistorySnapshot(room) {
+  if (!room || !Array.isArray(room.chatHistory)) return [];
+  return room.chatHistory.slice(-MAX_CHAT_HISTORY);
+}
+
+function appendChatMessageToRoom(room, message) {
+  if (!room || !message || typeof message !== 'object') return;
+  if (!Array.isArray(room.chatHistory)) {
+    room.chatHistory = [];
+  }
+  room.chatHistory.push(message);
+  if (room.chatHistory.length > MAX_CHAT_HISTORY) {
+    room.chatHistory = room.chatHistory.slice(-MAX_CHAT_HISTORY);
+  }
+}
+
 /**
  * Register all game event handlers on a connected socket.
  *
@@ -304,22 +328,39 @@ function clearRoundTimers(roomId) {
  * @param {object[]} questions - Pre-loaded QUESTIONS array from the deck
  */
 function registerHandlers(socket, io, questions, tokenManager) {
+  const emitRoomChatMessage = (roomId, message) => {
+    if (!roomId || !message) return;
+    const room = getRoom();
+    if (room) appendChatMessageToRoom(room, message);
+    io.to(roomId).emit('chat:message', message);
+  };
+
   // create ChatManager singleton when first socket connects
   if (!chatInstance) {
-    chatInstance = new ChatManager(io);
+    chatInstance = new ChatManager(io, {
+      onMessage: (roomPin, message) => {
+        if (roomPin !== LAN_ROOM_ID) return;
+        const room = getRoom();
+        if (!room) return;
+        appendChatMessageToRoom(room, message);
+      },
+    });
   }
 
   const emitNextQuestionForRound = (room, nextQuestionPayload) => {
     const timedPayload = withQuestionTiming(withAnswerMode(nextQuestionPayload, room.answerMode));
     room.roundSettled = false;
     room.roundId = Number(room.roundId || 0) + 1;
+    room.currentQStartedAt = timedPayload.startedAt;
+    room.currentQEndsAt = timedPayload.endsAt;
+    room.currentQDurationMs = timedPayload.durationMs;
 
     io.to(LAN_ROOM_ID).emit('next_question', timedPayload);
 
     clearTimerByRoom(questionTimeoutTimers, LAN_ROOM_ID);
     const expectedRoundId = room.roundId;
     const expectedQuestionIndex = Number(room.currentQ);
-    const timeoutMs = Number(timedPayload.durationMs) > 0 ? Number(timedPayload.durationMs) : 20000;
+    const timeoutMs = Math.max(0, Number(room.currentQEndsAt || 0) - Date.now());
 
     const timeoutHandle = setTimeout(() => {
       const liveRoom = getRoom();
@@ -379,6 +420,9 @@ function registerHandlers(socket, io, questions, tokenManager) {
         if (gameOver) {
           io.to(LAN_ROOM_ID).emit('game_over', gameOver);
           markRoomClosed('ended');
+          liveRoom.currentQStartedAt = null;
+          liveRoom.currentQEndsAt = null;
+          liveRoom.currentQDurationMs = null;
           clearRoundTimers(LAN_ROOM_ID);
           deleteRoom();
           console.log('[Game] LAN_ROOM finished. Room deleted.');
@@ -417,6 +461,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
     LAN_ROOM_ID,
     settleCurrentRound,
     getChatMode: () => chatInstance?.mode || 'FREE',
+    emitChatMessage: emitRoomChatMessage,
   });
 
   const isHostAuthorized = (room, hostToken, hostSessionId) => {
@@ -473,10 +518,17 @@ function registerHandlers(socket, io, questions, tokenManager) {
 
   // G��G�� create_room G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('create_room', ({ roomName, hostSessionId, hostToken }, callback) => {
-    // Validate host token
-    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
-      console.warn(`[Warn] Unauthorized create_room attempt from ${socket.id}`);
-      return callback({ success: false, error: 'Unauthorized: invalid or missing host token.' });
+    // Validate host token with detailed reason so client can recover/retry intelligently.
+    const tokenCheck = tokenManager.validateTokenDetailed(hostToken, socket.id);
+    if (!tokenCheck.valid) {
+      console.warn(`[Warn] Unauthorized create_room attempt from ${socket.id} (${tokenCheck.reason})`);
+      let error = 'Unauthorized: invalid or missing host token.';
+      if (tokenCheck.reason === 'expired_token') {
+        error = 'Unauthorized: host token expired. Generate a new token.';
+      } else if (tokenCheck.reason === 'socket_mismatch') {
+        error = 'Unauthorized: host token is bound to a previous session. Generate a new token.';
+      }
+      return callback({ success: false, error, reason: tokenCheck.reason });
     }
 
     if (!roomName || !roomName.trim()) {
@@ -515,6 +567,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
         status: currentRoom.status,
         deckSelected: Array.isArray(currentRoom.questions) && currentRoom.questions.length > 0,
         answerMode: currentRoom.answerMode || 'auto',
+        chatHistory: getChatHistorySnapshot(currentRoom),
       });
     }
 
@@ -619,12 +672,16 @@ function registerHandlers(socket, io, questions, tokenManager) {
       players: room.players,
       currentQ: room.currentQ,
       totalQ: roomQuestions.length,
+      chatHistory: getChatHistorySnapshot(room),
       activeQuestion: canSyncQuestion
         ? withQuestionTiming(withAnswerMode({
             question: roomQuestions[currentIndex],
             index: currentIndex,
             total: roomQuestions.length,
-          }, room.answerMode))
+          }, room.answerMode), {
+            startedAt: room.currentQStartedAt,
+            endsAt: room.currentQEndsAt,
+          })
         : null,
     });
   });
@@ -665,6 +722,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       answerMode: room.answerMode || 'multiple_choice',
       playerName: assigned.name,
       avatarObject: assigned.avatarObject,
+      chatHistory: getChatHistorySnapshot(room),
     });
   });
 
@@ -710,6 +768,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       answerMode: room.answerMode || 'multiple_choice',
       playerName: assigned.name,
       avatarObject: assigned.avatarObject,
+      chatHistory: getChatHistorySnapshot(room),
     });
   });
 
@@ -783,6 +842,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       myScore: me?.score || 0,
       chatMode: chatInstance.mode,
       chatAllowed: chatInstance.allowed,
+      chatHistory: getChatHistorySnapshot(room),
       hasAnswered,
       answeredValue: hasAnswered ? room.answersIn[socket.id] : pending.lastAnswer,
       activeQuestion: canSyncQuestion
@@ -790,7 +850,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
             question: sanitizeQuestion(roomQuestions[currentIndex]),
             index: currentIndex,
             total: roomQuestions.length,
-          }, room.answerMode))
+          }, room.answerMode), {
+            startedAt: room.currentQStartedAt,
+            endsAt: room.currentQEndsAt,
+          })
         : null,
     });
   });
@@ -953,6 +1016,36 @@ function registerHandlers(socket, io, questions, tokenManager) {
     callback?.({ ok: true });
   });
 
+  socket.on('chat:host_announce', ({ text, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
+      console.warn(`[Warn] Unauthorized chat:host_announce attempt from ${socket.id}`);
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (!hasValidHostSession(room, hostSessionId)) {
+      rejectHost(socket, null);
+      return callback?.({ ok: false, reason: 'host_locked' });
+    }
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+
+    const cleanText = String(text || '').trim().slice(0, 280);
+    if (!cleanText) return callback?.({ ok: false, reason: 'empty_message' });
+
+    const message = {
+      id: `host_announce_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+      from: 'host',
+      name: 'Host',
+      text: cleanText,
+      event: 'host_announcement',
+      isAnnouncement: true,
+      ts: Date.now(),
+    };
+
+    emitRoomChatMessage(LAN_ROOM_ID, message);
+    callback?.({ ok: true });
+  });
+
   socket.on('host:kick_player', ({ target, hostToken, hostSessionId }, callback) => {
     const room = getRoom();
     if (!isHostAuthorized(room, hostToken, hostSessionId)) {
@@ -1045,6 +1138,36 @@ function registerHandlers(socket, io, questions, tokenManager) {
     if (existingTimer) {
       clearTimeout(existingTimer);
       hostDisconnectTimers.delete(LAN_ROOM_ID);
+    }
+
+    return callback?.({ ok: true });
+  });
+
+  // player intentionally leaves the current game room
+  socket.on('player:leave', (callback) => {
+    const room = getRoom();
+    if (!room) {
+      return callback?.({ ok: true });
+    }
+
+    const wasPlayerRemoved = removePlayer(socket.id);
+    if (wasPlayerRemoved) {
+      if (room.answersIn && Object.prototype.hasOwnProperty.call(room.answersIn, socket.id)) {
+        delete room.answersIn[socket.id];
+      }
+
+      const playerSessionId = String(socket.playerSessionId || '').trim();
+      if (playerSessionId) {
+        pendingPlayerReconnect.delete(playerSessionId);
+        const existingTimer = playerDisconnectTimers.get(playerSessionId);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+          playerDisconnectTimers.delete(playerSessionId);
+        }
+      }
+
+      socket.leave(LAN_ROOM_ID);
+      io.to(LAN_ROOM_ID).emit('player_joined', { players: room.players });
     }
 
     return callback?.({ ok: true });
