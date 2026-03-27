@@ -31,7 +31,7 @@ export default function Footer() {
                 className="w-10 h-10 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 flex items-center justify-center group-hover:shadow-lg transition-shadow duration-300"
                 style={{ boxShadow: "0 0 16px rgba(16,185,129,0.6), 0 0 32px rgba(6,182,212,0.3)" }}
               >
-                <Terminal className="text-black w-5 h-5" />
+                <span className="text-white font-bold">LF</span>
               </motion.div>
               <span className="text-xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent group-hover:from-emerald-300 group-hover:to-cyan-300 transition-all duration-300">
                 LocalFlux

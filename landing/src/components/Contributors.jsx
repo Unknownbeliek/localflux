@@ -112,25 +112,6 @@ export default function Contributors() {
           </a>
         </div>
 
-        {/* DEV NOTE */}
-        <div className="mt-16 max-w-3xl mx-auto relative">
-          <div className="absolute inset-0 bg-emerald-500/5 blur-2xl rounded-xl" />
-
-          <div className="relative border border-white/10 bg-white/[0.03] backdrop-blur-xl rounded-xl p-6 text-left">
-            <p className="text-emerald-400 text-sm mb-2">
-              // Developer Integration Note:
-            </p>
-
-            <p className="text-gray-400 text-sm mb-3">
-              Load contributors dynamically from GitHub API:
-            </p>
-
-            <code className="block text-emerald-300 text-sm bg-black/30 px-4 py-3 rounded-md border border-white/10 overflow-x-auto">
-              https://api.github.com/repos/{`{owner}`}/{`{repo}`}/contributors
-            </code>
-          </div>
-        </div>
-
       </div>
     </section>
   );
