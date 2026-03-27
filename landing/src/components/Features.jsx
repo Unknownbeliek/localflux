@@ -51,7 +51,7 @@ export default function Features() {
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
           {features.map((f, i) => {
             const cardRef = React.useRef(null);
             
@@ -75,14 +75,14 @@ export default function Features() {
                   cardRef.current?.style.setProperty("--x", "50%");
                   cardRef.current?.style.setProperty("--y", "50%");
                 }}
-                className="group relative"
+                className="group relative h-full"
               >
                 {/* Main card */}
-                <div className="interactive-border relative p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-xl hover:border-white/15 transition-all duration-300" style={{
+                <div className="interactive-border relative h-full min-h-[200px] p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-xl hover:border-white/15 transition-all duration-300 flex flex-col" style={{
                   boxShadow: '0 10px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)'
                 }}>
                   {/* Content */}
-                  <div className="relative z-10">
+                  <div className="relative z-10 h-full flex flex-col justify-between">
                     {/* Icon - subtle hover scale */}
                     <motion.div
                       animate={{ y: [0, -4, 0] }}
@@ -97,7 +97,7 @@ export default function Features() {
                       {f.title}
                     </h3>
 
-                    <p className="text-gray-400 group-hover:text-gray-300/80 transition-colors duration-300">
+                    <p className="text-gray-400 group-hover:text-gray-300/80 transition-colors duration-300 flex-1">
                       {f.description}
                     </p>
                   </div>
