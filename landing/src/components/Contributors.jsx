@@ -105,7 +105,7 @@ export default function Contributors() {
             href="https://github.com/Unknownbeliek/localflux"
             target="_blank"
             rel="noopener noreferrer"
-            className="group relative px-6 py-3 rounded-lg border border-emerald-400/30 hover:border-emerald-400/60 text-emerald-400 transition overflow-hidden"
+            className="group relative px-6 py-3 rounded-lg border border-emerald-400/30 hover:border-emerald-400/60 text-emerald-400 overflow-hidden transition-[transform,border-color,background-color,opacity] duration-300 ease-out hover:-translate-y-1"
           >
             <span className="relative z-10">View All on GitHub</span>
             <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition bg-emerald-400/10" />

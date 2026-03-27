@@ -94,10 +94,11 @@ export default function Footer() {
 
           <motion.div 
             whileHover={{ scale: 1.05, y: -2 }}
-            className="group relative px-4 py-2 rounded-lg border border-emerald-400/40 text-emerald-400 hover:border-emerald-400/80 hover:text-emerald-300 transition-all duration-300 bg-white/[0.03] backdrop-blur-sm"
+            className="group relative px-4 py-2 rounded-lg border border-emerald-400/30 text-emerald-400 hover:border-emerald-400/60 hover:text-emerald-300 transition-[border-color,color,transform,background-color,opacity] duration-300 ease-out bg-white/[0.03] backdrop-blur-sm overflow-hidden"
           >
             {/* Badge glow */}
-            <div className="absolute -inset-1 rounded-lg opacity-0 group-hover:opacity-70 blur-lg transition-opacity duration-300 bg-gradient-to-r from-emerald-400/60 to-cyan-400/30" />
+            <div className="absolute -inset-1 rounded-lg opacity-0 group-hover:opacity-50 blur-lg transition-opacity duration-300 bg-gradient-to-r from-emerald-400/40 to-cyan-400/25" />
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition duration-300 bg-emerald-400/10" />
             <span className="relative">100% Open Source</span>
           </motion.div>
         </motion.div>
