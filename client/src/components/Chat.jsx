@@ -149,7 +149,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
   };
 
   return (
-    <div className={`flex h-full flex-col text-white ${showMeta || showModeBadge ? 'gap-2' : 'gap-1.5'}`}>
+    <div className={`min-h-0 flex h-full flex-col text-white ${showMeta || showModeBadge ? 'gap-2' : 'gap-1.5'}`}>
       {(showMeta || showModeBadge) && (
         <div className="flex items-center justify-between gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 px-3 py-2">
           {showMeta ? (

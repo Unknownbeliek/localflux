@@ -132,7 +132,7 @@ copy client\.env.example client\.env
 
 Open `client/.env` in a text editor and set the backend URL:
 
-```env
+```bash
 VITE_BACKEND_URL=http://localhost:3000
 ```
 

@@ -124,14 +124,14 @@ frontend URL and the socket connects automatically.
 
 ### `server/.env` (example)
 
-```env
+```bash
 PORT=3000
 DECK_PATH=data/decks/movie.json
 ```
 
 ### `client/.env` (example)
 
-```env
+```bash
 VITE_BACKEND_URL=http://localhost:3000
 ```
 
