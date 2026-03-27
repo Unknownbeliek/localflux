@@ -650,59 +650,74 @@ export default function Player({ onBack }) {
     const myRank = finalScores.findIndex(p => p.id === selfPlayerId) + 1;
     const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
     return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-5 pt-8 animate-phase-in z-0">
+      <div className="relative h-screen w-screen overflow-hidden bg-slate-950 text-white animate-phase-in">
         <AnimatedBackground />
-        {renderLeaveAndPing()}
-        <p className="mb-5 text-[11px] uppercase tracking-[0.28em] text-slate-500">Game Over</p>
-        <h2 className="text-4xl font-black tracking-tight mb-2">Final Standings</h2>
-        {myEntry && (
-          <p className="text-slate-400 text-sm mb-6 font-mono tabular-nums">
-            You placed #{myRank} with {myEntry.score} pts
-          </p>
-        )}
-        <div className="flex flex-col gap-3 flex-1">
-          {rankedFinalScores.map((p, i) => {
-            const isTopOne = i === 0;
-            const isTopTwo = i === 1;
-            const isTopThree = i === 2;
-            const isMe = p.id === selfPlayerId;
-            const placementClass =
-              isTopOne
-                ? 'border-amber-300/60 bg-amber-400/20 text-amber-100 shadow-[0_0_30px_rgba(251,191,36,0.3)] ring-2 ring-amber-300/30'
-                : isTopTwo
-                  ? 'border-slate-300/50 bg-slate-200/15 text-slate-100 shadow-xl'
-                  : isTopThree
-                    ? 'border-orange-300/60 bg-orange-400/15 text-orange-100 shadow-lg'
-                    : isMe
-                      ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100 ring-1 ring-emerald-400/40'
-                      : 'border-white/10 bg-slate-900/60 text-white/90 backdrop-blur-md';
-            const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
+        <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4">
+          <div className="w-full max-w-3xl rounded-3xl border border-white/15 bg-slate-900/55 p-6 shadow-2xl shadow-black/50 backdrop-blur-xl md:p-8">
+            {renderLeaveAndPing()}
+            <p className="text-center text-[11px] uppercase tracking-[0.28em] text-slate-400">Game Over</p>
+            <h2 className="mt-3 text-center text-4xl font-black tracking-tight md:text-5xl">Final Standings</h2>
+            {myEntry && (
+              <p className="mt-2 text-center text-sm font-mono tabular-nums text-slate-300">
+                You placed #{myRank} with {myEntry.score} pts
+              </p>
+            )}
 
-            return (
-              <div
-                key={p.id || `${p.name}_${i}`}
-                className={`flex items-center justify-between rounded-3xl px-6 py-5 border ${placementClass}`}
+            <div className="mt-6 w-full max-w-2xl mx-auto flex flex-col gap-3">
+              {rankedFinalScores.map((p, i) => {
+                const isTopOne = i === 0;
+                const isTopTwo = i === 1;
+                const isTopThree = i === 2;
+                const isMe = p.id === selfPlayerId;
+                const podiumClass =
+                  isTopOne
+                    ? 'bg-yellow-500/10 border-yellow-500 text-yellow-100 text-xl py-6 shadow-[0_0_35px_rgba(234,179,8,0.35)]'
+                    : isTopTwo
+                      ? 'bg-slate-300/10 border-slate-300/70 text-slate-100 py-5'
+                      : isTopThree
+                        ? 'bg-orange-500/10 border-orange-500/70 text-orange-100 py-5'
+                        : isMe
+                          ? 'bg-emerald-500/15 border-emerald-400/70 text-emerald-100 py-4'
+                          : 'bg-slate-900/70 border-white/10 text-white/90 py-4';
+                const medal = isTopOne ? '🥇' : isTopTwo ? '🥈' : isTopThree ? '🥉' : '';
+
+                return (
+                  <div
+                    key={p.id || `${p.name}_${i}`}
+                    className={`flex items-center justify-between rounded-2xl border px-5 ${podiumClass}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-7 font-mono text-lg tabular-nums opacity-85">{i + 1}</span>
+                      {medal && <span className="text-2xl leading-none">{medal}</span>}
+                    </div>
+                    <span className="flex-1 truncate font-black tracking-tight">{p.name}</span>
+                    <span className="font-black tabular-nums text-2xl">{p.score}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {error && (
+              <p className="mt-4 rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-3 text-sm font-medium text-rose-200 backdrop-blur-md">
+                {error}
+              </p>
+            )}
+
+            <div className="flex items-center justify-center gap-4 mt-12">
+              <button
+                onClick={handleBackToLobby}
+                className="rounded-2xl bg-emerald-400 px-8 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95"
               >
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-lg w-8 tabular-nums opacity-80">{i + 1}</span>
-                  {medal && <span className="text-2xl leading-none drop-shadow-md">{medal}</span>}
-                </div>
-                <span className="flex-1 font-black text-xl tracking-tight">{p.name}</span>
-                <span className="font-black text-2xl tabular-nums drop-shadow-sm">{p.score}</span>
-              </div>
-            );
-          })}
-        </div>
-        {error && (
-          <p className="mt-4 rounded-xl border border-rose-500/50 bg-rose-500/20 px-4 py-3 text-sm font-medium text-rose-200 backdrop-blur-md">{error}</p>
-        )}
-        <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <button onClick={handleBackToLobby} className="w-full rounded-2xl bg-emerald-400 py-4 text-lg font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95">
-            BACK TO LOBBY
-          </button>
-          <button onClick={handleExitToPlay} className="w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95">
-            EXIT
-          </button>
+                BACK TO LOBBY
+              </button>
+              <button
+                onClick={handleExitToPlay}
+                className="rounded-2xl border border-slate-700 bg-slate-900 px-8 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-emerald-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95"
+              >
+                EXIT
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -728,82 +743,119 @@ export default function Player({ onBack }) {
   }
 
   if (phase === 'result' && resultData) {
-    const correctAnswer = resultData.correct_answer;
+    const correctAnswer = resultData.correct_answer || resultData.correctAnswer || '';
     const hasAnswered = Boolean(selected);
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
     const gotIt = hasAnswered && (answeredCorrect === true || (!isTypeGuessQuestion && selected === correctAnswer));
     return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-4 pt-6 pb-10 animate-phase-in z-0">
+      <div className="relative z-0 flex h-screen w-screen overflow-hidden bg-slate-950 text-white animate-phase-in">
         <AnimatedBackground />
-        <div className="mb-4 flex items-start justify-between gap-3 relative z-10">
-          <div>
-            {renderLeaveAndPing({ inline: true })}
-            <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
-          </div>
-          <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Next</p>
-            <p className="text-2xl font-black tabular-nums text-emerald-300">{nextQuestionIn > 0 ? `${nextQuestionIn}s` : '...'}</p>
-          </div>
-        </div>
 
-        <div className="mb-6 rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl px-6 py-8 shadow-2xl shadow-black/50">
-          <p className="text-2xl md:text-3xl font-black leading-tight text-white/90 drop-shadow-md">{question?.prompt}</p>
-        </div>
-
-        {question?.image && (
-          <div className="mb-6 flex justify-center">
-            <img src={resolveImageUrl(question.image)} alt="Question visual" className="max-h-56 rounded-2xl object-contain opacity-95 shadow-2xl shadow-black/50 ring-1 ring-white/10" />
-          </div>
-        )}
-
-        {isTypeGuessQuestion ? (
-          <div className="grid grid-cols-1 gap-3 content-start">
-            <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-5">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/90">Answer</p>
-              <p className="mt-1 text-xl font-black text-emerald-100">{correctAnswer}</p>
-            </div>
-            <div className={`rounded-2xl border px-5 py-5 ${hasAnswered ? (gotIt ? 'border-emerald-400 bg-emerald-500/10' : 'border-rose-400 bg-rose-500/10') : 'border-slate-700 bg-slate-900/70'}`}>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Your Guess</p>
-              <p className="mt-1 text-lg font-black text-white">{hasAnswered ? selected : 'No guess submitted'}</p>
+        <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+          <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                {renderLeaveAndPing({ inline: true })}
+                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
+              </div>
+              <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Next</p>
+                <p className="text-2xl font-black tabular-nums text-emerald-300">{nextQuestionIn > 0 ? `${nextQuestionIn}s` : '...'}</p>
+              </div>
             </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 content-start">
-            {(Array.isArray(question?.options) ? question.options : []).map((opt, idx) => {
-              const isSelected = selected === opt;
-              const isCorrect = correctAnswer === opt;
-              const baseClass = 'border-slate-700 bg-slate-900 text-slate-200';
 
-              let feedbackClass = baseClass;
-              if (isSelected && hasAnswered) {
-                feedbackClass = gotIt
-                  ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
-                  : 'border-rose-400 bg-rose-500/20 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.3)] opacity-70';
-              } else if (isCorrect) {
-                feedbackClass = 'border-emerald-500/60 bg-emerald-500/20 text-emerald-100 shadow-[0_0_25px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50';
-              } else {
-                feedbackClass = 'border-white/5 bg-slate-900/40 text-slate-400 opacity-50 backdrop-blur-md';
-              }
+          <div className="flex min-h-0 flex-1 flex-col p-4 md:p-8">
+            <div className="shrink-0 rounded-3xl border border-white/10 bg-slate-950/40 px-6 py-6 shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <p className="text-2xl md:text-3xl font-black leading-tight text-white/90 drop-shadow-md text-center">{question?.prompt}</p>
+            </div>
 
-              return (
-                <div
-                  key={`${question?.q_id || 'q'}_${idx}_${opt}`}
-                  className={`w-full rounded-3xl border-2 px-6 py-7 text-left text-xl md:text-2xl font-black transition-all duration-300 ${feedbackClass}`}
-                >
-                  {opt}
+            {question?.image && (
+              <div className="mt-4 flex min-h-0 flex-1 items-center justify-center">
+                <img
+                  src={resolveImageUrl(question.image)}
+                  alt="Question visual"
+                  className="max-h-full max-w-full rounded-2xl object-contain opacity-95 shadow-2xl shadow-black/50 ring-1 ring-white/10"
+                />
+              </div>
+            )}
+
+            <div className="mt-4 shrink-0">
+              {isTypeGuessQuestion ? (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-5">
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/90">Answer</p>
+                    <p className="mt-1 text-xl font-black text-emerald-100">{correctAnswer}</p>
+                  </div>
+                  <div className={`rounded-2xl border px-5 py-5 ${hasAnswered ? (gotIt ? 'border-emerald-400 bg-emerald-500/10' : 'border-rose-400 bg-rose-500/10') : 'border-slate-700 bg-slate-900/70'}`}>
+                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Your Guess</p>
+                    <p className="mt-1 text-lg font-black text-white">{hasAnswered ? selected : 'No guess submitted'}</p>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ) : (
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  {(Array.isArray(question?.options) ? question.options : []).map((opt, idx) => {
+                    const isSelected = selected === opt;
+                    const isCorrect = correctAnswer === opt;
+                    const baseClass = 'border-slate-700 bg-slate-900 text-slate-200';
 
-        <p className="mt-5 text-center text-sm font-semibold text-slate-300">
-          {hasAnswered ? (gotIt ? 'You answered correctly!' : 'Your selected answer was incorrect.') : 'You did not submit an answer this round.'}
-        </p>
-        <p className="mt-2 text-center font-mono text-sm tabular-nums">Score: <span className="font-black text-amber-300">{myScore}</span></p>
-        <p className="mt-2 text-center text-xs uppercase tracking-[0.24em] text-white/60">
-          {nextQuestionIn > 0 ? `Next question in ${nextQuestionIn}s` : 'Preparing next question'}
-        </p>
+                    let feedbackClass = baseClass;
+                    if (isSelected && hasAnswered) {
+                      feedbackClass = gotIt
+                        ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
+                        : 'border-rose-400 bg-rose-500/20 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.3)] opacity-70';
+                    } else if (isCorrect) {
+                      feedbackClass = 'border-emerald-500/60 bg-emerald-500/20 text-emerald-100 shadow-[0_0_25px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50';
+                    } else {
+                      feedbackClass = 'border-white/5 bg-slate-900/40 text-slate-400 opacity-50 backdrop-blur-md';
+                    }
+
+                    return (
+                      <div
+                        key={`${question?.q_id || 'q'}_${idx}_${opt}`}
+                        className={`w-full rounded-2xl border-2 px-5 py-4 text-left text-base md:text-lg font-black transition-all duration-300 ${feedbackClass}`}
+                      >
+                        {opt}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 shrink-0 text-center">
+              <p className="text-sm font-semibold text-slate-300">
+                {hasAnswered ? (gotIt ? 'You answered correctly!' : 'Your selected answer was incorrect.') : 'You did not submit an answer this round.'}
+              </p>
+              <p className="mt-2 font-mono text-sm tabular-nums">Score: <span className="font-black text-amber-300">{myScore}</span></p>
+              <p className="mt-2 text-xs uppercase tracking-[0.24em] text-white/60">
+                {nextQuestionIn > 0 ? `Next question in ${nextQuestionIn}s` : 'Preparing next question'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <aside className="hidden lg:flex w-80 lg:w-96 flex-col border-l border-white/10 bg-black/20 backdrop-blur-xl relative z-10">
+          <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300/80">Room Chat</p>
+            <p className="mt-1 text-[11px] text-slate-400">{roomDisplayName}</p>
+          </div>
+          <div className="min-h-0 flex-1 p-3">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                suppressFreeComposer={isTypeGuessQuestion}
+                showMeta={!isTypeGuessQuestion}
+                showModeBadge={!isTypeGuessQuestion}
+              />
+            </div>
+          </div>
+        </aside>
+
       </div>
     );
   }
@@ -850,223 +902,158 @@ export default function Player({ onBack }) {
   if (phase === 'question' && question) {
     const progress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
+    const answerControlMinHeight = 'clamp(68px, 10vh, 112px)';
     return (
-      <div className={`relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col p-4 pt-6 md:pb-6 animate-phase-in z-0 ${isTypeGuessQuestion ? 'pb-[50vh]' : 'pb-24'}`}>
+      <div className="flex h-screen w-screen overflow-hidden bg-background bg-slate-950 text-foreground text-white animate-phase-in">
         <AnimatedBackground />
-        <div className="relative z-10 mb-6 flex items-start justify-between gap-3">
-          <div>
-            {renderLeaveAndPing({ inline: true })}
-            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
-          </div>
-          <div
-            className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
-              timeLeft <= 2
-                ? 'border-red-500/60 bg-red-500/10'
-                : timeLeft <= 5
-                  ? 'border-amber-500/50 bg-amber-500/10'
-                  : 'border-slate-800 bg-slate-900'
-            }`}
-          >
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
-            <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timeLeft <= 2 ? 'text-red-300' : timerTone}`}>{timeLeft}s</p>
-          </div>
-        </div>
 
-        <div className="mb-5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-          <div
-            className={`h-full rounded-full transition-all duration-500 ${progress <= 25 ? 'bg-red-400' : progress <= 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-
-        <div className="mb-6 rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl px-6 py-8 shadow-2xl shadow-black/50">
-          <p className="text-2xl md:text-3xl font-black leading-tight text-white/95 drop-shadow-md">{question.prompt}</p>
-        </div>
-
-        {question.image && (
-          <div className="mb-8 flex justify-center">
-            <img src={resolveImageUrl(question.image)} alt="Question visual" className="max-h-56 md:max-h-72 rounded-2xl object-contain shadow-2xl shadow-black/60 ring-1 ring-white/10" />
-          </div>
-        )}
-
-        {isTypeGuessQuestion ? (
-          <div className="hidden rounded-3xl border border-white/10 bg-slate-950/40 backdrop-blur-xl p-6 md:block shadow-2xl shadow-black/50">
-            <p className="mb-4 text-xs font-black uppercase tracking-[0.25em] text-emerald-400">Type Your Guess</p>
-            {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
-              <div className="mb-4">
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">Your Attempts (Private)</p>
-                <div className="flex flex-wrap gap-2">
-                  {privateGuessHistory.map((entry, idx) => (
-                    <button
-                      key={`${entry}_${idx}`}
-                      type="button"
-                      onClick={() => handleReusePrivateGuess(entry)}
-                      title={entry}
-                      disabled={answeredCorrect === true || isSubmitting}
-                      className="max-w-full rounded-full border border-slate-600 bg-slate-900/60 px-3 py-1.5 text-xs text-slate-200 transition-all hover:border-emerald-500/60 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span className="block max-w-48 truncate">{entry}</span>
-                    </button>
-                  ))}
-                </div>
+        <div className="relative z-10 flex flex-1 flex-col">
+          <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                {renderLeaveAndPing({ inline: true })}
+                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
               </div>
-            )}
-            <div className="flex gap-3">
-              <input
-                ref={desktopGuessInputRef}
-                type="text"
-                value={guessText}
-                onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !answeredCorrect && !isSubmitting) handleGuessSubmit();
-                }}
-                placeholder="Type your guess..."
-                disabled={answeredCorrect === true || isSubmitting}
-                className={`flex-1 rounded-full border border-white/20 bg-slate-950/60 px-6 py-4 text-base font-semibold text-white placeholder:text-slate-400 shadow-inner focus:border-emerald-400/80 focus:ring-4 focus:ring-emerald-400/20 focus:outline-none transition-all ${(answeredCorrect === true || isSubmitting) ? 'opacity-40 cursor-not-allowed' : ''}`}
-              />
-              <button
-                onClick={handleGuessSubmit}
-                className="rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 px-8 py-4 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_20px_rgba(52,211,153,0.5)] active:translate-y-0 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:translate-y-0 disabled:shadow-none"
-                disabled={!guessText.trim() || answeredCorrect === true || isSubmitting}
-              >
-                {isSubmitting ? '...' : 'GUESS'}
-              </button>
-            </div>
-            {guessFeedback && <p className="mt-3 text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4 content-start">
-            {question.options.map((opt, idx) => (
-              <button
-                key={`${question?.q_id || 'q'}_${idx}_${opt}`}
-                onClick={() => handleAnswer(opt)}
-                disabled={isSubmitting}
-                className={`group relative overflow-hidden w-full rounded-3xl border-2 px-6 py-7 text-left text-xl md:text-2xl font-black transition-all duration-300 hover:-translate-y-1 active:translate-y-0 active:scale-[0.98] shadow-lg hover:shadow-2xl backdrop-blur-md ${
-                  idx % 4 === 0
-                    ? 'border-sky-500/30 bg-sky-500/10 text-sky-50 hover:border-sky-400 hover:bg-sky-500/20 hover:shadow-sky-500/20'
-                    : idx % 4 === 1
-                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-50 hover:border-violet-400 hover:bg-violet-500/20 hover:shadow-violet-500/20'
-                      : idx % 4 === 2
-                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-50 hover:border-rose-400 hover:bg-rose-500/20 hover:shadow-rose-500/20'
-                        : 'border-amber-500/30 bg-amber-500/10 text-amber-50 hover:border-amber-400 hover:bg-amber-500/20 hover:shadow-amber-500/20'
+              <div
+                className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
+                  timeLeft <= 2
+                    ? 'border-red-500/60 bg-red-500/10'
+                    : timeLeft <= 5
+                      ? 'border-amber-500/50 bg-amber-500/10'
+                      : 'border-slate-800 bg-slate-900'
                 }`}
               >
-                <div className="relative z-10">{opt}</div>
-              </button>
-            ))}
+                <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
+                <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timeLeft <= 2 ? 'text-red-300' : timerTone}`}>{timeLeft}s</p>
+              </div>
+            </div>
           </div>
-        )}
 
-        <div className="mt-5 hidden rounded-2xl border border-slate-800 bg-slate-900/70 p-3 md:block">
-          <Chat
-            socket={chatSocket}
-            roomPin={LAN_ROOM}
-            title="Room Chat"
-            initialMode={chatMode}
-            initialAllowed={chatAllowed}
-            suppressFreeComposer={isTypeGuessQuestion}
-            showMeta={!isTypeGuessQuestion}
-            showModeBadge={!isTypeGuessQuestion}
-          />
+          <div className="shrink-0 px-4 pb-2 pt-3 md:px-8">
+            <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${progress <= 25 ? 'bg-red-400' : progress <= 50 ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="flex flex-1 min-h-0 flex-col items-center justify-center p-4 md:p-8">
+              {question.image ? (
+                <>
+                  <p className="w-full max-w-5xl text-center text-2xl font-black leading-tight text-white/95 drop-shadow-md md:text-4xl">
+                    {question.prompt}
+                  </p>
+                  <div className="mt-4 flex min-h-0 w-full flex-1 items-center justify-center">
+                    <img
+                      src={resolveImageUrl(question.image)}
+                      alt="Question visual"
+                      className="max-h-full max-w-full rounded-lg object-contain shadow-xl"
+                    />
+                  </div>
+                </>
+              ) : (
+                <div className="flex flex-1 items-center justify-center p-8">
+                  <p className="text-center text-3xl font-bold text-white md:text-5xl lg:text-6xl">
+                    {question.prompt}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {isTypeGuessQuestion ? (
+              <div className="relative z-10 mx-auto grid w-full max-w-5xl shrink-0 grid-cols-1 gap-3 p-4 md:p-8">
+                {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
+                  <div className="flex gap-2 overflow-x-auto pb-1">
+                    {privateGuessHistory.map((entry, idx) => (
+                      <button
+                        key={`${entry}_${idx}`}
+                        type="button"
+                        onClick={() => handleReusePrivateGuess(entry)}
+                        title={entry}
+                        disabled={answeredCorrect === true || isSubmitting}
+                        className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 transition-all hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <span className="block max-w-36 truncate">{entry}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <div className="flex gap-2">
+                  <input
+                    ref={desktopGuessInputRef}
+                    type="text"
+                    value={guessText}
+                    onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !answeredCorrect && !isSubmitting) handleGuessSubmit();
+                    }}
+                    placeholder={answeredCorrect ? 'Answer submitted' : 'Type your guess here...'}
+                    disabled={answeredCorrect === true || isSubmitting}
+                    className={`flex-1 rounded-xl border border-white/20 bg-slate-950/60 px-5 py-3 text-base font-semibold text-white shadow-inner placeholder:text-slate-400 focus:border-emerald-400/80 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none transition-all ${(answeredCorrect === true || isSubmitting) ? 'cursor-not-allowed opacity-40' : ''}`}
+                    style={{ minHeight: answerControlMinHeight }}
+                  />
+                  <button
+                    onClick={handleGuessSubmit}
+                    className="rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 px-6 py-3 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                    style={{ minHeight: answerControlMinHeight }}
+                    disabled={!guessText.trim() || answeredCorrect === true || isSubmitting}
+                  >
+                    {isSubmitting ? '...' : 'GUESS'}
+                  </button>
+                </div>
+                {guessFeedback && <p className="text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
+              </div>
+            ) : (
+              <div className="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-4 p-4 md:p-8 shrink-0">
+                {question.options.map((opt, idx) => {
+                  const colorClass =
+                    idx % 4 === 0
+                      ? 'bg-gradient-to-br from-rose-500 to-pink-600 text-white'
+                      : idx % 4 === 1
+                        ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white'
+                        : idx % 4 === 2
+                          ? 'bg-gradient-to-br from-amber-400 to-orange-500 text-white'
+                          : 'bg-gradient-to-br from-emerald-400 to-teal-500 text-white';
+
+                  return (
+                    <button
+                      key={`${question?.q_id || 'q'}_${idx}_${opt}`}
+                      onClick={() => handleAnswer(opt)}
+                      disabled={isSubmitting}
+                      className={`rounded-xl px-6 py-4 text-left text-lg font-black transition-transform hover:scale-[1.02] active:scale-95 md:py-6 md:text-xl disabled:cursor-not-allowed disabled:opacity-60 ${colorClass}`}
+                      style={{ minHeight: answerControlMinHeight }}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
 
-        {isTypeGuessQuestion && (
-          <div
-            className="fixed inset-x-0 bottom-0 z-40 flex h-[40vh] flex-col border-t border-white/10 bg-black/60 backdrop-blur-2xl p-3 shadow-[0_-8px_30px_rgba(0,0,0,0.5)] md:hidden"
-            style={{ paddingBottom: 'max(0.6rem, env(safe-area-inset-bottom))' }}
-          >
-            <p className="mb-2 text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Guess + Chat</p>
-
-            <div className="min-h-0 flex-1 rounded-2xl border border-white/5 bg-white/5 p-1.5 overflow-hidden">
+        <aside className="hidden lg:flex w-80 lg:w-96 flex-col border-l border-white/10 bg-black/20 backdrop-blur-xl relative z-10">
+          <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300/80">Room Chat</p>
+            <p className="mt-1 text-[11px] text-slate-400">{roomDisplayName}</p>
+          </div>
+          <div className="min-h-0 flex-1 p-3">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
               <Chat
                 socket={chatSocket}
                 roomPin={LAN_ROOM}
                 title="Room Chat"
                 initialMode={chatMode}
                 initialAllowed={chatAllowed}
-                suppressFreeComposer
-                showMeta={false}
-                showModeBadge={false}
+                suppressFreeComposer={isTypeGuessQuestion}
+                showMeta={!isTypeGuessQuestion}
+                showModeBadge={!isTypeGuessQuestion}
               />
             </div>
-
-            <div className="mt-1.5 border-t border-white/10 pt-2">
-              <p className="mb-1.5 text-[11px] font-black uppercase tracking-[0.25em] text-white/50">Type Your Guess</p>
-              {chatMode !== 'FREE' && privateGuessHistory.length > 0 && (
-                <div className="mb-1.5 flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
-                  {privateGuessHistory.map((entry, idx) => (
-                    <button
-                      key={`${entry}_${idx}`}
-                      type="button"
-                      onClick={() => handleReusePrivateGuess(entry)}
-                      title={entry}
-                      disabled={answeredCorrect === true || isSubmitting}
-                      className="shrink-0 rounded-full border border-white/15 bg-white/5 px-3 py-1.5 text-[11px] font-medium text-white/80 transition-all hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      <span className="block max-w-36 truncate">{entry}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-              {guessFeedback && <p className="mb-1.5 text-xs font-semibold text-emerald-300">{guessFeedback}</p>}
-              <div className="flex gap-2">
-                <input
-                  ref={mobileGuessInputRef}
-                  type="text"
-                  value={guessText}
-                  onChange={(e) => setGuessText(e.target.value.slice(0, 180))}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !answeredCorrect && !isSubmitting) handleGuessSubmit();
-                  }}
-                  placeholder={answeredCorrect ? 'Answer submitted' : 'Type your guess here...'}
-                  disabled={answeredCorrect === true || isSubmitting}
-                  className={`min-h-14 flex-1 rounded-full border border-white/20 bg-slate-950/60 px-5 py-3 text-sm font-semibold text-white shadow-inner placeholder:text-slate-400 focus:border-emerald-400/80 focus:ring-2 focus:ring-emerald-400/30 focus:outline-none transition-all ${(answeredCorrect === true || isSubmitting) ? 'cursor-not-allowed opacity-40' : ''}`}
-                />
-                <button
-                  onClick={handleGuessSubmit}
-                  className="min-h-14 rounded-full bg-gradient-to-r from-emerald-400 to-teal-400 px-6 py-3 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_0_15px_rgba(52,211,153,0.4)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
-                  disabled={!guessText.trim() || answeredCorrect === true || isSubmitting}
-                >
-                  {isSubmitting ? '...' : 'GUESS'}
-                </button>
-              </div>
-            </div>
           </div>
-        )}
-
-        {!isTypeGuessQuestion && (
-          <button
-            onClick={() => setChatDrawerOpen(true)}
-            className="fixed bottom-4 right-4 z-30 rounded-full border-2 border-emerald-400/40 bg-black/50 backdrop-blur-xl px-6 py-3.5 text-sm font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_20px_rgba(52,211,153,0.2)] transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_0_30px_rgba(52,211,153,0.3)] active:translate-y-0 active:scale-95 md:hidden"
-            style={{ marginBottom: 'max(0px, env(safe-area-inset-bottom))' }}
-          >
-            CHAT
-          </button>
-        )}
-
-        {!isTypeGuessQuestion && chatDrawerOpen && (
-          <>
-            <button
-              aria-label="Close chat drawer"
-              onClick={() => setChatDrawerOpen(false)}
-              className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm md:hidden"
-            />
-            <div className="fixed inset-x-0 bottom-0 z-50 flex h-[62vh] max-h-140 flex-col rounded-t-[2rem] border-t border-white/10 bg-black/60 backdrop-blur-2xl p-4 shadow-[0_-8px_40px_rgba(0,0,0,0.6)] md:hidden">
-              <div className="mb-3 flex items-center justify-between px-1">
-                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Room Chat</p>
-                <button
-                  onClick={() => setChatDrawerOpen(false)}
-                  className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-black text-white/80 transition-all hover:bg-white/10"
-                >
-                  Close
-                </button>
-              </div>
-              <div className="min-h-0 flex-1">
-                <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Room Chat" initialMode={chatMode} initialAllowed={chatAllowed} />
-              </div>
-            </div>
-          </>
-        )}
+        </aside>
       </div>
     );
   }
