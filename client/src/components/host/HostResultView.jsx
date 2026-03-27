@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Chat from '../Chat';
 import ConfirmActionModal from '../ConfirmActionModal';
+import BgmControl from '../BgmControl';
 
 export default function HostResultView({
   resultData,
@@ -45,7 +46,10 @@ export default function HostResultView({
         <main className="flex min-h-0 flex-col">
           <div className="mb-6 flex items-center justify-between">
             <p className="text-[11px] uppercase tracking-[0.24em] text-slate-500">Question {qIndex + 1} / {qTotal}</p>
-            <span className={`text-xs font-mono ${connected ? 'text-emerald-400' : 'text-rose-400'}`}>{connected ? 'live' : 'offline'}</span>
+            <div className="flex items-center gap-3">
+              <BgmControl />
+              <span className={`text-xs font-mono ${connected ? 'text-emerald-400' : 'text-rose-400'}`}>{connected ? 'live' : 'offline'}</span>
+            </div>
           </div>
 
           <div className="mb-7 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 px-5 py-5">

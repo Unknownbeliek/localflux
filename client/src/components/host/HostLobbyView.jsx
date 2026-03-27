@@ -4,6 +4,7 @@ import PingIndicator from '../PingIndicator';
 import { QRCodeSVG } from 'qrcode.react';
 import AnimatedBackground from '../AnimatedBackground';
 import ConfirmActionModal from '../ConfirmActionModal';
+import BgmControl from '../BgmControl';
 
 function normalizeAvatarObject(input) {
   if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
@@ -173,6 +174,7 @@ export default function HostLobbyView({
             <div className="ml-4 font-outfit text-xs font-semibold tracking-wide text-slate-500">Host Dashboard</div>
           </div>
           <div className="flex items-center gap-3">
+            <BgmControl />
             <PingIndicator socket={hostSocket} />
             <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-3.5 py-2">
               <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />

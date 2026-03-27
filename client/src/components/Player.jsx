@@ -6,6 +6,8 @@ import PingIndicator from './PingIndicator';
 import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
 import { resolveQuestionTiming } from '../utils/questionTiming';
 import ConfirmActionModal from './ConfirmActionModal';
+import BgmControl from './BgmControl';
+import { useBgm } from '../context/BgmProvider';
 import { triggerHaptic } from '../utils/haptics';
 import { playGameSfx } from '../utils/gameFeel';
 
@@ -131,6 +133,7 @@ function displayRoomName(name) {
 }
 
 export default function Player({ onBack }) {
+  const { setMusicPhase } = useBgm();
   const savedPlayerState = readPlayerState();
   const savedStateSessionId = String(savedPlayerState?.playerSessionId || '').trim();
   const playerSessionIdRef = useRef(getOrCreatePlayerSessionId());
@@ -647,6 +650,21 @@ export default function Player({ onBack }) {
   }, [phase, nextQuestionIn]);
 
   useEffect(() => {
+    const phaseToMusic = {
+      joining: 'lobby',
+      waiting: 'lobby',
+      starting: 'gameplay',
+      question: 'gameplay',
+      answered: 'gameplay',
+      result: 'gameplay',
+      ending: 'podium',
+      gameover: 'podium',
+    };
+
+    setMusicPhase(phaseToMusic[phase] || 'lobby');
+  }, [phase, setMusicPhase]);
+
+  useEffect(() => {
     if (streakCount >= 3) return;
     setShowFireIgnite(false);
     if (fireIgniteTimerRef.current) {
@@ -877,11 +895,10 @@ export default function Player({ onBack }) {
     );
   };
 
-  const renderLeaveAndPing = ({ inline = false, showLeaveButton = false } = {}) => {
-    if (inline) {
-      return (
-        <div className="mb-2 flex items-center gap-2">
-          <PingIndicator socket={chatSocket} />
+  const renderTopBar = ({ showLeaveButton = false } = {}) => {
+    return (
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
           {showLeaveButton && (
             <button
               onClick={openLeaveGameModal}
@@ -890,22 +907,10 @@ export default function Player({ onBack }) {
               LEAVE GAME
             </button>
           )}
+          <PingIndicator socket={chatSocket} />
         </div>
-      );
-    }
-
-    return (
-      <>
-        <PingIndicator socket={chatSocket} className="absolute top-5 right-5" />
-        {showLeaveButton && (
-          <button
-            onClick={openLeaveGameModal}
-            className="absolute top-5 right-32 z-20 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-black tracking-[0.12em] text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
-          >
-            LEAVE GAME
-          </button>
-        )}
-      </>
+        <BgmControl />
+      </div>
     );
   };
 
@@ -918,7 +923,7 @@ export default function Player({ onBack }) {
         <AnimatedBackground />
         <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4 md:p-8">
           <div className="relative w-full max-w-3xl">
-            {renderLeaveAndPing()}
+            {renderTopBar({ showLeaveButton: true })}
             <LeaderboardResultsCard
               finalScores={finalScores}
               highlightPlayerId={selfPlayerId}
@@ -994,9 +999,9 @@ export default function Player({ onBack }) {
 
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            {renderTopBar({ showLeaveButton: true })}
             <div className="flex items-start justify-between gap-3">
               <div>
-                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <div className="flex items-center">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
                   {renderStreakBadge()}
@@ -1115,9 +1120,9 @@ export default function Player({ onBack }) {
         <AnimatedBackground />
 
         <div className="relative z-10 flex w-full flex-1 flex-col p-4 md:p-8">
+          {renderTopBar({ showLeaveButton: true })}
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <div className="flex items-center">
                   <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
                   {renderStreakBadge()}
@@ -1257,9 +1262,9 @@ export default function Player({ onBack }) {
 
         <div className="relative z-10 flex flex-1 flex-col">
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            {renderTopBar({ showLeaveButton: true })}
             <div className="flex items-start justify-between gap-3">
               <div>
-                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <div className="flex items-center">
                   <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
                   {renderStreakBadge()}
@@ -1428,8 +1433,8 @@ export default function Player({ onBack }) {
     return (
       <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center gap-4 p-5 animate-phase-in z-0">
         <AnimatedBackground />
-        <div className="relative z-10 w-full flex flex-col items-center">
-          {renderLeaveAndPing({ showLeaveButton: true })}
+        <div className="relative z-10 w-full max-w-5xl">
+          {renderTopBar({ showLeaveButton: true })}
         </div>
         <p className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-md">{roomDisplayName}</p>
         <p className="text-white/50 text-sm font-medium">

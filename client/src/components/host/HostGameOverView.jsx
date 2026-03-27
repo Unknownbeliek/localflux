@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import LeaderboardResultsCard from '../leaderboard/LeaderboardResultsCard';
 import { playGameSfx } from '../../utils/gameFeel';
 import { triggerHaptic } from '../../utils/haptics';
+import BgmControl from '../BgmControl';
 
 const CELEBRATION_FX_KEY = 'lf_celebration_fx_enabled';
 
@@ -102,6 +103,8 @@ export default function HostGameOverView({
 
       {/* Button Group */}
       <div className="flex flex-wrap justify-center gap-4 mt-auto">
+        <BgmControl />
+
         <button
           onClick={toggleCelebrationFx}
           className="bg-transparent border border-white/20 hover:bg-white/10 text-white px-6 py-3 rounded-lg font-bold transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
