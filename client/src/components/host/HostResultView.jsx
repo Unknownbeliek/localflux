@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Chat from '../Chat';
+import ConfirmActionModal from '../ConfirmActionModal';
 
 export default function HostResultView({
   resultData,
@@ -14,6 +15,12 @@ export default function HostResultView({
   handleMute,
   mutedSet,
   onHostAnnouncement,
+  onEndGameRequest,
+  isEndGameModalOpen,
+  endGameConfirmChecked,
+  setEndGameConfirmChecked,
+  onEndGameCancel,
+  onEndGameConfirm,
 }) {
   const [announcementText, setAnnouncementText] = useState('');
   const [announcementFeedback, setAnnouncementFeedback] = useState('');
@@ -70,7 +77,15 @@ export default function HostResultView({
 
         <aside className="flex min-h-0 flex-col gap-4">
           <section className="rounded-3xl border border-white/10 bg-slate-900/70 p-4">
-            <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Host Announcement</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Host Announcement</p>
+              <button
+                onClick={onEndGameRequest}
+                className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-black tracking-[0.12em] text-rose-200 transition hover:bg-rose-500/20"
+              >
+                END GAME
+              </button>
+            </div>
             <div className="mt-2 flex gap-2">
               <input
                 value={announcementText}
@@ -108,6 +123,18 @@ export default function HostResultView({
           </section>
         </aside>
       </div>
+
+      <ConfirmActionModal
+        open={isEndGameModalOpen}
+        title="End Game Session"
+        message="Ending here will close the room before the next transition for all players."
+        checkboxLabel="I understand all players will be removed from this session."
+        checked={endGameConfirmChecked}
+        onCheckedChange={setEndGameConfirmChecked}
+        onCancel={onEndGameCancel}
+        onConfirm={onEndGameConfirm}
+        confirmLabel="End Session"
+      />
     </div>
   );
 }

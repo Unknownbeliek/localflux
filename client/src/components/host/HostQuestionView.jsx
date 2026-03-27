@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Chat from '../Chat';
 import AnimatedBackground from '../AnimatedBackground';
+import ConfirmActionModal from '../ConfirmActionModal';
 
 function resolveImageUrl(image) {
   if (!image) return null;
@@ -36,6 +37,12 @@ export default function HostQuestionView({
   answerMode,
   answerModeLabels,
   onHostAnnouncement,
+  onEndGameRequest,
+  isEndGameModalOpen,
+  endGameConfirmChecked,
+  setEndGameConfirmChecked,
+  onEndGameCancel,
+  onEndGameConfirm,
 }) {
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const timerProgress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
@@ -127,7 +134,15 @@ export default function HostQuestionView({
                 <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">Chat Mode</p>
                 <p className="text-xs text-slate-500 mt-1">{roomGameMode === 'guided' ? 'Guided Mode' : 'Open Mode'}</p>
               </div>
-              <span className="rounded-full bg-emerald-500/20 border border-emerald-400/50 px-3 py-1 text-[11px] font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.3)]">LIVE</span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full bg-emerald-500/20 border border-emerald-400/50 px-3 py-1 text-[11px] font-black tracking-[0.2em] text-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.3)]">LIVE</span>
+                <button
+                  onClick={onEndGameRequest}
+                  className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-black tracking-[0.12em] text-rose-200 transition hover:bg-rose-500/20"
+                >
+                  END GAME
+                </button>
+              </div>
             </div>
 
             <div className="grid grid-cols-3 gap-3">
@@ -212,6 +227,18 @@ export default function HostQuestionView({
           </section>
         </aside>
       </div>
+
+      <ConfirmActionModal
+        open={isEndGameModalOpen}
+        title="End Live Question"
+        message="Ending now will stop this question and close the room for all players."
+        checkboxLabel="I understand everyone will be disconnected from this live room."
+        checked={endGameConfirmChecked}
+        onCheckedChange={setEndGameConfirmChecked}
+        onCancel={onEndGameCancel}
+        onConfirm={onEndGameConfirm}
+        confirmLabel="End Room"
+      />
     </div>
   );
 }

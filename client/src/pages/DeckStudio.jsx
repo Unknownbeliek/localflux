@@ -3,6 +3,7 @@ import { useDeckStudioStore } from '../deckStudio/store';
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog';
 import CloudDeckCard from '../components/CloudDeckCard';
 import AnimatedBackground from '../components/AnimatedBackground';
+import ConfirmActionModal from '../components/ConfirmActionModal';
 import { getBackendUrl } from '../backendUrl';
 import { compressImageToWebP } from '../utils/imageCompressor';
 
@@ -63,6 +64,8 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   const [isImageDropActive, setIsImageDropActive] = useState(false);
   const [showSlideScrollUpHint, setShowSlideScrollUpHint] = useState(false);
   const [showSlideScrollDownHint, setShowSlideScrollDownHint] = useState(false);
+  const [isDeleteQuestionModalOpen, setIsDeleteQuestionModalOpen] = useState(false);
+  const [deleteQuestionConfirmChecked, setDeleteQuestionConfirmChecked] = useState(false);
   const promptTextareaRef = useRef(null);
   const slideListRef = useRef(null);
   const [hostName] = useState(() =>
@@ -248,6 +251,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   );
 
   const progressPct = deck.slides.length > 0 ? Math.round((validCount / deck.slides.length) * 100) : 0;
+  const activeQuestionNumber = activeIndex >= 0 ? activeIndex + 1 : 0;
 
   const onImportCsv = () => {
     if (!csvText.trim()) return;
@@ -275,8 +279,14 @@ export default function DeckStudio({ onBack, onHostDeck }) {
 
   const onDeleteQuestion = () => {
     if (!activeSlide || deck.slides.length <= 1) return;
-    const ok = window.confirm('Delete this question? You can still Undo.');
-    if (!ok) return;
+    setDeleteQuestionConfirmChecked(false);
+    setIsDeleteQuestionModalOpen(true);
+  };
+
+  const confirmDeleteQuestion = () => {
+    if (!activeSlide || deck.slides.length <= 1 || !deleteQuestionConfirmChecked) return;
+    setIsDeleteQuestionModalOpen(false);
+    setDeleteQuestionConfirmChecked(false);
     setActionMessage('');
     removeSlide(activeSlide.id);
   };
@@ -731,6 +741,21 @@ export default function DeckStudio({ onBack, onHostDeck }) {
           )}
         </div>
       </aside>
+
+      <ConfirmActionModal
+        open={isDeleteQuestionModalOpen}
+        title="Delete Question"
+        message={`Question ${activeQuestionNumber || '?'} will be removed from this deck draft.`}
+        checkboxLabel="I understand this question will be deleted from the current draft."
+        checked={deleteQuestionConfirmChecked}
+        onCheckedChange={setDeleteQuestionConfirmChecked}
+        onCancel={() => {
+          setIsDeleteQuestionModalOpen(false);
+          setDeleteQuestionConfirmChecked(false);
+        }}
+        onConfirm={confirmDeleteQuestion}
+        confirmLabel="Delete Question"
+      />
     </div>
   );
 }

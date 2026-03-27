@@ -202,6 +202,13 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [autoAdvanceIn, setAutoAdvanceIn] = useState(0);
   const [isStartConfirmArmed, setIsStartConfirmArmed] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
+  const [isEndGameModalOpen, setIsEndGameModalOpen] = useState(false);
+  const [endGameConfirmChecked, setEndGameConfirmChecked] = useState(false);
+  const [isLeaveHostModalOpen, setIsLeaveHostModalOpen] = useState(false);
+  const [leaveHostConfirmChecked, setLeaveHostConfirmChecked] = useState(false);
+  const [draftDeleteTargetId, setDraftDeleteTargetId] = useState('');
+  const [isDeleteDraftModalOpen, setIsDeleteDraftModalOpen] = useState(false);
+  const [deleteDraftConfirmChecked, setDeleteDraftConfirmChecked] = useState(false);
   const startConfirmTimerRef = useRef(null);
   const tokenRefreshInFlightRef = useRef(false);
   const profilePulseTimersRef = useRef(new Map());
@@ -894,10 +901,8 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
   };
 
-  const handleDeleteStudioDraft = async (draftId) => {
+  const executeDeleteStudioDraft = async (draftId) => {
     if (!draftId) return;
-    const ok = window.confirm('Delete this saved studio deck?');
-    if (!ok) return;
 
     try {
       await deckStudioDB.drafts.delete(draftId);
@@ -914,6 +919,29 @@ export default function Host({ onBack, studioQuestions = null }) {
     } catch (err) {
       setManageNotice(err?.message || 'Failed to delete draft.');
     }
+  };
+
+  const handleDeleteStudioDraft = async (draftId) => {
+    if (!draftId) return;
+    setDraftDeleteTargetId(draftId);
+    setDeleteDraftConfirmChecked(false);
+    setIsDeleteDraftModalOpen(true);
+  };
+
+  const deleteDraftTargetTitle = useMemo(() => {
+    if (!draftDeleteTargetId) return 'this draft';
+    const target = studioDecks.find((entry) => entry.id === draftDeleteTargetId);
+    const title = String(target?.title || '').trim();
+    return title || 'this draft';
+  }, [draftDeleteTargetId, studioDecks]);
+
+  const handleDeleteStudioDraftConfirm = async () => {
+    if (!deleteDraftConfirmChecked || !draftDeleteTargetId) return;
+    const target = draftDeleteTargetId;
+    setIsDeleteDraftModalOpen(false);
+    setDeleteDraftConfirmChecked(false);
+    setDraftDeleteTargetId('');
+    await executeDeleteStudioDraft(target);
   };
 
   const startRenameStudioDraft = (draft) => {
@@ -1106,17 +1134,74 @@ export default function Host({ onBack, studioQuestions = null }) {
         : 'text-emerald-300';
 
   const handleBack = () => {
-    const hasActiveRoom = Boolean(roomId) || phase !== 'setup';
-    if (hasActiveRoom) {
-      const confirmed = window.confirm('Leave host view? This can disrupt players in the room.');
-      if (!confirmed) return;
-
-      if (socketRef.current?.connected && hostToken) {
-        socketRef.current.emit('host:close_room', { hostToken, hostSessionId: hostSessionIdRef.current }, () => {});
-      }
-    }
     clearHostState();
     onBack?.();
+  };
+
+  const handleBackRequest = () => {
+    const hasActiveRoom = Boolean(roomId) || phase !== 'setup';
+    if (hasActiveRoom) {
+      setIsLeaveHostModalOpen(true);
+      setLeaveHostConfirmChecked(false);
+      return;
+    }
+
+    handleBack();
+  };
+
+  const closeLeaveHostModal = () => {
+    setIsLeaveHostModalOpen(false);
+    setLeaveHostConfirmChecked(false);
+  };
+
+  const handleLeaveHostConfirm = () => {
+    if (!leaveHostConfirmChecked) return;
+
+    if (socketRef.current?.connected && hostToken) {
+      socketRef.current.emit('host:close_room', { hostToken, hostSessionId: hostSessionIdRef.current }, () => {
+        closeLeaveHostModal();
+        handleBack();
+      });
+      return;
+    }
+
+    closeLeaveHostModal();
+    handleBack();
+  };
+
+  const closeEndGameModal = () => {
+    setIsEndGameModalOpen(false);
+    setEndGameConfirmChecked(false);
+  };
+
+  const handleEndGameRequest = () => {
+    if (!roomId) return;
+    setIsEndGameModalOpen(true);
+    setEndGameConfirmChecked(false);
+  };
+
+  const handleEndGameConfirm = () => {
+    const hasActiveRoom = Boolean(roomId);
+    if (!hasActiveRoom) return;
+
+    if (!endGameConfirmChecked) {
+      setError('End game cancelled. Please tick the confirmation box.');
+      return;
+    }
+
+    if (!socketRef.current?.connected || !hostToken) {
+      setError('Host connection/token unavailable.');
+      return;
+    }
+
+    socketRef.current.emit('host:close_room', { hostToken, hostSessionId: hostSessionIdRef.current }, (ack) => {
+      if (!ack?.ok) {
+        setError(ack?.reason || 'Failed to end room.');
+        return;
+      }
+      closeEndGameModal();
+      handleHostNewRoom();
+    });
   };
 
   const handleHostNewRoom = () => {
@@ -1258,7 +1343,7 @@ export default function Host({ onBack, studioQuestions = null }) {
             Another host session already controls the active room. Use the original host device/session to manage this game.
           </p>
           <button
-            onClick={handleBack}
+            onClick={handleBackRequest}
             className="mt-6 w-full rounded-2xl border border-slate-700 bg-slate-900 py-4 text-lg font-black text-white transition-all duration-150 hover:-translate-y-0.5 hover:border-rose-500/50 hover:bg-slate-800 active:translate-y-0 active:scale-95"
           >
             BACK
@@ -1283,6 +1368,12 @@ export default function Host({ onBack, studioQuestions = null }) {
         handleMute={handleMute}
         mutedSet={mutedSet}
         onHostAnnouncement={sendHostAnnouncement}
+        onEndGameRequest={handleEndGameRequest}
+        isEndGameModalOpen={isEndGameModalOpen}
+        endGameConfirmChecked={endGameConfirmChecked}
+        setEndGameConfirmChecked={setEndGameConfirmChecked}
+        onEndGameCancel={closeEndGameModal}
+        onEndGameConfirm={handleEndGameConfirm}
       />
     );
   }
@@ -1314,6 +1405,12 @@ export default function Host({ onBack, studioQuestions = null }) {
         answerMode={answerMode}
         answerModeLabels={answerModeLabels}
         onHostAnnouncement={sendHostAnnouncement}
+        onEndGameRequest={handleEndGameRequest}
+        isEndGameModalOpen={isEndGameModalOpen}
+        endGameConfirmChecked={endGameConfirmChecked}
+        setEndGameConfirmChecked={setEndGameConfirmChecked}
+        onEndGameCancel={closeEndGameModal}
+        onEndGameConfirm={handleEndGameConfirm}
       />
     );
   }
@@ -1321,7 +1418,28 @@ export default function Host({ onBack, studioQuestions = null }) {
   if (phase === 'lobby') {
     return (
       <HostLobbyView
-        handleBack={handleBack}
+        handleBack={handleBackRequest}
+        onEndGameRequest={handleEndGameRequest}
+        isEndGameModalOpen={isEndGameModalOpen}
+        endGameConfirmChecked={endGameConfirmChecked}
+        setEndGameConfirmChecked={setEndGameConfirmChecked}
+        onEndGameCancel={closeEndGameModal}
+        onEndGameConfirm={handleEndGameConfirm}
+        isLeaveHostModalOpen={isLeaveHostModalOpen}
+        leaveHostConfirmChecked={leaveHostConfirmChecked}
+        setLeaveHostConfirmChecked={setLeaveHostConfirmChecked}
+        onLeaveHostCancel={closeLeaveHostModal}
+        onLeaveHostConfirm={handleLeaveHostConfirm}
+        isDeleteDraftModalOpen={isDeleteDraftModalOpen}
+        deleteDraftConfirmChecked={deleteDraftConfirmChecked}
+        setDeleteDraftConfirmChecked={setDeleteDraftConfirmChecked}
+        deleteDraftTargetTitle={deleteDraftTargetTitle}
+        onDeleteDraftCancel={() => {
+          setIsDeleteDraftModalOpen(false);
+          setDeleteDraftConfirmChecked(false);
+          setDraftDeleteTargetId('');
+        }}
+        onDeleteDraftConfirm={handleDeleteStudioDraftConfirm}
         hostSocket={hostSocket}
         joinUrl={joinUrl}
         copied={copied}
@@ -1393,7 +1511,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   return (
     <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
-      <button onClick={handleBack} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm transition-colors">back</button>
+      <button onClick={handleBackRequest} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm transition-colors">back</button>
       <div className="z-10 w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-black/30 animate-phase-in">
         <h1 className="mb-8 text-5xl font-black tracking-tight">New Room</h1>
         <div className="w-full">
@@ -1423,6 +1541,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         </div>
         {resumeNotice && <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{resumeNotice}</p>}
         </div>
+
       </div>
     </div>
   );

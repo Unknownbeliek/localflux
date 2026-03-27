@@ -1143,6 +1143,36 @@ function registerHandlers(socket, io, questions, tokenManager) {
     return callback?.({ ok: true });
   });
 
+  // player intentionally leaves the current game room
+  socket.on('player:leave', (callback) => {
+    const room = getRoom();
+    if (!room) {
+      return callback?.({ ok: true });
+    }
+
+    const wasPlayerRemoved = removePlayer(socket.id);
+    if (wasPlayerRemoved) {
+      if (room.answersIn && Object.prototype.hasOwnProperty.call(room.answersIn, socket.id)) {
+        delete room.answersIn[socket.id];
+      }
+
+      const playerSessionId = String(socket.playerSessionId || '').trim();
+      if (playerSessionId) {
+        pendingPlayerReconnect.delete(playerSessionId);
+        const existingTimer = playerDisconnectTimers.get(playerSessionId);
+        if (existingTimer) {
+          clearTimeout(existingTimer);
+          playerDisconnectTimers.delete(playerSessionId);
+        }
+      }
+
+      socket.leave(LAN_ROOM_ID);
+      io.to(LAN_ROOM_ID).emit('player_joined', { players: room.players });
+    }
+
+    return callback?.({ ok: true });
+  });
+
   // G��G�� disconnect G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('disconnect', () => {
     console.log(`[-] Disconnected: ${socket.id}`);

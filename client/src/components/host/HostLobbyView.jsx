@@ -3,6 +3,7 @@ import Chat from '../Chat';
 import PingIndicator from '../PingIndicator';
 import { QRCodeSVG } from 'qrcode.react';
 import AnimatedBackground from '../AnimatedBackground';
+import ConfirmActionModal from '../ConfirmActionModal';
 
 function normalizeAvatarObject(input) {
   if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
@@ -19,6 +20,23 @@ function presetPath(value) {
 
 export default function HostLobbyView({
   handleBack,
+  onEndGameRequest,
+  isEndGameModalOpen,
+  endGameConfirmChecked,
+  setEndGameConfirmChecked,
+  onEndGameCancel,
+  onEndGameConfirm,
+  isLeaveHostModalOpen,
+  leaveHostConfirmChecked,
+  setLeaveHostConfirmChecked,
+  onLeaveHostCancel,
+  onLeaveHostConfirm,
+  isDeleteDraftModalOpen,
+  deleteDraftConfirmChecked,
+  setDeleteDraftConfirmChecked,
+  deleteDraftTargetTitle,
+  onDeleteDraftCancel,
+  onDeleteDraftConfirm,
   hostSocket,
   joinUrl,
   copied,
@@ -142,6 +160,12 @@ export default function HostLobbyView({
         <header className="mx-auto flex max-w-7xl items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <button onClick={handleBack} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all hover:bg-slate-800/70 hover:text-white">← Back</button>
+            <button
+              onClick={onEndGameRequest}
+              className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm font-black tracking-wide text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
+            >
+              END GAME
+            </button>
             <div className="flex items-center gap-2.5">
               <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500 to-emerald-400 shadow-md shadow-violet-500/20" />
               <div className="text-xl font-black tracking-tight text-gradient-brand font-outfit">LocalFlux</div>
@@ -569,6 +593,42 @@ export default function HostLobbyView({
           </div>
         </div>
       )}
+
+      <ConfirmActionModal
+        open={isEndGameModalOpen}
+        title="End Active Room"
+        message="This will immediately end the live game and disconnect every player in this room."
+        checkboxLabel="I understand all players will be removed from this active room."
+        checked={endGameConfirmChecked}
+        onCheckedChange={setEndGameConfirmChecked}
+        onCancel={onEndGameCancel}
+        onConfirm={onEndGameConfirm}
+        confirmLabel="End Room"
+      />
+
+      <ConfirmActionModal
+        open={isLeaveHostModalOpen}
+        title="Exit Host Dashboard"
+        message="Exiting host mode now will close the current room for all connected players."
+        checkboxLabel="I understand leaving host mode will end the room for everyone."
+        checked={leaveHostConfirmChecked}
+        onCheckedChange={setLeaveHostConfirmChecked}
+        onCancel={onLeaveHostCancel}
+        onConfirm={onLeaveHostConfirm}
+        confirmLabel="Exit Host"
+      />
+
+      <ConfirmActionModal
+        open={isDeleteDraftModalOpen}
+        title="Delete Studio Draft"
+        message={`\"${deleteDraftTargetTitle || 'this draft'}\" will be removed from your local Studio library.`}
+        checkboxLabel="I understand this draft delete cannot be undone."
+        checked={deleteDraftConfirmChecked}
+        onCheckedChange={setDeleteDraftConfirmChecked}
+        onCancel={onDeleteDraftCancel}
+        onConfirm={onDeleteDraftConfirm}
+        confirmLabel="Delete Draft"
+      />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { createGameSocket } from '../backendUrl';
 import PingIndicator from './PingIndicator';
 import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
 import { resolveQuestionTiming } from '../utils/questionTiming';
+import ConfirmActionModal from './ConfirmActionModal';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
@@ -165,6 +166,9 @@ export default function Player({ onBack }) {
   const [nextQuestionIn, setNextQuestionIn] = useState(0);
   const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [joinRetryIn, setJoinRetryIn] = useState(0);
+  const [awaitingRoomCreation, setAwaitingRoomCreation] = useState(false);
+  const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
+  const [leaveConfirmChecked, setLeaveConfirmChecked] = useState(false);
   const roomDisplayName = displayRoomName(roomName);
   const latestNameRef = useRef(name);
   const startSplashUntilRef = useRef(0);
@@ -202,6 +206,7 @@ export default function Player({ onBack }) {
   const applyResumePayload = (res) => {
     setError('');
     setJoinRetryIn(0);
+    setAwaitingRoomCreation(false);
     setRoomName(res.roomName || 'LocalFlux Game');
     if (res.chatMode) setChatMode(res.chatMode);
     if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
@@ -250,7 +255,41 @@ export default function Player({ onBack }) {
     setPhase('waiting');
   };
 
-  const attemptJoinRoom = () => {
+  const isRoomUnavailableError = (message) => {
+    const text = String(message || '').toLowerCase();
+    return (
+      text.includes('room is not created yet') ||
+      text.includes('wait for the host to create a room') ||
+      text.includes('wait for the host to create a new room') ||
+      text.includes('room closed because the host disconnected')
+    );
+  };
+
+  const processJoinSuccess = (res) => {
+    setError('');
+    setJoinRetryIn(0);
+    setAwaitingRoomCreation(false);
+    shouldTryResumeRef.current = true;
+    if (typeof res.playerName === 'string' && res.playerName.trim()) {
+      setName(res.playerName.trim());
+    }
+    if (res.avatarObject && typeof res.avatarObject === 'object') {
+      setAvatarObject(normalizeAvatarObject(res.avatarObject));
+    }
+    setRoomName(res.roomName || 'LocalFlux Game');
+    if (res.chatMode) setChatMode(res.chatMode);
+    if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
+    if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
+    setIsLobbyDeckReady(Boolean(res.deckSelected));
+    setMyScore(Number(res.myScore) || 0);
+    setPhase('waiting');
+  };
+
+  const emitJoin = ({
+    onSuccess,
+    onUnavailable,
+    onFailure,
+  } = {}) => {
     const socket = socketRef.current;
     if (!socket?.connected) {
       setError('Connecting to server...');
@@ -265,28 +304,30 @@ export default function Player({ onBack }) {
       },
       (res) => {
         if (!res?.success) {
-          setError(res?.error || 'Could not join game.');
+          if (isRoomUnavailableError(res?.error)) {
+            onUnavailable?.(res);
+            return;
+          }
+          onFailure?.(res);
           return;
         }
 
-        setError('');
-        setJoinRetryIn(0);
-        shouldTryResumeRef.current = true;
-        if (typeof res.playerName === 'string' && res.playerName.trim()) {
-          setName(res.playerName.trim());
-        }
-        if (res.avatarObject && typeof res.avatarObject === 'object') {
-          setAvatarObject(normalizeAvatarObject(res.avatarObject));
-        }
-        setRoomName(res.roomName || 'LocalFlux Game');
-        if (res.chatMode) setChatMode(res.chatMode);
-        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
-        if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
-        setIsLobbyDeckReady(Boolean(res.deckSelected));
-        setMyScore(Number(res.myScore) || 0);
-        setPhase('waiting');
+        onSuccess?.(res);
       }
     );
+  };
+
+  const attemptJoinRoom = () => {
+    const socket = socketRef.current;
+    if (!socket?.connected) {
+      setError('Connecting to server...');
+      return;
+    }
+
+    emitJoin({
+      onSuccess: processJoinSuccess,
+      onFailure: (res) => setError(res?.error || 'Could not join game.'),
+    });
   };
 
   const attemptResumeRoom = () => {
@@ -351,6 +392,7 @@ export default function Player({ onBack }) {
     socket.on('disconnect', () => {
       setConnected(false);
       setJoinRetryIn(0);
+      setAwaitingRoomCreation(false);
     });
     socket.on('player:profileUpdated', ({ player }) => {
       if (!player || player.id !== socket.id) return;
@@ -485,6 +527,48 @@ export default function Player({ onBack }) {
   }, [phase, connected]);
 
   useEffect(() => {
+    if (!awaitingRoomCreation || !connected) return undefined;
+
+    let remaining = 3;
+    const kickoffTimer = window.setTimeout(() => {
+      emitJoin({
+        onSuccess: processJoinSuccess,
+        onUnavailable: () => {
+          setError('Waiting for host to create a room...');
+          setPhase('waiting');
+        },
+        onFailure: (res) => {
+          setError(res?.error || 'Could not join lobby.');
+        },
+      });
+      setJoinRetryIn(remaining);
+    }, 0);
+
+    const retryTimer = window.setInterval(() => {
+      remaining -= 1;
+      if (remaining <= 0) {
+        emitJoin({
+          onSuccess: processJoinSuccess,
+          onUnavailable: () => {
+            setError('Waiting for host to create a room...');
+            setPhase('waiting');
+          },
+          onFailure: (res) => {
+            setError(res?.error || 'Could not join lobby.');
+          },
+        });
+        remaining = 3;
+      }
+      setJoinRetryIn(remaining);
+    }, 1000);
+
+    return () => {
+      window.clearTimeout(kickoffTimer);
+      window.clearInterval(retryTimer);
+    };
+  }, [awaitingRoomCreation, connected]);
+
+  useEffect(() => {
     if (!(phase === 'question' || phase === 'answered') || !questionEndsAt) return undefined;
     const timer = window.setInterval(() => {
       const remaining = Math.max(0, Math.ceil((questionEndsAt - Date.now()) / 1000));
@@ -522,6 +606,35 @@ export default function Player({ onBack }) {
     onBack?.();
   };
 
+  const openLeaveGameModal = () => {
+    setIsLeaveModalOpen(true);
+    setLeaveConfirmChecked(false);
+  };
+
+  const closeLeaveGameModal = () => {
+    setIsLeaveModalOpen(false);
+    setLeaveConfirmChecked(false);
+  };
+
+  const handleLeaveGame = () => {
+    if (!leaveConfirmChecked) {
+      setError('Leave cancelled. Please tick the confirmation box.');
+      return;
+    }
+
+    const socket = socketRef.current;
+    if (socket?.connected) {
+      socket.emit('player:leave', () => {
+        closeLeaveGameModal();
+        handleExitToPlay();
+      });
+      return;
+    }
+
+    closeLeaveGameModal();
+    handleExitToPlay();
+  };
+
   const handleBackToLobby = () => {
     if (!socketRef.current?.connected) {
       setError('Not connected. Please retry in a moment.');
@@ -529,39 +642,26 @@ export default function Player({ onBack }) {
     }
 
     setError('');
-    socketRef.current.emit(
-      'join',
-      {
-        playerName: latestNameRef.current || 'Guest',
-        playerSessionId: playerSessionIdRef.current,
-      },
-      (res) => {
-        if (!res?.success) {
-          setError(res?.error || 'Could not rejoin lobby.');
-          return;
-        }
 
-        if (typeof res.playerName === 'string' && res.playerName.trim()) {
-          setName(res.playerName.trim());
-        }
-        if (res.avatarObject && typeof res.avatarObject === 'object') {
-          setAvatarObject(normalizeAvatarObject(res.avatarObject));
-        }
+    setFinalScores([]);
+    setQuestion(null);
+    setSelected(null);
+    setPrivateGuessHistory([]);
+    setResultData(null);
 
-        setRoomName(res.roomName || 'LocalFlux Game');
-        if (res.chatMode) setChatMode(res.chatMode);
-        if (Array.isArray(res.chatAllowed)) setChatAllowed(res.chatAllowed);
-        if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
-        setIsLobbyDeckReady(Boolean(res.deckSelected));
-        setMyScore(Number(res.myScore) || 0);
-        setFinalScores([]);
-        setQuestion(null);
-        setSelected(null);
-        setPrivateGuessHistory([]);
-        setResultData(null);
+    emitJoin({
+      onSuccess: processJoinSuccess,
+      onUnavailable: () => {
+        setRoomName('LocalFlux Room');
+        setAwaitingRoomCreation(true);
+        setJoinRetryIn(3);
+        setError('Waiting for host to create a room...');
         setPhase('waiting');
-      }
-    );
+      },
+      onFailure: (res) => {
+        setError(res?.error || 'Could not rejoin lobby.');
+      },
+    });
   };
 
   const handleAnswer = (opt) => {
@@ -671,11 +771,19 @@ export default function Player({ onBack }) {
         ? 'text-amber-300'
         : 'text-emerald-300';
 
-  const renderLeaveAndPing = ({ inline = false } = {}) => {
+  const renderLeaveAndPing = ({ inline = false, showLeaveButton = false } = {}) => {
     if (inline) {
       return (
-        <div className="mb-2 flex items-center">
+        <div className="mb-2 flex items-center gap-2">
           <PingIndicator socket={chatSocket} />
+          {showLeaveButton && (
+            <button
+              onClick={openLeaveGameModal}
+              className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-[11px] font-black tracking-[0.12em] text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
+            >
+              LEAVE GAME
+            </button>
+          )}
         </div>
       );
     }
@@ -683,6 +791,14 @@ export default function Player({ onBack }) {
     return (
       <>
         <PingIndicator socket={chatSocket} className="absolute top-5 right-5" />
+        {showLeaveButton && (
+          <button
+            onClick={openLeaveGameModal}
+            className="absolute top-5 right-32 z-20 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-black tracking-[0.12em] text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
+          >
+            LEAVE GAME
+          </button>
+        )}
       </>
     );
   };
@@ -725,6 +841,18 @@ export default function Player({ onBack }) {
                 EXIT
               </button>
             </div>
+
+            <ConfirmActionModal
+              open={isLeaveModalOpen}
+              title="Leave Current Game"
+              message="You will leave the active room immediately and return to Play screen."
+              checkboxLabel="I understand I may lose my current round progress and place in the room."
+              checked={leaveConfirmChecked}
+              onCheckedChange={setLeaveConfirmChecked}
+              onCancel={closeLeaveGameModal}
+              onConfirm={handleLeaveGame}
+              confirmLabel="Leave Game"
+            />
           </div>
         </div>
       </div>
@@ -762,7 +890,7 @@ export default function Player({ onBack }) {
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                {renderLeaveAndPing({ inline: true })}
+                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
               </div>
               <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
@@ -837,6 +965,18 @@ export default function Player({ onBack }) {
           </div>
         </aside>
 
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Room"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I may lose my score progress in this match."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
+
       </div>
     );
   }
@@ -868,7 +1008,7 @@ export default function Player({ onBack }) {
         <div className="relative z-10 flex w-full flex-1 flex-col p-4 md:p-8">
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              {renderLeaveAndPing({ inline: true })}
+              {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
               <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
             </div>
             <div
@@ -972,6 +1112,18 @@ export default function Player({ onBack }) {
             </div>
           </div>
         </aside>
+
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Room"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I may lose my score progress in this match."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
       </div>
     );
   }
@@ -988,7 +1140,7 @@ export default function Player({ onBack }) {
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
             <div className="flex items-start justify-between gap-3">
               <div>
-                {renderLeaveAndPing({ inline: true })}
+                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
               </div>
               <div
@@ -1132,6 +1284,18 @@ export default function Player({ onBack }) {
             </div>
           </div>
         </aside>
+
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Room"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I may lose my score progress in this match."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
       </div>
     );
   }
@@ -1141,12 +1305,18 @@ export default function Player({ onBack }) {
       <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center gap-4 p-5 animate-phase-in z-0">
         <AnimatedBackground />
         <div className="relative z-10 w-full flex flex-col items-center">
-          {renderLeaveAndPing()}
+          {renderLeaveAndPing({ showLeaveButton: true })}
         </div>
         <p className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-md">{roomDisplayName}</p>
-        <p className="text-white/50 text-sm font-medium">Waiting for host to start...</p>
+        <p className="text-white/50 text-sm font-medium">
+          {awaitingRoomCreation ? 'Waiting for host to create room...' : 'Waiting for host to start...'}
+        </p>
         <p className={`text-xs font-black uppercase tracking-[0.15em] ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
-          {isLobbyDeckReady ? 'Deck selected! Get ready.' : 'Waiting for host to choose a deck...'}
+          {awaitingRoomCreation
+            ? `Auto-join when room is ready${connected ? ` (${joinRetryIn || 1}s)` : ''}`
+            : isLobbyDeckReady
+              ? 'Deck selected! Get ready.'
+              : 'Waiting for host to choose a deck...'}
         </p>
         <p className={`text-xs font-mono mt-1 ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           {connected ? 'connected' : 'reconnecting...'}
@@ -1235,6 +1405,18 @@ export default function Player({ onBack }) {
         <div className="w-full max-w-md mt-4 rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-4 shadow-xl shadow-black/40">
           <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} initialMessages={chatHistory} />
         </div>
+
+        <ConfirmActionModal
+          open={isLeaveModalOpen}
+          title="Leave Waiting Lobby"
+          message={`You are about to leave ${roomDisplayName} and return to the Play screen.`}
+          checkboxLabel="I understand I will stop waiting for this host room."
+          checked={leaveConfirmChecked}
+          onCheckedChange={setLeaveConfirmChecked}
+          onCancel={closeLeaveGameModal}
+          onConfirm={handleLeaveGame}
+          confirmLabel="Leave Game"
+        />
       </div>
     );
   }
@@ -1275,6 +1457,18 @@ export default function Player({ onBack }) {
           </div>
         </div>
       </div>
+
+      <ConfirmActionModal
+        open={isLeaveModalOpen}
+        title="Leave Room"
+        message="You are about to leave before joining fully and return to the Play screen."
+        checkboxLabel="I understand this will cancel my current join attempt."
+        checked={leaveConfirmChecked}
+        onCheckedChange={setLeaveConfirmChecked}
+        onCancel={closeLeaveGameModal}
+        onConfirm={handleLeaveGame}
+        confirmLabel="Leave Game"
+      />
     </div>
   );
 }

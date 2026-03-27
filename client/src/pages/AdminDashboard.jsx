@@ -5,6 +5,7 @@ import { useHostToken } from '../context/HostTokenProvider'
 import { createGameSocket, getBackendUrl } from '../backendUrl'
 import { deckStudioDB } from '../deckStudio/db'
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog'
+import ConfirmActionModal from '../components/ConfirmActionModal'
 
 const LIBRARY_GRADIENTS = [
   'from-emerald-400 to-blue-500',
@@ -61,6 +62,9 @@ export default function AdminDashboard() {
   const [cloudError, setCloudError] = useState('')
   const [hasFetchedCloud, setHasFetchedCloud] = useState(false)
   const [downloadingCloudDeckId, setDownloadingCloudDeckId] = useState('')
+  const [isDeleteDraftModalOpen, setIsDeleteDraftModalOpen] = useState(false)
+  const [deleteDraftConfirmChecked, setDeleteDraftConfirmChecked] = useState(false)
+  const [deleteDraftTargetId, setDeleteDraftTargetId] = useState('')
   const libraryScrollRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -294,8 +298,24 @@ export default function AdminDashboard() {
 
   const handleDeleteDraft = async (draftId) => {
     if (!draftId) return
-    const confirmed = window.confirm('Delete this local draft?')
-    if (!confirmed) return
+    setDeleteDraftTargetId(draftId)
+    setDeleteDraftConfirmChecked(false)
+    setIsDeleteDraftModalOpen(true)
+  }
+
+  const deleteDraftTargetTitle = useMemo(() => {
+    if (!deleteDraftTargetId) return 'this draft'
+    const target = localDrafts.find((draft) => draft.id === deleteDraftTargetId)
+    const title = String(target?.title || '').trim()
+    return title || 'this draft'
+  }, [deleteDraftTargetId, localDrafts])
+
+  const confirmDeleteDraft = async () => {
+    if (!deleteDraftTargetId || !deleteDraftConfirmChecked) return
+    const draftId = deleteDraftTargetId
+    setIsDeleteDraftModalOpen(false)
+    setDeleteDraftConfirmChecked(false)
+    setDeleteDraftTargetId('')
 
     try {
       await deckStudioDB.drafts.delete(draftId)
@@ -628,6 +648,22 @@ export default function AdminDashboard() {
           </p>
         </div>
       </div>
+
+      <ConfirmActionModal
+        open={isDeleteDraftModalOpen}
+        title="Delete Draft"
+        message={`\"${deleteDraftTargetTitle}\" will be permanently removed from your local drafts.`}
+        checkboxLabel="I understand this draft cannot be recovered after deletion."
+        checked={deleteDraftConfirmChecked}
+        onCheckedChange={setDeleteDraftConfirmChecked}
+        onCancel={() => {
+          setIsDeleteDraftModalOpen(false)
+          setDeleteDraftConfirmChecked(false)
+          setDeleteDraftTargetId('')
+        }}
+        onConfirm={confirmDeleteDraft}
+        confirmLabel="Delete Draft"
+      />
     </div>
   )
 }
