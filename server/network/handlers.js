@@ -518,10 +518,17 @@ function registerHandlers(socket, io, questions, tokenManager) {
 
   // G��G�� create_room G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('create_room', ({ roomName, hostSessionId, hostToken }, callback) => {
-    // Validate host token
-    if (!hostToken || !tokenManager.validateToken(hostToken, socket.id)) {
-      console.warn(`[Warn] Unauthorized create_room attempt from ${socket.id}`);
-      return callback({ success: false, error: 'Unauthorized: invalid or missing host token.' });
+    // Validate host token with detailed reason so client can recover/retry intelligently.
+    const tokenCheck = tokenManager.validateTokenDetailed(hostToken, socket.id);
+    if (!tokenCheck.valid) {
+      console.warn(`[Warn] Unauthorized create_room attempt from ${socket.id} (${tokenCheck.reason})`);
+      let error = 'Unauthorized: invalid or missing host token.';
+      if (tokenCheck.reason === 'expired_token') {
+        error = 'Unauthorized: host token expired. Generate a new token.';
+      } else if (tokenCheck.reason === 'socket_mismatch') {
+        error = 'Unauthorized: host token is bound to a previous session. Generate a new token.';
+      }
+      return callback({ success: false, error, reason: tokenCheck.reason });
     }
 
     if (!roomName || !roomName.trim()) {

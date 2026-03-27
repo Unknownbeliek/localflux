@@ -46,31 +46,42 @@ class HostTokenManager {
    * @returns {boolean} true if token is valid and active
    */
   validateToken(token, socketId = null) {
-    if (!token || typeof token !== 'string') return false;
-    
+    return this.validateTokenDetailed(token, socketId).valid;
+  }
+
+  /**
+   * Validate token and return both status and failure reason.
+   * @param {string} token - The token to validate
+   * @param {string} [socketId] - Socket ID to bind/validate against
+   * @returns {{ valid: boolean, reason: string }}
+   */
+  validateTokenDetailed(token, socketId = null) {
+    if (!token) return { valid: false, reason: 'missing_token' };
+    if (typeof token !== 'string') return { valid: false, reason: 'invalid_token' };
+
     const entry = this.tokens.get(token);
-    if (!entry) return false;
-    
+    if (!entry) return { valid: false, reason: 'invalid_token' };
+
     // Check expiration
     if (Date.now() > entry.expiresAt) {
       this.tokens.delete(token);
-      return false;
+      return { valid: false, reason: 'expired_token' };
     }
-    
+
     // Check if active
-    if (!entry.isActive) return false;
-    
+    if (!entry.isActive) return { valid: false, reason: 'inactive_token' };
+
     // Bind to socket on first use
     if (socketId && !entry.socketId) {
       entry.socketId = socketId;
     }
-    
+
     // If already bound to a socket, only allow same socket
     if (entry.socketId && entry.socketId !== socketId) {
-      return false;
+      return { valid: false, reason: 'socket_mismatch' };
     }
-    
-    return true;
+
+    return { valid: true, reason: 'ok' };
   }
 
   /**

@@ -139,7 +139,7 @@ function csvRowsToDeck(rows, fallbackTitle = 'CSV Import') {
 }
 
 export default function Host({ onBack, studioQuestions = null }) {
-  const { token: hostToken } = useHostToken();
+  const { token: hostToken, setHostToken, clearToken, getTokenTtl } = useHostToken();
   const savedHostState = readHostState();
   const hostSessionIdRef = useRef(getOrCreateHostSessionId());
   const resumeAttemptedRef = useRef(false);
@@ -203,6 +203,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [isStartConfirmArmed, setIsStartConfirmArmed] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const startConfirmTimerRef = useRef(null);
+  const tokenRefreshInFlightRef = useRef(false);
   const profilePulseTimersRef = useRef(new Map());
   const modeOptions = ['FREE', 'RESTRICTED', 'OFF'];
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
@@ -212,6 +213,111 @@ export default function Host({ onBack, studioQuestions = null }) {
     multiple_choice: '4 OPTIONS',
     type_guess: 'TYPE GUESS',
   };
+
+  const requestFreshHostToken = useCallback(() => {
+    if (!socketRef.current?.connected) {
+      return Promise.reject(new Error('Not connected.'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error('Token refresh timeout.'));
+      }, 5000);
+
+      socketRef.current.emit('admin:generate-host-token', {}, (res) => {
+        clearTimeout(timeout);
+        if (res?.success && res?.token) {
+          setHostToken(res.token, res.ttlMs);
+          resolve(res.token);
+          return;
+        }
+
+        if (String(res?.reason || '') === 'host_locked') {
+          clearToken();
+        }
+        reject(new Error(res?.error || 'Failed to refresh host token.'));
+      });
+    });
+  }, [setHostToken, clearToken]);
+
+  const isTokenAuthError = useCallback((res) => {
+    const reason = String(res?.reason || '').toLowerCase();
+    const text = String(res?.error || '').toLowerCase();
+    if (reason.includes('token') || reason.includes('socket_mismatch')) return true;
+    return text.includes('unauthorized') && text.includes('token');
+  }, []);
+
+  const createRoomWithAuthRetry = useCallback((nextRoomName, onSuccess) => {
+    if (!socketRef.current?.connected) {
+      setError('Not connected.');
+      return;
+    }
+
+    const attemptCreate = (tokenToUse, hasRetried) => {
+      socketRef.current.emit(
+        'create_room',
+        { roomName: nextRoomName, hostSessionId: hostSessionIdRef.current, hostToken: tokenToUse },
+        async (res) => {
+          if (res?.success) {
+            onSuccess?.(res);
+            return;
+          }
+
+          if (!hasRetried && isTokenAuthError(res)) {
+            try {
+              const refreshedToken = await requestFreshHostToken();
+              attemptCreate(refreshedToken, true);
+              return;
+            } catch (err) {
+              setError(err?.message || 'Host authorization failed.');
+              return;
+            }
+          }
+
+          setError(res?.error || 'Failed to create room.');
+        }
+      );
+    };
+
+    attemptCreate(hostToken, false);
+  }, [hostToken, isTokenAuthError, requestFreshHostToken]);
+
+  useEffect(() => {
+    if (!hostToken || !connected) return;
+
+    let cancelled = false;
+
+    const refreshIfNeeded = async () => {
+      if (cancelled || tokenRefreshInFlightRef.current) return;
+
+      const ttlMs = Number(getTokenTtl?.() || 0);
+      // Refresh shortly before expiry to avoid host actions failing on stale tokens.
+      if (ttlMs <= 0 || ttlMs > 90_000) return;
+
+      tokenRefreshInFlightRef.current = true;
+      try {
+        await requestFreshHostToken();
+      } catch (err) {
+        if (!cancelled) {
+          const message = err?.message || 'Failed to refresh host token.';
+          setError((prev) => prev || message);
+        }
+      } finally {
+        tokenRefreshInFlightRef.current = false;
+      }
+    };
+
+    const intervalId = setInterval(() => {
+      void refreshIfNeeded();
+    }, 15_000);
+
+    void refreshIfNeeded();
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [hostToken, connected, getTokenTtl, requestFreshHostToken]);
 
   useEffect(() => {
     if (!roomId && !roomName) return;
@@ -623,7 +729,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     if (!hostToken) return setError('Host token invalid. Restart the application.');
     setError('');
 
-    socketRef.current.emit('create_room', { roomName, hostSessionId: hostSessionIdRef.current, hostToken }, (res) => {
+    createRoomWithAuthRetry(roomName, (res) => {
       if (res.success) {
         setRoomId(LAN_ROOM);
         setPhase('lobby');
@@ -642,7 +748,6 @@ export default function Host({ onBack, studioQuestions = null }) {
         }
         return;
       }
-      setError(res?.error || 'Failed to create room.');
     });
   };
 
@@ -1052,7 +1157,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     const nextRoomName = roomName.trim() || 'LocalFlux Game';
     setError('');
 
-    socketRef.current.emit('create_room', { roomName: nextRoomName, hostSessionId: hostSessionIdRef.current, hostToken }, async (res) => {
+    createRoomWithAuthRetry(nextRoomName, async (res) => {
       if (!res?.success) {
         setError(res?.error || 'Failed to create room.');
         return;
