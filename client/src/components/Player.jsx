@@ -6,6 +6,8 @@ import PingIndicator from './PingIndicator';
 import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
 import { resolveQuestionTiming } from '../utils/questionTiming';
 import ConfirmActionModal from './ConfirmActionModal';
+import BgmControl from './BgmControl';
+import { useBgm } from '../context/BgmProvider';
 import { triggerHaptic } from '../utils/haptics';
 import { playGameSfx } from '../utils/gameFeel';
 
@@ -61,6 +63,12 @@ function normalizeAvatarObject(input) {
   return { type: 'preset', value };
 }
 
+function isSameAvatarObject(a, b) {
+  const left = normalizeAvatarObject(a);
+  const right = normalizeAvatarObject(b);
+  return left.type === right.type && left.value === right.value;
+}
+
 function resolvePresetPath(value) {
   const trimmed = String(value || '').trim();
   if (!trimmed) return '/avatars/1.png';
@@ -79,7 +87,7 @@ function resolveImageUrl(image) {
 function getOrCreatePlayerSessionId() {
   if (typeof window === 'undefined') return '';
   try {
-    const fromStateRaw = window.sessionStorage.getItem(PLAYER_STATE_KEY);
+    const fromStateRaw = window.localStorage.getItem(PLAYER_STATE_KEY);
     if (fromStateRaw) {
       const parsed = JSON.parse(fromStateRaw);
       const stateSession = String(parsed?.playerSessionId || '').trim();
@@ -114,11 +122,12 @@ function readPlayerState() {
 
 function persistPlayerState(next) {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.setItem(PLAYER_STATE_KEY, JSON.stringify(next));
+  window.localStorage.setItem(PLAYER_STATE_KEY, JSON.stringify(next));
 }
 
 function clearPlayerState() {
   if (typeof window === 'undefined') return;
+  window.localStorage.removeItem(PLAYER_STATE_KEY);
   window.sessionStorage.removeItem(PLAYER_STATE_KEY);
 }
 
@@ -131,6 +140,7 @@ function displayRoomName(name) {
 }
 
 export default function Player({ onBack }) {
+  const { setMusicPhase } = useBgm();
   const savedPlayerState = readPlayerState();
   const savedStateSessionId = String(savedPlayerState?.playerSessionId || '').trim();
   const playerSessionIdRef = useRef(getOrCreatePlayerSessionId());
@@ -146,8 +156,9 @@ export default function Player({ onBack }) {
   const [error, setError] = useState('');
   const [roomName, setRoomName] = useState(savedPlayerState?.roomName || '');
   const [profileSaved, setProfileSaved] = useState(false);
+  const [hasEditedProfile, setHasEditedProfile] = useState(Boolean(savedPlayerState?.profileEdited));
 
-  const [phase, setPhase] = useState('joining');
+  const [phase, setPhase] = useState(() => (savedPlayerState?.roomName ? 'waiting' : 'joining'));
   const [question, setQuestion] = useState(null);
   const [selected, setSelected] = useState(null);
   const [guessText, setGuessText] = useState('');
@@ -178,6 +189,8 @@ export default function Player({ onBack }) {
   const [showFireIgnite, setShowFireIgnite] = useState(false);
   const roomDisplayName = displayRoomName(roomName);
   const latestNameRef = useRef(name);
+  const latestAvatarRef = useRef(avatarObject);
+  const hasEditedProfileRef = useRef(Boolean(savedPlayerState?.profileEdited));
   const startSplashUntilRef = useRef(0);
   const pendingQuestionRef = useRef(null);
   const startSplashTimerRef = useRef(null);
@@ -289,6 +302,7 @@ export default function Player({ onBack }) {
     const text = String(message || '').toLowerCase();
     return (
       text.includes('room is not created yet') ||
+      text.includes('room has ended') ||
       text.includes('wait for the host to create a room') ||
       text.includes('wait for the host to create a new room') ||
       text.includes('room closed because the host disconnected')
@@ -300,11 +314,21 @@ export default function Player({ onBack }) {
     setJoinRetryIn(0);
     setAwaitingRoomCreation(false);
     shouldTryResumeRef.current = true;
-    if (typeof res.playerName === 'string' && res.playerName.trim()) {
-      setName(res.playerName.trim());
-    }
-    if (res.avatarObject && typeof res.avatarObject === 'object') {
-      setAvatarObject(normalizeAvatarObject(res.avatarObject));
+    const serverName = String(res.playerName || '').trim();
+    const serverAvatar = normalizeAvatarObject(res.avatarObject);
+    const localName = String(latestNameRef.current || '').trim() || 'Guest';
+    const localAvatar = normalizeAvatarObject(latestAvatarRef.current);
+    const shouldKeepLocalProfile = hasEditedProfileRef.current;
+
+    if (!shouldKeepLocalProfile) {
+      if (serverName) {
+        setName(serverName);
+      }
+      if (res.avatarObject && typeof res.avatarObject === 'object') {
+        setAvatarObject(serverAvatar);
+      }
+    } else if (socketRef.current?.connected && (serverName !== localName || !isSameAvatarObject(serverAvatar, localAvatar))) {
+      socketRef.current.emit('player:updateProfile', { newName: localName, avatarObject: localAvatar }, () => {});
     }
     setRoomName(res.roomName || 'LocalFlux Game');
     if (res.chatMode) setChatMode(res.chatMode);
@@ -357,6 +381,13 @@ export default function Player({ onBack }) {
 
     emitJoin({
       onSuccess: processJoinSuccess,
+      onUnavailable: () => {
+        setRoomName('LocalFlux Room');
+        setAwaitingRoomCreation(true);
+        setJoinRetryIn(3);
+        setError('Host is setting up a fresh room. We will auto-join you soon.');
+        setPhase('waiting');
+      },
       onFailure: (res) => setError(res?.error || 'Could not join game.'),
     });
   };
@@ -399,15 +430,24 @@ export default function Player({ onBack }) {
   }, [name]);
 
   useEffect(() => {
+    latestAvatarRef.current = avatarObject;
+  }, [avatarObject]);
+
+  useEffect(() => {
+    hasEditedProfileRef.current = hasEditedProfile;
+  }, [hasEditedProfile]);
+
+  useEffect(() => {
     if (!name.trim() && !roomName.trim()) return;
     persistPlayerState({
       name: name.trim(),
       avatarObject,
       roomName: roomName.trim(),
+      profileEdited: hasEditedProfile,
       playerSessionId: String(playerSessionIdRef.current || '').trim(),
       updatedAt: Date.now(),
     });
-  }, [name, avatarObject, roomName]);
+  }, [name, avatarObject, roomName, hasEditedProfile]);
 
   useEffect(() => {
     const socket = createGameSocket();
@@ -427,8 +467,21 @@ export default function Player({ onBack }) {
     });
     socket.on('player:profileUpdated', ({ player }) => {
       if (!player || player.id !== socket.id) return;
-      if (typeof player.name === 'string') setName(player.name);
-      setAvatarObject(normalizeAvatarObject(player.avatarObject));
+      const incomingName = String(player.name || '').trim();
+      const incomingAvatar = normalizeAvatarObject(player.avatarObject);
+      const localName = String(latestNameRef.current || '').trim();
+      const localAvatar = normalizeAvatarObject(latestAvatarRef.current);
+
+      if (hasEditedProfileRef.current) {
+        if (incomingName === localName && isSameAvatarObject(incomingAvatar, localAvatar)) {
+          if (incomingName) setName(incomingName);
+          setAvatarObject(incomingAvatar);
+        }
+        return;
+      }
+
+      if (incomingName) setName(incomingName);
+      setAvatarObject(incomingAvatar);
     });
     socket.on('chat:mode', ({ mode, allowed }) => {
       if (mode) setChatMode(mode);
@@ -450,8 +503,10 @@ export default function Player({ onBack }) {
       setIsLobbyDeckReady(true);
     });
     socket.on('room_closed', ({ message }) => {
-      setError(message || 'Room closed by host.');
-      setPhase('joining');
+      setError('Host is setting up a fresh room. We will auto-join you soon.');
+      setAwaitingRoomCreation(true);
+      setJoinRetryIn(3);
+      setPhase('waiting');
       setRoomName('');
       setChatHistory([]);
       setStreakCount(0);
@@ -569,7 +624,7 @@ export default function Player({ onBack }) {
       emitJoin({
         onSuccess: processJoinSuccess,
         onUnavailable: () => {
-          setError('Waiting for host to create a room...');
+          setError('Host is setting up a fresh room. We will auto-join you soon.');
           setPhase('waiting');
         },
         onFailure: (res) => {
@@ -585,7 +640,7 @@ export default function Player({ onBack }) {
         emitJoin({
           onSuccess: processJoinSuccess,
           onUnavailable: () => {
-            setError('Waiting for host to create a room...');
+            setError('Host is setting up a fresh room. We will auto-join you soon.');
             setPhase('waiting');
           },
           onFailure: (res) => {
@@ -645,6 +700,21 @@ export default function Player({ onBack }) {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [phase, nextQuestionIn]);
+
+  useEffect(() => {
+    const phaseToMusic = {
+      joining: 'lobby',
+      waiting: 'lobby',
+      starting: 'gameplay',
+      question: 'gameplay',
+      answered: 'gameplay',
+      result: 'gameplay',
+      ending: 'podium',
+      gameover: 'podium',
+    };
+
+    setMusicPhase(phaseToMusic[phase] || 'lobby');
+  }, [phase, setMusicPhase]);
 
   useEffect(() => {
     if (streakCount >= 3) return;
@@ -727,7 +797,7 @@ export default function Player({ onBack }) {
         setRoomName('LocalFlux Room');
         setAwaitingRoomCreation(true);
         setJoinRetryIn(3);
-        setError('Waiting for host to create a room...');
+        setError('Host is setting up a fresh room. We will auto-join you soon.');
         setPhase('waiting');
       },
       onFailure: (res) => {
@@ -820,19 +890,41 @@ export default function Player({ onBack }) {
   const handleSaveProfile = () => {
     const newName = name.trim();
     if (!newName) return setError('Display name cannot be empty.');
-    if (!socketRef.current?.connected) return setError('Not connected.');
+
+    const markProfileSaved = () => {
+      setName(newName);
+      setHasEditedProfile(true);
+      setProfileSaved(true);
+      setIsEditingName(false);
+      window.setTimeout(() => setProfileSaved(false), 1800);
+    };
+
+    const canSyncToServer = socketRef.current?.connected && !awaitingRoomCreation && phase !== 'joining';
+    if (!canSyncToServer) {
+      setError('');
+      markProfileSaved();
+      return;
+    }
 
     setError('');
     socketRef.current.emit('player:updateProfile', { newName, avatarObject }, (res) => {
       if (!res?.success) {
+        const reason = String(res?.error || '').toLowerCase();
+        const shouldFallbackToLocal =
+          reason.includes('not in an active room') ||
+          reason.includes('player not found');
+
+        if (shouldFallbackToLocal) {
+          setError('');
+          markProfileSaved();
+          return;
+        }
+
         setError(res?.error || 'Could not save profile.');
         return;
       }
-      setName(newName);
       setAvatarObject(normalizeAvatarObject(res.player?.avatarObject || avatarObject));
-      setProfileSaved(true);
-      setIsEditingName(false);
-      window.setTimeout(() => setProfileSaved(false), 1800);
+      markProfileSaved();
     });
   };
 
@@ -877,11 +969,10 @@ export default function Player({ onBack }) {
     );
   };
 
-  const renderLeaveAndPing = ({ inline = false, showLeaveButton = false } = {}) => {
-    if (inline) {
-      return (
-        <div className="mb-2 flex items-center gap-2">
-          <PingIndicator socket={chatSocket} />
+  const renderTopBar = ({ showLeaveButton = false } = {}) => {
+    return (
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex items-center gap-2">
           {showLeaveButton && (
             <button
               onClick={openLeaveGameModal}
@@ -890,22 +981,10 @@ export default function Player({ onBack }) {
               LEAVE GAME
             </button>
           )}
+          <PingIndicator socket={chatSocket} />
         </div>
-      );
-    }
-
-    return (
-      <>
-        <PingIndicator socket={chatSocket} className="absolute top-5 right-5" />
-        {showLeaveButton && (
-          <button
-            onClick={openLeaveGameModal}
-            className="absolute top-5 right-32 z-20 rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-[11px] font-black tracking-[0.12em] text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
-          >
-            LEAVE GAME
-          </button>
-        )}
-      </>
+        <BgmControl />
+      </div>
     );
   };
 
@@ -918,7 +997,7 @@ export default function Player({ onBack }) {
         <AnimatedBackground />
         <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4 md:p-8">
           <div className="relative w-full max-w-3xl">
-            {renderLeaveAndPing()}
+            {renderTopBar({ showLeaveButton: true })}
             <LeaderboardResultsCard
               finalScores={finalScores}
               highlightPlayerId={selfPlayerId}
@@ -994,9 +1073,9 @@ export default function Player({ onBack }) {
 
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            {renderTopBar({ showLeaveButton: true })}
             <div className="flex items-start justify-between gap-3">
               <div>
-                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <div className="flex items-center">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
                   {renderStreakBadge()}
@@ -1115,9 +1194,9 @@ export default function Player({ onBack }) {
         <AnimatedBackground />
 
         <div className="relative z-10 flex w-full flex-1 flex-col p-4 md:p-8">
+          {renderTopBar({ showLeaveButton: true })}
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
-              {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <div className="flex items-center">
                   <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
                   {renderStreakBadge()}
@@ -1257,9 +1336,9 @@ export default function Player({ onBack }) {
 
         <div className="relative z-10 flex flex-1 flex-col">
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
+            {renderTopBar({ showLeaveButton: true })}
             <div className="flex items-start justify-between gap-3">
               <div>
-                {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
                 <div className="flex items-center">
                   <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
                   {renderStreakBadge()}
@@ -1424,23 +1503,23 @@ export default function Player({ onBack }) {
     );
   }
 
-  if (phase === 'waiting') {
+  if (phase === 'waiting' || awaitingRoomCreation) {
     return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center gap-4 p-5 animate-phase-in z-0">
+      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-start gap-4 p-5 pt-8 animate-phase-in z-0">
         <AnimatedBackground />
-        <div className="relative z-10 w-full flex flex-col items-center">
-          {renderLeaveAndPing({ showLeaveButton: true })}
+        <div className="relative z-10 w-full max-w-5xl">
+          {renderTopBar({ showLeaveButton: true })}
         </div>
         <p className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-md">{roomDisplayName}</p>
         <p className="text-white/50 text-sm font-medium">
-          {awaitingRoomCreation ? 'Waiting for host to create room...' : 'Waiting for host to start...'}
+          {awaitingRoomCreation ? 'Host is setting up the room. You will join automatically.' : 'Host is getting everyone ready. Game starts soon.'}
         </p>
         <p className={`text-xs font-black uppercase tracking-[0.15em] ${isLobbyDeckReady ? 'text-emerald-300' : 'text-amber-300'}`}>
           {awaitingRoomCreation
-            ? `Auto-join when room is ready${connected ? ` (${joinRetryIn || 1}s)` : ''}`
+            ? `Auto-join is on. We check every ${joinRetryIn || 1}s${connected ? '' : ' once connection returns'}`
             : isLobbyDeckReady
-              ? 'Deck selected! Get ready.'
-              : 'Waiting for host to choose a deck...'}
+              ? 'Deck selected. You are all set.'
+              : 'Host is choosing the deck. Chat while you wait.'}
         </p>
         <p className={`text-xs font-mono mt-1 ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
           {connected ? 'connected' : 'reconnecting...'}
@@ -1526,7 +1605,7 @@ export default function Player({ onBack }) {
           </div>
         </section>
 
-        <div className="w-full max-w-md mt-4 rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-4 shadow-xl shadow-black/40">
+        <div className="w-full max-w-md mt-4 h-[320px] sm:h-[360px] min-h-0 overflow-hidden rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-4 shadow-xl shadow-black/40">
           <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} initialMessages={chatHistory} />
         </div>
 
@@ -1550,12 +1629,30 @@ export default function Player({ onBack }) {
       <AnimatedBackground />
       <button onClick={handleBack} className="absolute top-5 left-5 z-20 rounded-full border border-white/10 bg-white/5 backdrop-blur-md px-4 py-2 text-sm font-semibold text-white/60 transition-all hover:bg-white/10 hover:text-white">← back</button>
       <div className="z-10 w-full max-w-sm animate-phase-in rounded-3xl border border-white/10 bg-black/40 backdrop-blur-2xl p-8 shadow-[0_0_60px_rgba(0,0,0,0.6)]">
-        <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-6 drop-shadow-md">Joining Game</h1>
+        <h1 className="text-4xl md:text-5xl font-black tracking-tight mb-6 drop-shadow-md">
+          {awaitingRoomCreation ? 'Almost There' : 'Joining Game'}
+        </h1>
         <div className="w-full flex flex-col gap-4 items-center justify-center">
-          <p className="text-white/50 font-medium">One moment...</p>
-          {error && <p className="rounded-2xl border border-rose-500/40 bg-rose-500/15 backdrop-blur-md px-4 py-3 text-xs font-semibold text-rose-200 w-full text-center shadow-[0_0_15px_rgba(244,63,94,0.15)]">{error}</p>}
+          <p className="text-white/50 font-medium">
+            {awaitingRoomCreation
+              ? 'Your host is warming things up. We will pull you in as soon as the room opens.'
+              : 'One moment...'}
+          </p>
+          {error && !awaitingRoomCreation && (
+            <p className="rounded-2xl border border-rose-500/40 bg-rose-500/15 backdrop-blur-md px-4 py-3 text-xs font-semibold text-rose-200 w-full text-center shadow-[0_0_15px_rgba(244,63,94,0.15)]">
+              {error}
+            </p>
+          )}
+          {awaitingRoomCreation && (
+            <p className="rounded-2xl border border-cyan-400/25 bg-cyan-500/10 px-4 py-3 text-xs font-semibold text-cyan-100 w-full text-center">
+              New session? Ask the host to resend the latest invite link or room code.
+            </p>
+          )}
           {connected && phase === 'joining' && (
             <p className="text-xs font-mono text-white/40">Auto retry in {joinRetryIn || 1}s</p>
+          )}
+          {connected && awaitingRoomCreation && (
+            <p className="text-xs font-mono text-white/40">Checking room status every {joinRetryIn || 1}s</p>
           )}
           <button
             onClick={() => {
@@ -1565,7 +1662,7 @@ export default function Player({ onBack }) {
             disabled={!connected}
             className="mt-1 w-full rounded-full border-2 border-white/15 bg-white/5 px-4 py-3.5 text-sm font-black tracking-[0.1em] text-white/90 transition-all duration-300 hover:-translate-y-0.5 hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:shadow-[0_0_15px_rgba(52,211,153,0.2)] active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            RETRY NOW
+            {awaitingRoomCreation ? 'CHECK AGAIN' : 'RETRY NOW'}
           </button>
           <div className={`flex items-center justify-center gap-2 text-xs font-bold ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
             {connected ? (

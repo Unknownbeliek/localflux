@@ -11,6 +11,7 @@ import HostQuestionView from './host/HostQuestionView';
 import HostGameOverView from './host/HostGameOverView';
 import HostLobbyView from './host/HostLobbyView';
 import { resolveQuestionTiming } from '../utils/questionTiming';
+import { useBgm } from '../context/BgmProvider';
 import { playGameSfx } from '../utils/gameFeel';
 import { triggerHaptic } from '../utils/haptics';
 
@@ -141,6 +142,7 @@ function csvRowsToDeck(rows, fallbackTitle = 'CSV Import') {
 }
 
 export default function Host({ onBack, studioQuestions = null }) {
+  const { setMusicPhase } = useBgm();
   const { token: hostToken, setHostToken, clearToken, getTokenTtl } = useHostToken();
   const savedHostState = readHostState();
   const hostSessionIdRef = useRef(getOrCreateHostSessionId());
@@ -596,6 +598,18 @@ export default function Host({ onBack, studioQuestions = null }) {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [phase, autoAdvanceIn]);
+
+  useEffect(() => {
+    const phaseToMusic = {
+      setup: 'lobby',
+      lobby: 'lobby',
+      question: 'gameplay',
+      result: 'gameplay',
+      gameover: 'podium',
+    };
+
+    setMusicPhase(phaseToMusic[phase] || 'lobby');
+  }, [phase, setMusicPhase]);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);

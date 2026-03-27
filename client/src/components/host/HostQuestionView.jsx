@@ -2,6 +2,7 @@ import { useState } from 'react';
 import Chat from '../Chat';
 import AnimatedBackground from '../AnimatedBackground';
 import ConfirmActionModal from '../ConfirmActionModal';
+import BgmControl from '../BgmControl';
 
 function resolveImageUrl(image) {
   if (!image) return null;
@@ -76,13 +77,16 @@ export default function HostQuestionView({
                 Mode: {answerModeLabels?.[answerMode] || answerMode}
               </p>
             </div>
-            <div className={`rounded-2xl border-2 px-5 py-3 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
-              timeLeft <= 5
-                ? 'border-red-500/60 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-                : 'border-white/10 bg-black/40'
-            }`}>
-              <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/50">Timer</p>
-              <p className={`text-3xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</p>
+            <div className="flex items-start gap-3">
+              <BgmControl />
+              <div className={`rounded-2xl border-2 px-5 py-3 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
+                timeLeft <= 5
+                  ? 'border-red-500/60 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                  : 'border-white/10 bg-black/40'
+              }`}>
+                <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/50">Timer</p>
+                <p className={`text-3xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</p>
+              </div>
             </div>
           </div>
 

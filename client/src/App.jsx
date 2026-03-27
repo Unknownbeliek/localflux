@@ -7,13 +7,15 @@ import { useState } from 'react'
 import { HostTokenProvider } from './context/HostTokenProvider'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { LocalhostBouncer } from './components/LocalhostBouncer'
+import { BgmProvider } from './context/BgmProvider'
 
 function App() {
   const [studioQuestions, setStudioQuestions] = useState(null)
 
   return (
     <HostTokenProvider>
-      <BrowserRouter>
+      <BgmProvider>
+        <BrowserRouter>
       <Routes>
         {/* Public Player Route */}
         <Route path="/play" element={<Player onBack={() => window.location.href = '/'} />} />
@@ -53,6 +55,7 @@ function App() {
         </Route>
       </Routes>
       </BrowserRouter>
+      </BgmProvider>
     </HostTokenProvider>
   )
 }
