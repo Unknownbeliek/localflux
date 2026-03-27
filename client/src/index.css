@@ -333,3 +333,145 @@
 .title-glow {
   animation: title-glow 4s ease-in-out infinite;
 }
+
+@keyframes timer-danger {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(248, 113, 113, 0);
+  }
+  50% {
+    transform: scale(1.03);
+    box-shadow: 0 0 20px rgba(248, 113, 113, 0.3);
+  }
+}
+
+.animate-timer-danger {
+  animation: timer-danger 0.9s ease-in-out infinite;
+}
+
+@keyframes correct-burst {
+  0% {
+    opacity: 0;
+    transform: translateY(6px) scale(0.92);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-2px) scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-correct-burst {
+  animation: correct-burst 300ms cubic-bezier(0.2, 0.9, 0.25, 1.2) both;
+}
+
+@keyframes final-reveal {
+  0% {
+    opacity: 0;
+    transform: translateY(12px) scale(0.96);
+    filter: blur(4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+.animate-final-reveal {
+  animation: final-reveal 520ms cubic-bezier(0.2, 0.9, 0.25, 1.1) both;
+}
+
+@keyframes curtain-drop {
+  0% {
+    transform: scaleY(1);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scaleY(0);
+    opacity: 0;
+  }
+}
+
+.host-final-curtain {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  transform-origin: top;
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.22), rgba(2, 6, 23, 0.98));
+  animation: curtain-drop 700ms cubic-bezier(0.22, 0.9, 0.24, 1) forwards;
+  pointer-events: none;
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translate3d(0, -12vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--confetti-drift, 0px), 105vh, 0) rotate(650deg);
+    opacity: 0;
+  }
+}
+
+.host-confetti-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 18;
+  overflow: hidden;
+}
+
+.host-confetti-piece {
+  position: absolute;
+  top: -12vh;
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.2);
+  animation-name: confetti-fall;
+  animation-timing-function: cubic-bezier(0.16, 0.6, 0.24, 1);
+  animation-fill-mode: forwards;
+}
+
+@keyframes on-fire-flicker {
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(251, 146, 60, 0.35), 0 0 0 rgba(239, 68, 68, 0);
+    transform: translateY(0);
+  }
+  50% {
+    box-shadow: 0 0 16px rgba(251, 146, 60, 0.55), 0 0 30px rgba(239, 68, 68, 0.25);
+    transform: translateY(-1px);
+  }
+}
+
+.animate-on-fire-badge {
+  animation: on-fire-flicker 850ms ease-in-out infinite;
+}
+
+@keyframes fire-ignite {
+  0% {
+    opacity: 0;
+    transform: translateY(4px) scale(0.92);
+  }
+  35% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.06);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.98);
+  }
+}
+
+.animate-fire-ignite {
+  animation: fire-ignite 1.2s cubic-bezier(0.2, 0.85, 0.25, 1) both;
+}

@@ -1,4 +1,9 @@
+import { useEffect, useMemo, useState } from 'react';
 import LeaderboardResultsCard from '../leaderboard/LeaderboardResultsCard';
+import { playGameSfx } from '../../utils/gameFeel';
+import { triggerHaptic } from '../../utils/haptics';
+
+const CELEBRATION_FX_KEY = 'lf_celebration_fx_enabled';
 
 export default function HostGameOverView({
   finalScores,
@@ -19,15 +24,91 @@ export default function HostGameOverView({
   startRenameStudioDraft,
   handleDeleteStudioDraft,
 }) {
+  const [showRevealCurtain, setShowRevealCurtain] = useState(true);
+  const [showConfetti, setShowConfetti] = useState(true);
+  const [celebrationFxEnabled, setCelebrationFxEnabled] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const value = window.localStorage.getItem(CELEBRATION_FX_KEY);
+    return value !== 'false';
+  });
+  const confettiPieces = useMemo(
+    () =>
+      Array.from({ length: 42 }, (_, index) => ({
+        id: index,
+        left: `${Math.random() * 100}%`,
+        delay: `${Math.random() * 0.45}s`,
+        duration: `${2.1 + Math.random() * 1.3}s`,
+        hue: 130 + Math.floor(Math.random() * 130),
+        drift: `${-22 + Math.random() * 44}px`,
+      })),
+    []
+  );
+
+  useEffect(() => {
+    setShowConfetti(celebrationFxEnabled);
+
+    if (celebrationFxEnabled) {
+      playGameSfx('streak', { intensity: 1 });
+      triggerHaptic('success');
+    }
+
+    const revealTimer = window.setTimeout(() => {
+      setShowRevealCurtain(false);
+    }, 700);
+
+    const confettiTimer = window.setTimeout(() => {
+      setShowConfetti(false);
+    }, 2800);
+
+    return () => {
+      window.clearTimeout(revealTimer);
+      window.clearTimeout(confettiTimer);
+    };
+  }, [celebrationFxEnabled]);
+
+  const toggleCelebrationFx = () => {
+    setCelebrationFxEnabled((current) => {
+      const next = !current;
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(CELEBRATION_FX_KEY, String(next));
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className="h-screen w-full flex flex-col items-center justify-center bg-slate-950 p-8 overflow-hidden text-white animate-phase-in">
-      {/* TODO: Add react-confetti here for full-screen celebration */}
-      <div className="w-full max-w-5xl flex-1 flex items-center justify-center">
+    <div className="relative h-screen w-full flex flex-col items-center justify-center bg-slate-950 p-8 overflow-hidden text-white animate-phase-in">
+      {showRevealCurtain && <div className="host-final-curtain" />}
+      {celebrationFxEnabled && showConfetti && (
+        <div className="host-confetti-layer" aria-hidden="true">
+          {confettiPieces.map((piece) => (
+            <span
+              key={piece.id}
+              className="host-confetti-piece"
+              style={{
+                left: piece.left,
+                animationDelay: piece.delay,
+                animationDuration: piece.duration,
+                background: `hsl(${piece.hue} 90% 62%)`,
+                '--confetti-drift': piece.drift,
+              }}
+            />
+          ))}
+        </div>
+      )}
+      <div className="w-full max-w-5xl flex-1 flex items-center justify-center animate-final-reveal">
         <LeaderboardResultsCard finalScores={finalScores} pretitle="Final Scores" title="Leaderboard" />
       </div>
 
       {/* Button Group */}
       <div className="flex flex-wrap justify-center gap-4 mt-auto">
+        <button
+          onClick={toggleCelebrationFx}
+          className="bg-transparent border border-white/20 hover:bg-white/10 text-white px-6 py-3 rounded-lg font-bold transition-all duration-150 hover:-translate-y-0.5 active:translate-y-0 active:scale-95"
+        >
+          FX: {celebrationFxEnabled ? 'ON' : 'OFF'}
+        </button>
+
         {/* Primary Action */}
         <button
           onClick={handleHostNewRoom}

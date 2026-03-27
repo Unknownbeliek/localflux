@@ -6,6 +6,8 @@ import PingIndicator from './PingIndicator';
 import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
 import { resolveQuestionTiming } from '../utils/questionTiming';
 import ConfirmActionModal from './ConfirmActionModal';
+import { triggerHaptic } from '../utils/haptics';
+import { playGameSfx } from '../utils/gameFeel';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
@@ -169,6 +171,11 @@ export default function Player({ onBack }) {
   const [awaitingRoomCreation, setAwaitingRoomCreation] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
   const [leaveConfirmChecked, setLeaveConfirmChecked] = useState(false);
+  const [streakCount, setStreakCount] = useState(0);
+  const [correctBurstTick, setCorrectBurstTick] = useState(0);
+  const [timerDangerActive, setTimerDangerActive] = useState(false);
+  const [fireIgniteTick, setFireIgniteTick] = useState(0);
+  const [showFireIgnite, setShowFireIgnite] = useState(false);
   const roomDisplayName = displayRoomName(roomName);
   const latestNameRef = useRef(name);
   const startSplashUntilRef = useRef(0);
@@ -178,6 +185,26 @@ export default function Player({ onBack }) {
   const endSplashTimerRef = useRef(null);
   const desktopGuessInputRef = useRef(null);
   const mobileGuessInputRef = useRef(null);
+  const prevTimeLeftRef = useRef(0);
+  const fireIgniteTimerRef = useRef(null);
+
+  const celebrateCorrect = ({ wasStreak = false } = {}) => {
+    setCorrectBurstTick((value) => value + 1);
+    playGameSfx(wasStreak ? 'streak' : 'correct', { intensity: wasStreak ? 1 : 0.8 });
+    triggerHaptic(wasStreak ? 'success' : 'medium');
+  };
+
+  const triggerFireIgnite = () => {
+    setFireIgniteTick((value) => value + 1);
+    setShowFireIgnite(true);
+    if (fireIgniteTimerRef.current) {
+      window.clearTimeout(fireIgniteTimerRef.current);
+    }
+    fireIgniteTimerRef.current = window.setTimeout(() => {
+      setShowFireIgnite(false);
+      fireIgniteTimerRef.current = null;
+    }, 1200);
+  };
 
   const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt, serverNow }) => {
     setQuestion(nextQuestion);
@@ -190,6 +217,7 @@ export default function Player({ onBack }) {
     setResultData(null);
     setNextQuestionIn(0);
     setChatDrawerOpen(false);
+    setTimerDangerActive(false);
     const fallbackMs = Number(nextQuestion?.time_limit_ms) || 20000;
     const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
       durationMs,
@@ -200,6 +228,7 @@ export default function Player({ onBack }) {
     setTimeTotal(Math.ceil(normalizedMs / 1000));
     setQuestionEndsAt(targetEndsAt);
     setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
+    prevTimeLeftRef.current = Math.max(0, Math.ceil(remainingMs / 1000));
     setPhase('question');
   };
 
@@ -219,6 +248,7 @@ export default function Player({ onBack }) {
       setQuestion(null);
       setResultData(null);
       setSelected(null);
+      setStreakCount(0);
       setPhase('waiting');
       return;
     }
@@ -282,6 +312,7 @@ export default function Player({ onBack }) {
     if (Array.isArray(res.chatHistory)) setChatHistory(res.chatHistory.slice(-MAX_CHAT_HISTORY));
     setIsLobbyDeckReady(Boolean(res.deckSelected));
     setMyScore(Number(res.myScore) || 0);
+    setStreakCount(0);
     setPhase('waiting');
   };
 
@@ -423,6 +454,7 @@ export default function Player({ onBack }) {
       setPhase('joining');
       setRoomName('');
       setChatHistory([]);
+      setStreakCount(0);
       pendingFinalScoresRef.current = null;
       if (endSplashTimerRef.current) {
         window.clearTimeout(endSplashTimerRef.current);
@@ -431,6 +463,9 @@ export default function Player({ onBack }) {
       clearPlayerState();
     });
     socket.on('game_started', () => {
+      playGameSfx('round_start', { intensity: 0.9 });
+      triggerHaptic('medium');
+      setStreakCount(0);
       setPhase('starting');
       startSplashUntilRef.current = Date.now() + START_SPLASH_MIN_MS;
       pendingQuestionRef.current = null;
@@ -579,6 +614,25 @@ export default function Player({ onBack }) {
   }, [phase, questionEndsAt]);
 
   useEffect(() => {
+    if (!(phase === 'question' || phase === 'answered')) {
+      setTimerDangerActive(false);
+      return;
+    }
+
+    const prev = Number(prevTimeLeftRef.current || 0);
+    const current = Number(timeLeft || 0);
+
+    setTimerDangerActive(current > 0 && current <= 5);
+
+    if (current > 0 && current <= 5 && current !== prev) {
+      playGameSfx('timer_warning', { intensity: current <= 2 ? 1 : 0.7 });
+      triggerHaptic(current <= 2 ? 'medium' : 'light');
+    }
+
+    prevTimeLeftRef.current = current;
+  }, [phase, timeLeft]);
+
+  useEffect(() => {
     if (phase !== 'result' || nextQuestionIn <= 0) return undefined;
     const timer = window.setInterval(() => {
       setNextQuestionIn((prev) => {
@@ -591,6 +645,24 @@ export default function Player({ onBack }) {
     }, 1000);
     return () => window.clearInterval(timer);
   }, [phase, nextQuestionIn]);
+
+  useEffect(() => {
+    if (streakCount >= 3) return;
+    setShowFireIgnite(false);
+    if (fireIgniteTimerRef.current) {
+      window.clearTimeout(fireIgniteTimerRef.current);
+      fireIgniteTimerRef.current = null;
+    }
+  }, [streakCount]);
+
+  useEffect(() => {
+    return () => {
+      if (fireIgniteTimerRef.current) {
+        window.clearTimeout(fireIgniteTimerRef.current);
+        fireIgniteTimerRef.current = null;
+      }
+    };
+  }, []);
 
   const handleBack = () => {
     clearPlayerState();
@@ -675,6 +747,15 @@ export default function Player({ onBack }) {
     socketRef.current.emit('submit_answer', { answer: opt }, (res) => {
       if (res?.success && typeof res.correct === 'boolean') {
         setAnsweredCorrect(res.correct);
+        if (res.correct) {
+          const nextStreak = streakCount + 1;
+          setStreakCount(nextStreak);
+          celebrateCorrect({ wasStreak: nextStreak >= 3 });
+          if (nextStreak === 3) triggerFireIgnite();
+        } else {
+          setStreakCount(0);
+          playGameSfx('wrong', { intensity: 0.8 });
+        }
       }
       setIsSubmitting(false);
     });
@@ -698,6 +779,10 @@ export default function Player({ onBack }) {
       }
 
       if (res.matched) {
+        const nextStreak = streakCount + 1;
+        setStreakCount(nextStreak);
+        celebrateCorrect({ wasStreak: nextStreak >= 3 });
+        if (nextStreak === 3) triggerFireIgnite();
         setSelected(payload);
         setAnsweredCorrect(true);
         setGuessText('');
@@ -708,6 +793,8 @@ export default function Player({ onBack }) {
         return;
       }
 
+      setStreakCount(0);
+      playGameSfx('wrong', { intensity: 0.7 });
       setAnsweredCorrect(null);
       setGuessText('');
       setGuessFeedback('');
@@ -770,6 +857,25 @@ export default function Player({ onBack }) {
       : timeTotal > 0 && timeLeft <= Math.ceil(timeTotal * 0.5)
         ? 'text-amber-300'
         : 'text-emerald-300';
+
+  const renderStreakBadge = () => {
+    if (streakCount < 2) return null;
+    const isOnFire = streakCount >= 3;
+
+    return (
+      <div className="ml-2 flex items-center gap-2">
+        {showFireIgnite && isOnFire && (
+          <span key={fireIgniteTick} className="animate-fire-ignite rounded-full border border-orange-300/60 bg-orange-500/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-orange-100">
+            Fire Mode
+          </span>
+        )}
+        <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isOnFire ? 'animate-on-fire-badge border-orange-300/65 bg-orange-500/20 text-orange-50' : 'border-amber-400/60 bg-amber-500/15 text-amber-100'}`}>
+          <span>{isOnFire ? 'On Fire' : 'Streak'}</span>
+          <span className="font-mono tabular-nums">x{streakCount}</span>
+        </div>
+      </div>
+    );
+  };
 
   const renderLeaveAndPing = ({ inline = false, showLeaveButton = false } = {}) => {
     if (inline) {
@@ -891,7 +997,10 @@ export default function Player({ onBack }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
-                <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
+                <div className="flex items-center">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
+                  {renderStreakBadge()}
+                </div>
               </div>
               <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
                 <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Next</p>
@@ -1009,10 +1118,13 @@ export default function Player({ onBack }) {
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
               {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
-              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
+                <div className="flex items-center">
+                  <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
+                  {renderStreakBadge()}
+                </div>
             </div>
             <div
-              className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
+              className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${timerDangerActive ? 'animate-timer-danger' : ''} ${
                 timeLeft <= 2
                   ? 'border-red-500/60 bg-red-500/10'
                   : timeLeft <= 5
@@ -1031,6 +1143,13 @@ export default function Player({ onBack }) {
               <p className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">
                 {selected}
               </p>
+              {answeredCorrect === true && (
+                <div key={correctBurstTick} className="mt-4 flex items-center justify-center">
+                  <div className="animate-correct-burst rounded-full border border-emerald-300/80 bg-emerald-400/20 px-4 py-1.5 text-xs font-black uppercase tracking-[0.16em] text-emerald-100 shadow-[0_0_24px_rgba(52,211,153,0.35)]">
+                    Perfect hit{streakCount >= 3 ? ` · Streak x${streakCount}` : ''}
+                  </div>
+                </div>
+              )}
               <p
                 className={`mt-4 text-base font-black uppercase tracking-[0.16em] ${
                   answeredCorrect === true
@@ -1141,10 +1260,13 @@ export default function Player({ onBack }) {
             <div className="flex items-start justify-between gap-3">
               <div>
                 {renderLeaveAndPing({ inline: true, showLeaveButton: true })}
-                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
+                <div className="flex items-center">
+                  <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
+                  {renderStreakBadge()}
+                </div>
               </div>
               <div
-                className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
+                className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${timerDangerActive ? 'animate-timer-danger' : ''} ${
                   timeLeft <= 2
                     ? 'border-red-500/60 bg-red-500/10'
                     : timeLeft <= 5
@@ -1225,6 +1347,7 @@ export default function Player({ onBack }) {
                   />
                   <button
                     onClick={handleGuessSubmit}
+                    data-haptic="medium"
                     className="rounded-xl bg-gradient-to-r from-emerald-400 to-teal-400 px-6 py-3 text-sm font-black tracking-wide text-teal-950 transition-all duration-300 hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
                     style={{ minHeight: answerControlMinHeight }}
                     disabled={!guessText.trim() || answeredCorrect === true || isSubmitting}
@@ -1250,6 +1373,7 @@ export default function Player({ onBack }) {
                     <button
                       key={`${question?.q_id || 'q'}_${idx}_${opt}`}
                       onClick={() => handleAnswer(opt)}
+                      data-haptic="medium"
                       disabled={isSubmitting}
                       className={`rounded-xl px-6 py-4 text-left text-lg font-black transition-transform hover:scale-[1.02] active:scale-95 md:py-6 md:text-xl disabled:cursor-not-allowed disabled:opacity-60 ${colorClass}`}
                       style={{ minHeight: answerControlMinHeight }}

@@ -11,6 +11,8 @@ import HostQuestionView from './host/HostQuestionView';
 import HostGameOverView from './host/HostGameOverView';
 import HostLobbyView from './host/HostLobbyView';
 import { resolveQuestionTiming } from '../utils/questionTiming';
+import { playGameSfx } from '../utils/gameFeel';
+import { triggerHaptic } from '../utils/haptics';
 
 const HOST_SESSION_KEY = 'lf_host_session_id';
 const HOST_STATE_KEY = 'lf_host_state';
@@ -212,6 +214,9 @@ export default function Host({ onBack, studioQuestions = null }) {
   const startConfirmTimerRef = useRef(null);
   const tokenRefreshInFlightRef = useRef(false);
   const profilePulseTimersRef = useRef(new Map());
+  const prevPhaseRef = useRef(phase);
+  const prevTimeLeftRef = useRef(0);
+  const prevAutoAdvanceRef = useRef(0);
   const modeOptions = ['FREE', 'RESTRICTED', 'OFF'];
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
   const answerModeOptions = ['auto', 'multiple_choice', 'type_guess'];
@@ -522,6 +527,61 @@ export default function Host({ onBack, studioQuestions = null }) {
     }, 250);
     return () => window.clearInterval(timer);
   }, [phase, questionEndsAt]);
+
+  useEffect(() => {
+    const previousPhase = prevPhaseRef.current;
+
+    if (phase !== previousPhase) {
+      if (phase === 'question' && previousPhase !== 'setup') {
+        playGameSfx('round_start', { intensity: 0.9 });
+        triggerHaptic('medium');
+      }
+
+      if (phase === 'result') {
+        playGameSfx('correct', { intensity: 0.8 });
+      }
+
+      if (phase === 'gameover') {
+        playGameSfx('streak', { intensity: 1 });
+        triggerHaptic('success');
+      }
+    }
+
+    prevPhaseRef.current = phase;
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase !== 'question') {
+      prevTimeLeftRef.current = Number(timeLeft || 0);
+      return;
+    }
+
+    const previous = Number(prevTimeLeftRef.current || 0);
+    const current = Number(timeLeft || 0);
+
+    if (current > 0 && current <= 5 && current !== previous) {
+      playGameSfx('timer_warning', { intensity: current <= 2 ? 1 : 0.75 });
+      triggerHaptic(current <= 2 ? 'medium' : 'light');
+    }
+
+    prevTimeLeftRef.current = current;
+  }, [phase, timeLeft]);
+
+  useEffect(() => {
+    if (phase !== 'result') {
+      prevAutoAdvanceRef.current = Number(autoAdvanceIn || 0);
+      return;
+    }
+
+    const previous = Number(prevAutoAdvanceRef.current || 0);
+    const current = Number(autoAdvanceIn || 0);
+
+    if (current > 0 && current <= 3 && current !== previous) {
+      playGameSfx('timer_warning', { intensity: 0.8 });
+    }
+
+    prevAutoAdvanceRef.current = current;
+  }, [phase, autoAdvanceIn]);
 
   useEffect(() => {
     if (phase !== 'result' || autoAdvanceIn <= 0) return undefined;

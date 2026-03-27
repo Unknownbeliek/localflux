@@ -64,7 +64,7 @@ export default function HostResultView({
             ))}
           </div>
 
-          <div className="mt-8 w-full rounded-2xl border border-emerald-500/40 bg-emerald-500/10 py-4 text-center text-xl font-black text-emerald-200">
+          <div className={`mt-8 w-full rounded-2xl border border-emerald-500/40 bg-emerald-500/10 py-4 text-center text-xl font-black text-emerald-200 ${autoAdvanceIn > 0 && autoAdvanceIn <= 3 ? 'animate-timer-danger' : ''}`}>
             {qIndex + 1 >= qTotal
               ? autoAdvanceIn > 0
                 ? `FINISHING IN ${autoAdvanceIn}s`
