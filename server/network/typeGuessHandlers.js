@@ -4,6 +4,10 @@ const { validateAnswer } = require('../core/answerValidation');
 const { calculateScore } = require('../core/scoringEngine');
 const { MAX_GUESS_LENGTH } = require('../config/typeGuessPolicy');
 
+function createMessageId(prefix, socketId) {
+  return `${prefix}_${socketId || 'unknown'}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCurrentRound, getChatMode, emitChatMessage }) {
   const emitMessage = typeof emitChatMessage === 'function'
     ? emitChatMessage
@@ -55,6 +59,7 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
       const totalPlayers = Array.isArray(room.players) ? room.players.length : 0;
 
       emitMessage(LAN_ROOM_ID, {
+        id: createMessageId('guess_correct', socket.id),
         from: 'system',
         name: 'System',
         text: `${player.name} guessed correctly! +${scoreResult.points} pts`,
@@ -105,6 +110,7 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
         player.streak = scoreResult.newStreak;
         
         emitMessage(LAN_ROOM_ID, {
+          id: createMessageId('guess_penalty', socket.id),
           from: 'system',
           name: 'System',
           text: `${player.name} got a wrong answer penalty: ${scoreResult.penalty} pts`,
@@ -117,6 +123,7 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
     const chatMode = typeof getChatMode === 'function' ? String(getChatMode() || 'FREE') : 'FREE';
     if (chatMode === 'FREE') {
       emitMessage(LAN_ROOM_ID, {
+        id: createMessageId('guess_miss', socket.id),
         from: socket.id,
         name: socket.playerName || player.name || 'Player',
         text: rawGuess,

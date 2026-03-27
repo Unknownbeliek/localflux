@@ -230,11 +230,10 @@ export default function Player({ onBack }) {
       const isTypeGuessQuestion = activeQuestion?.answer_mode === 'type_guess';
       if (hasAnswered && isTypeGuessQuestion) {
         setAnsweredCorrect(true);
-        setPhase('question');
       } else {
         setAnsweredCorrect(null);
-        setPhase(hasAnswered ? 'answered' : 'question');
       }
+      setPhase(hasAnswered ? 'answered' : 'question');
       const fallbackMs = Number(activeQuestion?.time_limit_ms) || 20000;
       const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
         durationMs,
@@ -573,7 +572,10 @@ export default function Player({ onBack }) {
     setGuessFeedback('');
     setChatDrawerOpen(false);
     setPhase('answered');
-    socketRef.current.emit('submit_answer', { answer: opt }, () => {
+    socketRef.current.emit('submit_answer', { answer: opt }, (res) => {
+      if (res?.success && typeof res.correct === 'boolean') {
+        setAnsweredCorrect(res.correct);
+      }
       setIsSubmitting(false);
     });
   };
@@ -600,6 +602,7 @@ export default function Player({ onBack }) {
         setAnsweredCorrect(true);
         setGuessText('');
         setChatDrawerOpen(false);
+        setPhase('answered');
         const points = res.scoreAwarded || 100;
         setGuessFeedback(`That is correct! +${points} pts`);
         return;
@@ -751,7 +754,6 @@ export default function Player({ onBack }) {
     const correctAnswer = resultData.correct_answer || resultData.correctAnswer || '';
     const hasAnswered = Boolean(selected);
     const isTypeGuessQuestion = question?.answer_mode === 'type_guess';
-    const gotIt = hasAnswered && (answeredCorrect === true || (!isTypeGuessQuestion && selected === correctAnswer));
     return (
       <div className="relative z-0 flex h-screen w-screen overflow-hidden bg-slate-950 text-white animate-phase-in">
         <AnimatedBackground />
@@ -772,6 +774,7 @@ export default function Player({ onBack }) {
 
           <div className="flex min-h-0 flex-1 flex-col p-4 md:p-8">
             <div className="shrink-0 rounded-3xl border border-white/10 bg-slate-950/40 px-6 py-6 shadow-2xl shadow-black/50 backdrop-blur-xl">
+              <p className="text-center text-[11px] font-semibold uppercase tracking-[0.24em] text-emerald-300/80">Answer Reveal</p>
               <p className="text-2xl md:text-3xl font-black leading-tight text-white/90 drop-shadow-md text-center">{question?.prompt}</p>
             </div>
 
@@ -786,51 +789,23 @@ export default function Player({ onBack }) {
             )}
 
             <div className="mt-4 shrink-0">
-              {isTypeGuessQuestion ? (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-5">
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/90">Answer</p>
-                    <p className="mt-1 text-xl font-black text-emerald-100">{correctAnswer}</p>
-                  </div>
-                  <div className={`rounded-2xl border px-5 py-5 ${hasAnswered ? (gotIt ? 'border-emerald-400 bg-emerald-500/10' : 'border-rose-400 bg-rose-500/10') : 'border-slate-700 bg-slate-900/70'}`}>
-                    <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Your Guess</p>
-                    <p className="mt-1 text-lg font-black text-white">{hasAnswered ? selected : 'No guess submitted'}</p>
-                  </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <div className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-5 py-5">
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-emerald-300/90">Answer</p>
+                  <p className="mt-1 text-xl font-black text-emerald-100">{correctAnswer || 'Not available'}</p>
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                  {(Array.isArray(question?.options) ? question.options : []).map((opt, idx) => {
-                    const isSelected = selected === opt;
-                    const isCorrect = correctAnswer === opt;
-                    const baseClass = 'border-slate-700 bg-slate-900 text-slate-200';
-
-                    let feedbackClass = baseClass;
-                    if (isSelected && hasAnswered) {
-                      feedbackClass = gotIt
-                        ? 'border-emerald-400 bg-emerald-500/20 text-emerald-100 shadow-[0_0_20px_rgba(52,211,153,0.3)]'
-                        : 'border-rose-400 bg-rose-500/20 text-rose-100 shadow-[0_0_20px_rgba(244,63,94,0.3)] opacity-70';
-                    } else if (isCorrect) {
-                      feedbackClass = 'border-emerald-500/60 bg-emerald-500/20 text-emerald-100 shadow-[0_0_25px_rgba(52,211,153,0.4)] ring-2 ring-emerald-400/50';
-                    } else {
-                      feedbackClass = 'border-white/5 bg-slate-900/40 text-slate-400 opacity-50 backdrop-blur-md';
-                    }
-
-                    return (
-                      <div
-                        key={`${question?.q_id || 'q'}_${idx}_${opt}`}
-                        className={`w-full rounded-2xl border-2 px-5 py-4 text-left text-base md:text-lg font-black transition-all duration-300 ${feedbackClass}`}
-                      >
-                        {opt}
-                      </div>
-                    );
-                  })}
+                <div className={`rounded-2xl border px-5 py-5 ${hasAnswered ? 'border-sky-400/60 bg-sky-500/10' : 'border-slate-700 bg-slate-900/70'}`}>
+                  <p className="text-[11px] uppercase tracking-[0.2em] text-slate-300">
+                    {isTypeGuessQuestion ? 'Your Guess' : 'Your Answer'}
+                  </p>
+                  <p className="mt-1 text-lg font-black text-white">{hasAnswered ? selected : 'No answer submitted'}</p>
                 </div>
-              )}
+              </div>
             </div>
 
             <div className="mt-4 shrink-0 text-center">
               <p className="text-sm font-semibold text-slate-300">
-                {hasAnswered ? (gotIt ? 'You answered correctly!' : 'Your selected answer was incorrect.') : 'You did not submit an answer this round.'}
+                {hasAnswered ? 'Answer submitted. Review shown above.' : 'You did not submit an answer this round.'}
               </p>
               <p className="mt-2 font-mono text-sm tabular-nums">Score: <span className="font-black text-amber-300">{myScore}</span></p>
               <p className="mt-2 text-xs uppercase tracking-[0.24em] text-white/60">
@@ -887,20 +862,116 @@ export default function Player({ onBack }) {
 
   if (phase === 'answered') {
     return (
-      <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 gap-4 animate-phase-in z-0">
+      <div className="relative z-0 flex min-h-[100dvh] w-screen overflow-y-auto bg-slate-950 text-white animate-phase-in lg:h-screen lg:overflow-hidden">
         <AnimatedBackground />
-        <div className="relative z-10 w-full flex flex-col items-center">
-          {renderLeaveAndPing()}
+
+        <div className="relative z-10 flex w-full flex-1 flex-col p-4 md:p-8">
+          <div className="mb-3 flex items-start justify-between gap-3">
+            <div>
+              {renderLeaveAndPing({ inline: true })}
+              <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
+            </div>
+            <div
+              className={`rounded-2xl border-2 px-4 py-2 text-right transition-colors duration-300 backdrop-blur-md shadow-xl ${
+                timeLeft <= 2
+                  ? 'border-red-500/60 bg-red-500/10'
+                  : timeLeft <= 5
+                    ? 'border-amber-500/50 bg-amber-500/10'
+                    : 'border-slate-800 bg-slate-900'
+              }`}
+            >
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Timer</p>
+              <p className={`text-2xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timeLeft <= 2 ? 'text-red-300' : timerTone}`}>{timeLeft}s</p>
+            </div>
+          </div>
+
+          <div className="mx-auto flex w-full max-w-3xl flex-1 items-start justify-center pt-2 lg:items-center lg:pt-0">
+            <div className="w-full rounded-3xl border border-white/10 bg-black/35 p-6 text-center shadow-2xl shadow-black/40 backdrop-blur-xl md:p-8">
+              <p className="text-sm uppercase tracking-[0.24em] text-slate-400">Answer Submitted</p>
+              <p className="mt-4 rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">
+                {selected}
+              </p>
+              <p
+                className={`mt-4 text-base font-black uppercase tracking-[0.16em] ${
+                  answeredCorrect === true
+                    ? 'text-emerald-300'
+                    : answeredCorrect === false
+                      ? 'text-rose-300'
+                      : 'text-amber-300'
+                }`}
+              >
+                {answeredCorrect === true ? 'Correct' : answeredCorrect === false ? 'Wrong' : 'Checking...'}
+              </p>
+              <div className="mt-3 flex items-center justify-center">
+                {answeredCorrect === true ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/50 bg-emerald-500/15 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-emerald-200">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-400/25">
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                        <path d="M4.5 10.5L8.3 14.2L15.5 6.8" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                    Right Answer
+                  </span>
+                ) : answeredCorrect === false ? (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-rose-400/50 bg-rose-500/15 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-rose-200">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-rose-400/25">
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" aria-hidden="true">
+                        <path d="M6 6L14 14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                        <path d="M14 6L6 14" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                    Wrong Answer
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-2 rounded-full border border-amber-400/50 bg-amber-500/15 px-3 py-1.5 text-xs font-black uppercase tracking-[0.14em] text-amber-200">
+                    <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-amber-400/25">
+                      <span className="h-2 w-2 rounded-full bg-amber-200 animate-pulse" />
+                    </span>
+                    Verifying
+                  </span>
+                )}
+              </div>
+              <p className="mt-4 text-sm text-slate-400">You can chat while waiting for other players to submit.</p>
+              <div className="mt-4 flex justify-center gap-2">
+                <span className="status-dot" />
+                <span className="status-dot" />
+                <span className="status-dot" />
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 lg:hidden">
+            <div className="h-[42dvh] min-h-[260px] rounded-2xl border border-white/10 bg-black/25 p-2">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
+              />
+            </div>
+          </div>
         </div>
-        <p className="relative z-10 text-sm uppercase tracking-[0.24em] text-slate-500">Answer Submitted</p>
-        <p className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 px-6 py-4 text-2xl font-black text-emerald-200 shadow-lg shadow-emerald-900/30">{selected}</p>
-        <div className={`mt-2 text-3xl font-black tabular-nums ${timeLeft <= 5 ? 'animate-pulse' : ''} ${timerTone}`}>{timeLeft}s</div>
-        <div className="mt-3 flex gap-2">
-          <span className="status-dot" />
-          <span className="status-dot" />
-          <span className="status-dot" />
-        </div>
-        <p className="text-slate-500 text-sm mt-3">Waiting for others...</p>
+
+        <aside className="hidden lg:flex w-80 lg:w-96 flex-col border-l border-white/10 bg-black/20 backdrop-blur-xl relative z-10">
+          <div className="shrink-0 border-b border-white/10 px-4 py-3">
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-300/80">Room Chat</p>
+            <p className="mt-1 text-[11px] text-slate-400">{roomDisplayName}</p>
+          </div>
+          <div className="min-h-0 flex-1 p-3">
+            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Room Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
+              />
+            </div>
+          </div>
+        </aside>
       </div>
     );
   }
