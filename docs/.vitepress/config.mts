@@ -4,7 +4,7 @@ import { defineConfig } from 'vitepress'
 export default defineConfig({
   title: "LocalFlux",
   description: "A local-first, self-hosted multiplayer quiz engine. Zero cloud. Zero latency.",
-
+  
   themeConfig: {
     nav: [
       { text: 'Home', link: '/' },

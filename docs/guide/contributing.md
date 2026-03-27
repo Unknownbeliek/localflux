@@ -183,7 +183,7 @@ Before implementing a feature, understand the three-layer structure:
 2. Write tests in `server/tests/myFeature.test.js`
 3. Wire it in `network/handlers.js` or `network/myFeatureHandlers.js`
 4. Update React components (`client/src/components/`) to react to new events
-5. Document the feature in [docs/guide/](/guide/)
+5. Document the feature in [docs/guide/](/guide/get-started)
 
 ### Adding a new socket event
 
