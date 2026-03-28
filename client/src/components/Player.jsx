@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Chat from './Chat';
 import AnimatedBackground from './AnimatedBackground';
 import { createGameSocket } from '../backendUrl';
@@ -177,7 +177,6 @@ export default function Player({ onBack }) {
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
   const [nextQuestionIn, setNextQuestionIn] = useState(0);
-  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [joinRetryIn, setJoinRetryIn] = useState(0);
   const [awaitingRoomCreation, setAwaitingRoomCreation] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -229,7 +228,6 @@ export default function Player({ onBack }) {
     setPrivateGuessHistory([]);
     setResultData(null);
     setNextQuestionIn(0);
-    setChatDrawerOpen(false);
     setTimerDangerActive(false);
     const fallbackMs = Number(nextQuestion?.time_limit_ms) || 20000;
     const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({
@@ -340,7 +338,7 @@ export default function Player({ onBack }) {
     setPhase('waiting');
   };
 
-  const emitJoin = ({
+  const emitJoin = useCallback(({
     onSuccess,
     onUnavailable,
     onFailure,
@@ -370,7 +368,7 @@ export default function Player({ onBack }) {
         onSuccess?.(res);
       }
     );
-  };
+  }, []);
 
   const attemptJoinRoom = () => {
     const socket = socketRef.current;
@@ -502,7 +500,7 @@ export default function Player({ onBack }) {
       }
       setIsLobbyDeckReady(true);
     });
-    socket.on('room_closed', ({ message }) => {
+    socket.on('room_closed', () => {
       setError('Host is setting up a fresh room. We will auto-join you soon.');
       setAwaitingRoomCreation(true);
       setJoinRetryIn(3);
@@ -656,7 +654,7 @@ export default function Player({ onBack }) {
       window.clearTimeout(kickoffTimer);
       window.clearInterval(retryTimer);
     };
-  }, [awaitingRoomCreation, connected]);
+  }, [awaitingRoomCreation, connected, emitJoin]);
 
   useEffect(() => {
     if (!(phase === 'question' || phase === 'answered') || !questionEndsAt) return undefined;
@@ -812,7 +810,6 @@ export default function Player({ onBack }) {
     setSelected(opt);
     setAnsweredCorrect(null);
     setGuessFeedback('');
-    setChatDrawerOpen(false);
     setPhase('answered');
     socketRef.current.emit('submit_answer', { answer: opt }, (res) => {
       if (res?.success && typeof res.correct === 'boolean') {
@@ -856,7 +853,6 @@ export default function Player({ onBack }) {
         setSelected(payload);
         setAnsweredCorrect(true);
         setGuessText('');
-        setChatDrawerOpen(false);
         setPhase('answered');
         const points = res.scoreAwarded || 100;
         setGuessFeedback(`That is correct! +${points} pts`);

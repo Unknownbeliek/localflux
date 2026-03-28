@@ -652,7 +652,7 @@ export default function AdminDashboard() {
       <ConfirmActionModal
         open={isDeleteDraftModalOpen}
         title="Delete Draft"
-        message={`\"${deleteDraftTargetTitle}\" will be permanently removed from your local drafts.`}
+        message={`"${deleteDraftTargetTitle}" will be permanently removed from your local drafts.`}
         checkboxLabel="I understand this draft cannot be recovered after deletion."
         checked={deleteDraftConfirmChecked}
         onCheckedChange={setDeleteDraftConfirmChecked}

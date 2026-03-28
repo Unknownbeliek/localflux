@@ -1,0 +1,247 @@
+/**
+ * tests/scoringEngine.test.js
+ *
+ * Unit tests for server/core/scoringEngine.js
+ *
+ * Tests the calculateScore function for correct handling of:
+ * - Difficulty levels (easy, standard, medium, hard)
+ * - Game modes (casual, arcade, pro) with different decay floors and penalties
+ * - Time decay multiplier calculations
+ * - Streak bonuses
+ * - Correct vs. incorrect answer handling
+ */
+
+'use strict';
+
+const { calculateScore } = require('../core/scoringEngine');
+
+describe('scoringEngine.calculateScore()', () => {
+  // ── Tests: Difficulty Points ──────────────────────────────────────────────
+
+  describe('difficulty points', () => {
+    test('easy difficulty grants 50 base points', () => {
+      const result = calculateScore(true, 'easy', 'arcade', 10000, 20000);
+      expect(result.basePoints).toBe(50);
+    });
+
+    test('standard difficulty grants 100 base points', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000);
+      expect(result.basePoints).toBe(100);
+    });
+
+    test('medium difficulty grants 150 base points', () => {
+      const result = calculateScore(true, 'medium', 'arcade', 10000, 20000);
+      expect(result.basePoints).toBe(150);
+    });
+
+    test('hard difficulty grants 200 base points', () => {
+      const result = calculateScore(true, 'hard', 'arcade', 10000, 20000);
+      expect(result.basePoints).toBe(200);
+    });
+
+    test('defaults to standard for invalid difficulty', () => {
+      const result = calculateScore(true, 'invalid', 'arcade', 10000, 20000);
+      expect(result.basePoints).toBe(100);
+    });
+  });
+
+  // ── Tests: Time Decay Multiplier ──────────────────────────────────────────
+
+  describe('time decay multiplier', () => {
+    test('casual mode (decay floor 1.0) gives full points regardless of time', () => {
+      const result1 = calculateScore(true, 'standard', 'casual', 20000, 20000);
+      const result2 = calculateScore(true, 'standard', 'casual', 0, 20000);
+      expect(result1.points).toBe(result2.points);
+      expect(result1.points).toBe(100); // No time penalty
+    });
+
+    test('arcade mode (decay floor 0.5) gives 50% at t=0 and 100% at t=max', () => {
+      const fullTime = calculateScore(true, 'standard', 'arcade', 20000, 20000);
+      const noTime = calculateScore(true, 'standard', 'arcade', 0, 20000);
+      const midTime = calculateScore(true, 'standard', 'arcade', 10000, 20000);
+
+      expect(fullTime.points).toBe(100); // 100 * (0.5 + 0.5*1) = 100
+      expect(noTime.points).toBe(50);    // 100 * (0.5 + 0.5*0) = 50
+      expect(midTime.points).toBe(75);   // 100 * (0.5 + 0.5*0.5) = 75
+    });
+
+    test('pro mode (decay floor 0.0) gives 0% at t=0 and 100% at t=max', () => {
+      const fullTime = calculateScore(true, 'standard', 'pro', 20000, 20000);
+      const noTime = calculateScore(true, 'standard', 'pro', 0, 20000);
+      const midTime = calculateScore(true, 'standard', 'pro', 10000, 20000);
+
+      expect(fullTime.points).toBe(100); // 100 * (0 + 1*1) = 100
+      expect(noTime.points).toBe(0);     // 100 * (0 + 1*0) = 0
+      expect(midTime.points).toBe(50);   // 100 * (0 + 1*0.5) = 50
+    });
+
+    test('clamps time ratio between 0 and 1', () => {
+      // Test with timeRemaining > totalTime (shouldn't happen, but should be safe)
+      const result1 = calculateScore(true, 'standard', 'arcade', 30000, 20000);
+      // Test with negative time (shouldn't happen, but should be safe)
+      const result2 = calculateScore(true, 'standard', 'arcade', -5000, 20000);
+
+      expect(result1.points).toBeLessThanOrEqual(100);
+      expect(result2.points).toBeGreaterThanOrEqual(50);
+    });
+
+    test('handles zero totalTimeMs safely', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 0, 0);
+      expect(result.points).toBeGreaterThanOrEqual(0);
+    });
+  });
+
+  // ── Tests: Streak Bonuses ─────────────────────────────────────────────────
+
+  describe('streak bonuses', () => {
+    test('no streak bonus at streak 0-2', () => {
+      const s0 = calculateScore(true, 'standard', 'arcade', 10000, 20000, 0);
+      const s1 = calculateScore(true, 'standard', 'arcade', 10000, 20000, 1);
+
+      expect(s0.streakBonus).toBe(0); // newStreak=1, no bonus
+      expect(s1.streakBonus).toBe(0); // newStreak=2, no bonus
+    });
+
+    test('3-streak grants 20 bonus points', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000, 2);
+      expect(result.newStreak).toBe(3);
+      expect(result.streakBonus).toBe(20);
+    });
+
+    test('4-streak grants 30 bonus points', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000, 3);
+      expect(result.newStreak).toBe(4);
+      expect(result.streakBonus).toBe(30);
+    });
+
+    test('5+ streak grants 50 bonus points', () => {
+      const result5 = calculateScore(true, 'standard', 'arcade', 10000, 20000, 4);
+      const result10 = calculateScore(true, 'standard', 'arcade', 10000, 20000, 9);
+
+      expect(result5.newStreak).toBe(5);
+      expect(result5.streakBonus).toBe(50);
+      expect(result10.newStreak).toBe(10);
+      expect(result10.streakBonus).toBe(50);
+    });
+
+    test('streak bonuses are included in final points', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000, 4);
+      expect(result.points).toBe(result.basePoints * 0.75 + result.streakBonus); // 75 + 50 = 125
+    });
+  });
+
+  // ── Tests: Streak Continuity ──────────────────────────────────────────────
+
+  describe('streak continuity', () => {
+    test('correct answer increments streak by 1', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000, 5);
+      expect(result.newStreak).toBe(6);
+    });
+
+    test('incorrect answer resets streak to 0', () => {
+      const result = calculateScore(false, 'standard', 'arcade', 10000, 20000, 5);
+      expect(result.newStreak).toBe(0);
+    });
+
+    test('incorrect answer with no streak stays 0', () => {
+      const result = calculateScore(false, 'standard', 'arcade', 10000, 20000, 0);
+      expect(result.newStreak).toBe(0);
+    });
+  });
+
+  // ── Tests: Wrong Answer Penalties ─────────────────────────────────────────
+
+  describe('wrong answer penalties', () => {
+    test('casual mode has no penalty for wrong answers', () => {
+      const result = calculateScore(false, 'standard', 'casual', 10000, 20000);
+      expect(result.points).toBe(0);
+      expect(result.penalty).toBe(0);
+    });
+
+    test('arcade mode has no penalty for wrong answers', () => {
+      const result = calculateScore(false, 'standard', 'arcade', 10000, 20000);
+      expect(result.points).toBe(0);
+      expect(result.penalty).toBe(0);
+    });
+
+    test('pro mode penalizes wrong answers at -50% of base points', () => {
+      const result = calculateScore(false, 'standard', 'pro', 10000, 20000);
+      expect(result.penalty).toBe(-50); // -50% of 100
+      expect(result.points).toBe(-50);  // Negative points returned
+    });
+
+    test('pro mode penalty scales with difficulty', () => {
+      const easyPenalty = calculateScore(false, 'easy', 'pro', 10000, 20000);
+      const hardPenalty = calculateScore(false, 'hard', 'pro', 10000, 20000);
+
+      expect(easyPenalty.penalty).toBe(-25);  // -50% of 50
+      expect(hardPenalty.penalty).toBe(-100); // -50% of 200
+    });
+  });
+
+  // ── Tests: Complex Scoring Scenarios ──────────────────────────────────────
+
+  describe('complex scenarios', () => {
+    test('hard difficulty + perfect time + 5-streak in arcade', () => {
+      const result = calculateScore(true, 'hard', 'arcade', 20000, 20000, 4);
+      // basePoints = 200
+      // multiplier = 0.5 + 0.5*1 = 1
+      // timedScore = 200 * 1 = 200
+      // streakBonus = 50 (at 5-streak)
+      // points = 200 + 50 = 250
+      expect(result.points).toBe(250);
+      expect(result.newStreak).toBe(5);
+    });
+
+    test('easy difficulty + no time + no streak in pro', () => {
+      const result = calculateScore(true, 'easy', 'pro', 0, 20000);
+      // basePoints = 50
+      // multiplier = 0 + 1*0 = 0
+      // timedScore = 50 * 0 = 0
+      // streakBonus = 0 (newStreak = 1)
+      // points = 0
+      expect(result.points).toBe(0);
+      expect(result.newStreak).toBe(1);
+    });
+
+    test('medium difficulty + casual mode always full points', () => {
+      const result = calculateScore(true, 'medium', 'casual', 5000, 20000, 2);
+      // basePoints = 150
+      // multiplier = 1 (casual always 1)
+      // timedScore = 150
+      // streakBonus = 0 (3-streak triggers after, so now 3)
+      // Actually, streak calculation is AFTER the answer, so newStreak = 3, bonus = 20
+      // points = 150 + 20 = 170
+      expect(result.points).toBe(170);
+    });
+  });
+
+  // ── Tests: Edge Cases and Defaults ───────────────────────────────────────
+
+  describe('edge cases and defaults', () => {
+    test('missing currentStreak defaults to 0', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000);
+      expect(result.newStreak).toBe(1);
+    });
+
+    test('invalid gameMode defaults to arcade', () => {
+      const result = calculateScore(true, 'standard', 'invalid', 10000, 20000);
+      // arcade mode: 100 * (0.5 + 0.5*0.5) = 75
+      expect(result.points).toBe(75);
+    });
+
+    test('returns all required properties', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000, 0);
+      expect(result).toHaveProperty('points');
+      expect(result).toHaveProperty('newStreak');
+      expect(result).toHaveProperty('basePoints');
+      expect(result).toHaveProperty('streakBonus');
+      expect(result).toHaveProperty('penalty');
+    });
+
+    test('points are integers (rounded)', () => {
+      const result = calculateScore(true, 'standard', 'arcade', 10000, 20000);
+      expect(Number.isInteger(result.points)).toBe(true);
+    });
+  });
+});
