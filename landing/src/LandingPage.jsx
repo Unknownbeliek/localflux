@@ -706,8 +706,7 @@ export default function LocalFluxSections() {
     if (typeof window === "undefined") return;
 
     const mediaQuery = window.matchMedia("(max-width: 768px)");
-    const isMobile = window.matchMedia("(max-width: 768px)").matches;
-    setIsMobile(isMobile);
+    setIsMobile(mediaQuery.matches);
 
     const handleChange = (event) => setIsMobile(event.matches);
 
