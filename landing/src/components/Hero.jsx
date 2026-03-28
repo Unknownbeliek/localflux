@@ -1,166 +1,73 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Terminal, Download, Code2, Sparkles } from "lucide-react";
+import { Download, Code2, Sparkles } from "lucide-react";
+
+const TERMINAL_SEQUENCE = [
+  { delay: 0, type: "prompt", text: "" },
+  { delay: 400, type: "typing", text: "npx localflux start" },
+  { delay: 2000, type: "output", text: "", color: "text-slate-500" },
+  { delay: 2100, type: "output", text: "  LocalFlux v1.0.0 — FOSS LAN Event Engine", color: "text-slate-400" },
+  { delay: 2300, type: "output", text: "  ─────────────────────────────────────────", color: "text-slate-700" },
+  { delay: 2500, type: "output", text: "  Starting LocalFlux State Machine...", color: "text-yellow-400" },
+  { delay: 3200, type: "output", text: "  ✔  IndexedDB initialized", color: "text-emerald-400" },
+  { delay: 3600, type: "output", text: "  ✔  Zod schemas validated", color: "text-emerald-400" },
+  { delay: 4000, type: "output", text: "  ✔  Session state machine READY", color: "text-emerald-400" },
+  { delay: 4600, type: "output", text: "  ✔  Binding to 0.0.0.0:5173...", color: "text-emerald-400" },
+  { delay: 5200, type: "success", text: "  🚀 Engine running on http://192.168.1.5:5173", color: "text-emerald-300" },
+  { delay: 5800, type: "output", text: "", color: "text-slate-500" },
+  { delay: 5900, type: "output", text: "  Host Dashboard → http://192.168.1.5:5173/host", color: "text-cyan-400" },
+  { delay: 6100, type: "output", text: "  Player Join   → http://192.168.1.5:5173/join", color: "text-cyan-400" },
+];
 
 export default function Hero() {
-  const [buttonLight, setButtonLight] = React.useState({ primary: { x: 0, y: 0 }, secondary: { x: 0, y: 0 } });
-  const [terminalLight, setTerminalLight] = React.useState({ x: 0, y: 0 });
+  const [visibleLines, setVisibleLines] = React.useState([]);
+  const [typingText, setTypingText] = React.useState("");
+  const [phase, setPhase] = React.useState("idle");
+  const containerRef = React.useRef(null);
 
-  const handleButtonMove = (e, buttonType) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setButtonLight(prev => ({
-      ...prev,
-      [buttonType]: { x: e.clientX - rect.left, y: e.clientY - rect.top }
-    }));
-  };
+  React.useEffect(() => {
+    const timers = [];
 
-  const handleTerminalMove = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    setTerminalLight({ x: e.clientX - rect.left, y: e.clientY - rect.top });
-  };
+    const startSequence = () => {
+      setVisibleLines([]);
+      setTypingText("");
+      setPhase("idle");
+
+      TERMINAL_SEQUENCE.forEach((step) => {
+        const t = setTimeout(() => {
+          if (step.type === "typing") {
+            setPhase("typing");
+            const chars = step.text.split("");
+            chars.forEach((char, ci) => {
+              const ct = setTimeout(() => {
+                setTypingText((prev) => prev + char);
+                if (ci === chars.length - 1) setPhase("output");
+              }, ci * 55);
+              timers.push(ct);
+            });
+          } else if (step.type === "output" || step.type === "success") {
+            setVisibleLines((prev) => [...prev, { text: step.text, color: step.color, bold: step.type === "success" }]);
+            if (containerRef.current) {
+              containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            }
+          }
+        }, step.delay);
+        timers.push(t);
+      });
+
+      const loopT = setTimeout(() => {
+        setTypingText("");
+        startSequence();
+      }, 10500);
+      timers.push(loopT);
+    };
+
+    startSequence();
+    return () => timers.forEach(clearTimeout);
+  }, []);
 
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
-      <style>{`
-        @keyframes blink {
-          0%, 50%, 100% { opacity: 1; }
-          25%, 75% { opacity: 0; }
-        }
-
-        .cursor {
-          display: inline-block;
-          width: 6px;
-          height: 14px;
-          background: #10B981;
-          animation: blink 1s infinite;
-        }
-
-        .btn-primary {
-          position: relative;
-          background: linear-gradient(135deg, #10B981, #06B6D4);
-          box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);
-          transition: all 0.25s ease;
-        }
-
-        .btn-primary:hover {
-          transform: translateY(-2px);
-          box-shadow:
-            0 10px 30px rgba(16, 185, 129, 0.35),
-            0 0 20px rgba(16, 185, 129, 0.2);
-        }
-
-        .btn-primary::before {
-          content: "";
-          position: absolute;
-          inset: -1px;
-          border-radius: inherit;
-          background: linear-gradient(
-            120deg,
-            transparent,
-            rgba(16, 185, 129, 0.6),
-            transparent
-          );
-          opacity: 0;
-          transition: opacity 0.3s;
-        }
-
-        .btn-primary:hover::before {
-          opacity: 1;
-        }
-
-        .btn-secondary {
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.03);
-          transition: all 0.25s ease;
-          position: relative;
-        }
-
-        .btn-secondary:hover {
-          border-color: rgba(255, 255, 255, 0.2);
-          background: rgba(255, 255, 255, 0.06);
-        }
-
-        .interactive-border {
-          position: relative;
-          border-radius: 16px;
-          overflow: hidden;
-        }
-
-        .interactive-border::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          border-radius: inherit;
-          pointer-events: none;
-          background: radial-gradient(
-            200px circle at var(--x, 50%) var(--y, 50%),
-            rgba(16, 185, 129, 0.18),
-            transparent 60%
-          );
-          opacity: 0;
-          transition: opacity 0.25s ease;
-        }
-
-        .interactive-border:hover::after {
-          opacity: 1;
-        }
-
-        .terminal-card {
-          background: rgba(8, 12, 24, 0.85);
-          backdrop-filter: blur(16px);
-          border-radius: 16px;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
-          transition: all 0.3s ease;
-          overflow: hidden;
-        }
-
-        .terminal-card:hover {
-          border-color: rgba(16, 185, 129, 0.3);
-        }
-
-        .terminal-header {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 14px;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-        }
-
-        .dot {
-          width: 10px;
-          height: 10px;
-          border-radius: 50%;
-        }
-
-        .red { background: #ff5f56; }
-        .yellow { background: #ffbd2e; }
-        .green { background: #27c93f; }
-
-        .terminal-title {
-          margin-left: auto;
-          font-size: 12px;
-          color: rgba(255, 255, 255, 0.4);
-          font-family: 'JetBrains Mono', monospace;
-        }
-
-        .terminal-body {
-          padding: 18px;
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 13px;
-        }
-
-        .terminal-body p {
-          margin: 0;
-          line-height: 1.6;
-        }
-
-        .cmd { color: #10B981; font-weight: 500; }
-        .dim { color: #64748b; }
-        .success { color: #22c55e; }
-        .link { color: #38bdf8; }
-      `}</style>
-      
       <div className="relative z-10 container mx-auto px-6 py-32 md:py-40">
         <motion.div
           initial={{ opacity: 0, y: 30 }}
@@ -217,15 +124,7 @@ export default function Hero() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.5 }}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.96 }}
-              onMouseMove={(e) => handleButtonMove(e, 'primary')}
-              onMouseLeave={() => setButtonLight(prev => ({ ...prev, primary: { x: 0, y: 0 } }))}
-              style={{
-                '--x': `${buttonLight.primary.x}px`,
-                '--y': `${buttonLight.primary.y}px`
-              }}
-              className="btn-primary interactive-border px-6 py-3 rounded-full text-black font-semibold flex items-center gap-2 overflow-hidden relative"
+              className="px-6 py-3 rounded-full text-black font-semibold flex items-center gap-2 relative bg-gradient-to-r from-emerald-400 to-cyan-400 transition-transform duration-[250ms] ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
             >
               <Download className="w-5 h-5" />
               <span>Download Core Engine</span>
@@ -236,19 +135,19 @@ export default function Hero() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.96 }}
-              onMouseMove={(e) => handleButtonMove(e, 'secondary')}
-              onMouseLeave={() => setButtonLight(prev => ({ ...prev, secondary: { x: 0, y: 0 } }))}
-              style={{
-                '--x': `${buttonLight.secondary.x}px`,
-                '--y': `${buttonLight.secondary.y}px`
-              }}
-              className="btn-secondary interactive-border px-6 py-3 rounded-full text-white font-semibold flex items-center gap-2 relative"
+              className="px-6 py-3 rounded-full text-white font-semibold flex items-center gap-2 relative border border-white/10 bg-white/[0.03] transition-transform duration-[250ms] ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
             >
               <Code2 className="w-5 h-5" />
               <span>Run via CLI</span>
             </motion.button>
+          </div>
+
+          <div className="mb-8 text-center flex flex-col gap-2 mt-12">
+            <span className="font-mono text-xs tracking-[0.25em] text-slate-500 uppercase">Developer Experience</span>
+            <h2 className="text-2xl sm:text-3xl font-bold text-white">
+              One command.{" "}
+              <span className="shimmer-text">Instant LAN.</span>
+            </h2>
           </div>
 
           {/* Terminal */}
@@ -256,31 +155,78 @@ export default function Hero() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, delay: 0.7 }}
-            onMouseMove={handleTerminalMove}
-            onMouseLeave={() => setTerminalLight({ x: 0, y: 0 })}
-            style={{
-              '--x': `${terminalLight.x}px`,
-              '--y': `${terminalLight.y}px`
-            }}
-            className="mt-12 max-w-2xl mx-auto"
+            className="max-w-4xl mx-auto"
           >
-            <div className="terminal-card interactive-border relative overflow-hidden">
-              {/* Terminal Header */}
-              <div className="terminal-header">
-                <span className="dot red"></span>
-                <span className="dot yellow"></span>
-                <span className="dot green"></span>
-                <span className="terminal-title">zsh — localflux</span>
+            <div className="terminal-window relative">
+              <div className="terminal-scanline" />
+
+              <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border-b border-slate-700/60">
+                <div className="flex gap-1.5">
+                  <div className="w-3 h-3 rounded-full bg-red-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
+                  <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
+                </div>
+                <div className="flex-1 text-center">
+                  <span className="font-mono text-xs text-slate-500">zsh — localflux</span>
+                </div>
+                <div className="w-12 flex justify-end">
+                  <div className="flex gap-0.5">
+                    <div className="w-1 h-1 rounded-full bg-emerald-400 glow-pulse" />
+                  </div>
+                </div>
               </div>
 
-              {/* Terminal Body */}
-              <div className="terminal-body">
-                <p className="cmd">$ npx localflux start</p>
-                <p className="dim">Initializing LocalFlux engine...</p>
-                <p className="success">✔ Server running on LAN</p>
-                <p className="link">http://192.168.1.100:3000</p>
-                <p className="success">Ready to accept connections<span className="cursor" /></p>
+              <div
+                ref={containerRef}
+                className="p-5 min-h-64 max-h-80 overflow-y-auto font-mono text-sm leading-6 scroll-smooth"
+                style={{ scrollbarWidth: "none" }}
+              >
+                <div className="text-slate-700 text-xs mb-3">Last login: Mon Mar 24 07:31:18 on ttys001</div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-emerald-400">❯</span>
+                  <span className="text-slate-300">{typingText}</span>
+                  {(phase === "idle" || phase === "typing") && (
+                    <span
+                      className="inline-block w-2 h-4 bg-emerald-400 align-middle"
+                      style={{ animation: "typing-cursor 0.8s step-end infinite" }}
+                    />
+                  )}
+                </div>
+
+                <div className="mt-1">
+                  {visibleLines.map((line, i) => (
+                    <div
+                      key={i}
+                      className={`${line.color} ${line.bold ? "font-bold" : ""} text-sm leading-6`}
+                      style={{ animation: "fade-in-up 0.2s ease both" }}
+                    >
+                      {line.text}
+                    </div>
+                  ))}
+                </div>
+
+                {phase === "done" && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-emerald-400">❯</span>
+                    <span className="inline-block w-2 h-4 bg-emerald-400 align-middle" style={{ animation: "typing-cursor 0.8s step-end infinite" }} />
+                  </div>
+                )}
               </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-4 justify-center">
+              {[
+                { label: "npx install", value: "zero config" },
+                { label: "Port", value: ":5173" },
+                { label: "Bind", value: "0.0.0.0" },
+                { label: "Runtime", value: "Node ≥ 18" },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center gap-1.5 text-xs font-mono">
+                  <span className="text-slate-500">{item.label}</span>
+                  <span className="text-slate-300 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700">{item.value}</span>
+                </div>
+              ))}
             </div>
           </motion.div>
         </motion.div>

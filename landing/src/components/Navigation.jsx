@@ -22,7 +22,7 @@ export default function Navigation() {
           <div className="flex items-center justify-between h-20">
 
             {/* Logo */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.02]">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-r from-emerald-400 to-cyan-400 flex items-center justify-center">
                 <span className="text-white font-bold">LF</span>
               </div>
@@ -31,20 +31,29 @@ export default function Navigation() {
 
             {/* Desktop Links */}
             <div className="hidden md:flex gap-8 text-gray-400">
-              <a href="#" className="hover:text-white">Features</a>
-              <a href="#" className="hover:text-white">Docs</a>
-              <a href="#" className="hover:text-white">How It Works</a>
+              <a href="#" className="relative pb-1 transition-colors duration-200 hover:text-white after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-[2px] after:w-full after:bg-cyan-400 after:origin-left after:scale-x-0 after:transition-transform after:duration-300 after:ease-out hover:after:scale-x-100">Features</a>
+              <a href="#" className="relative pb-1 transition-colors duration-200 hover:text-white after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-[2px] after:w-full after:bg-cyan-400 after:origin-left after:scale-x-0 after:transition-transform after:duration-300 after:ease-out hover:after:scale-x-100">Docs</a>
+              <a href="#" className="relative pb-1 transition-colors duration-200 hover:text-white after:content-[''] after:absolute after:left-0 after:bottom-0 after:h-[2px] after:w-full after:bg-cyan-400 after:origin-left after:scale-x-0 after:transition-transform after:duration-300 after:ease-out hover:after:scale-x-100">How It Works</a>
             </div>
 
             {/* Right Side */}
             <div className="flex items-center gap-4">
 
-              <a href="#" className="hidden sm:flex items-center gap-2 text-gray-400 hover:text-white">
-                <GitBranch className="w-5 h-5" />
-                GitHub
-              </a>
+              <motion.a
+                href="https://github.com/Unknownbeliek/localflux"
+                target="_blank"
+                rel="noopener noreferrer"
+                whileHover={{ y: -2 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="group hidden sm:flex items-center gap-2 text-gray-400"
+              >
+                <span className="flex items-center gap-2 transition-transform duration-300 ease-out">
+                  <GitBranch className="w-5 h-5 transition-transform duration-300 ease-out group-hover:translate-x-0.5" />
+                  GitHub
+                </span>
+              </motion.a>
 
-              <button className="hidden sm:block px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-400 to-cyan-400 text-black font-semibold">
+              <button className="hidden sm:block px-5 py-2 rounded-lg bg-gradient-to-r from-emerald-400 to-cyan-400 text-black font-semibold transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:translate-y-0 active:scale-[0.98]">
                 Get Started
               </button>
 
@@ -68,7 +77,7 @@ export default function Navigation() {
             <a href="#">Features</a>
             <a href="#">Docs</a>
             <a href="#">How It Works</a>
-            <button className="mt-2 px-4 py-2 bg-emerald-400 text-black rounded-lg">
+            <button className="mt-2 px-4 py-2 bg-emerald-400 text-black rounded-lg transition-transform duration-200 ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:translate-y-0 active:scale-[0.98]">
               Get Started
             </button>
           </div>

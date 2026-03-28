@@ -63,7 +63,7 @@ export default function HowItWorks() {
           </p>
         </motion.div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-stretch">
           {steps.map((step, i) => {
             const cardRef = React.useRef(null);
             
@@ -87,14 +87,14 @@ export default function HowItWorks() {
                   cardRef.current?.style.setProperty("--x", "50%");
                   cardRef.current?.style.setProperty("--y", "50%");
                 }}
-                className="group relative pt-7"
+                className="group relative pt-7 h-full"
               >
                 {/* Main card */}
-                <div className="interactive-border relative p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-xl hover:border-white/15 transition-all duration-300" style={{
+                <div className="interactive-border relative h-full min-h-[200px] p-6 rounded-2xl bg-white/[0.03] border border-white/10 backdrop-blur-xl hover:border-white/15 transition-all duration-300 flex flex-col" style={{
                   boxShadow: '0 10px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)'
                 }}>
                   {/* Content */}
-                  <div className="relative z-10">
+                  <div className="relative z-10 h-full flex flex-col justify-between">
                     {/* Icon - subtle hover scale */}
                     <motion.div
                       animate={{ y: [0, -4, 0] }}
@@ -114,7 +114,7 @@ export default function HowItWorks() {
                     </p>
 
                     {/* Code badge - simple, subtle */}
-                    <div className="inline-block text-emerald-400 text-sm font-mono bg-black/40 px-3 py-1 rounded-lg border border-white/10 group-hover:border-white/20 transition-colors duration-300">
+                    <div className="inline-block mt-auto self-start text-emerald-400 text-sm font-mono bg-black/40 px-3 py-1 rounded-lg border border-white/10 group-hover:border-white/20 transition-colors duration-300">
                       {step.code}
                     </div>
                   </div>

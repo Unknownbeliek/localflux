@@ -5,8 +5,7 @@ import Features from "./components/Features";
 import HowItWorks from "./components/HowItWorks";
 import Footer from "./components/Footer";
 import { DynamicBackground } from "./components/DynamicBackground";
-import { DeveloperExperience } from "./components/DeveloperExperience";
-import { SocialProof } from "./components/SocialProof";
+import { LightBackground } from "./components/LightBackground";
 import Contributors from "./components/Contributors";
 
 /* ─────────────────────────────────────────
@@ -628,173 +627,6 @@ const BentoGrid = () => {
 };
 
 /* ─────────────────────────────────────────
-   SECTION 2: ANIMATED DX TERMINAL
-───────────────────────────────────────── */
-const TERMINAL_SEQUENCE = [
-  { delay: 0, type: "prompt", text: "" },                                          // cursor waiting
-  { delay: 400, type: "typing", text: "npx localflux start" },
-  { delay: 2000, type: "output", text: "", color: "text-slate-500" },
-  { delay: 2100, type: "output", text: "  LocalFlux v1.0.0 — FOSS LAN Event Engine", color: "text-slate-400" },
-  { delay: 2300, type: "output", text: "  ─────────────────────────────────────────", color: "text-slate-700" },
-  { delay: 2500, type: "output", text: "  Starting LocalFlux State Machine...", color: "text-yellow-400" },
-  { delay: 3200, type: "output", text: "  ✔  IndexedDB initialized", color: "text-emerald-400" },
-  { delay: 3600, type: "output", text: "  ✔  Zod schemas validated", color: "text-emerald-400" },
-  { delay: 4000, type: "output", text: "  ✔  Session state machine READY", color: "text-emerald-400" },
-  { delay: 4600, type: "output", text: "  ✔  Binding to 0.0.0.0:5173...", color: "text-emerald-400" },
-  { delay: 5200, type: "success", text: "  🚀 Engine running on http://192.168.1.5:5173", color: "text-emerald-300" },
-  { delay: 5800, type: "output", text: "", color: "text-slate-500" },
-  { delay: 5900, type: "output", text: "  Host Dashboard → http://192.168.1.5:5173/host", color: "text-cyan-400" },
-  { delay: 6100, type: "output", text: "  Player Join   → http://192.168.1.5:5173/join", color: "text-cyan-400" },
-];
-
-const TerminalSection = () => {
-  const [visibleLines, setVisibleLines] = useState([]);
-  const [typingText, setTypingText] = useState("");
-  const [showCursor, setShowCursor] = useState(true);
-  const [phase, setPhase] = useState("idle"); // idle | typing | output | done
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    const timers = [];
-    let charTimer = null;
-
-    // Start sequence
-    const startSequence = () => {
-      setVisibleLines([]);
-      setTypingText("");
-      setPhase("idle");
-      setShowCursor(true);
-
-      TERMINAL_SEQUENCE.forEach((step, idx) => {
-        const t = setTimeout(() => {
-          if (step.type === "typing") {
-            setPhase("typing");
-            const chars = step.text.split("");
-            chars.forEach((char, ci) => {
-              const ct = setTimeout(() => {
-                setTypingText(prev => prev + char);
-                if (ci === chars.length - 1) setPhase("output");
-              }, ci * 55);
-              timers.push(ct);
-            });
-          } else if (step.type === "output" || step.type === "success") {
-            setVisibleLines(prev => [...prev, { text: step.text, color: step.color, bold: step.type === "success" }]);
-            if (containerRef.current) {
-              containerRef.current.scrollTop = containerRef.current.scrollHeight;
-            }
-          }
-        }, step.delay);
-        timers.push(t);
-      });
-
-      // Loop after 10s
-      const loopT = setTimeout(() => {
-        setTypingText("");
-        startSequence();
-      }, 10500);
-      timers.push(loopT);
-    };
-
-    startSequence();
-    return () => timers.forEach(clearTimeout);
-  }, []);
-
-  return (
-    <section className="font-geist w-full max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      {/* Section header */}
-      <div className="mb-8 text-center flex flex-col gap-2">
-        <span className="font-mono text-xs tracking-[0.25em] text-slate-500 uppercase">Developer Experience</span>
-        <h2 className="text-2xl sm:text-3xl font-bold text-white">
-          One command.{" "}
-          <span className="shimmer-text">Instant LAN.</span>
-        </h2>
-      </div>
-
-      {/* Terminal */}
-      <div className="terminal-window relative">
-        {/* Scanline effect */}
-        <div className="terminal-scanline" />
-
-        {/* macOS title bar */}
-        <div className="flex items-center gap-3 px-4 py-3 bg-slate-800/60 border-b border-slate-700/60">
-          <div className="flex gap-1.5">
-            <div className="w-3 h-3 rounded-full bg-red-500/80" />
-            <div className="w-3 h-3 rounded-full bg-yellow-500/80" />
-            <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-          </div>
-          <div className="flex-1 text-center">
-            <span className="font-mono text-xs text-slate-500">zsh — localflux</span>
-          </div>
-          <div className="w-12 flex justify-end">
-            <div className="flex gap-0.5">
-              <div className="w-1 h-1 rounded-full bg-emerald-400 glow-pulse" />
-            </div>
-          </div>
-        </div>
-
-        {/* Terminal body */}
-        <div
-          ref={containerRef}
-          className="p-5 min-h-64 max-h-80 overflow-y-auto font-mono text-sm leading-6 scroll-smooth"
-          style={{ scrollbarWidth: "none" }}
-        >
-          {/* Previous session ghost */}
-          <div className="text-slate-700 text-xs mb-3">Last login: Mon Mar 24 07:31:18 on ttys001</div>
-
-          {/* Prompt line */}
-          <div className="flex items-center gap-2">
-            <span className="text-emerald-400">❯</span>
-            <span className="text-slate-300">{typingText}</span>
-            {(phase === "idle" || phase === "typing") && (
-              <span
-                className="inline-block w-2 h-4 bg-emerald-400 align-middle"
-                style={{ animation: "typing-cursor 0.8s step-end infinite" }}
-              />
-            )}
-          </div>
-
-          {/* Output lines */}
-          <div className="mt-1">
-            {visibleLines.map((line, i) => (
-              <div
-                key={i}
-                className={`${line.color} ${line.bold ? "font-bold" : ""} text-sm leading-6`}
-                style={{ animation: "fade-in-up 0.2s ease both" }}
-              >
-                {line.text}
-              </div>
-            ))}
-          </div>
-
-          {/* Final cursor */}
-          {phase === "done" && (
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-emerald-400">❯</span>
-              <span className="inline-block w-2 h-4 bg-emerald-400 align-middle" style={{ animation: "typing-cursor 0.8s step-end infinite" }} />
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Metadata strip */}
-      <div className="mt-4 flex flex-wrap gap-4 justify-center">
-        {[
-          { label: "npx install", value: "zero config" },
-          { label: "Port", value: ":5173" },
-          { label: "Bind", value: "0.0.0.0" },
-          { label: "Runtime", value: "Node ≥ 18" },
-        ].map(item => (
-          <div key={item.label} className="flex items-center gap-1.5 text-xs font-mono">
-            <span className="text-slate-500">{item.label}</span>
-            <span className="text-slate-300 bg-slate-800/60 px-1.5 py-0.5 rounded border border-slate-700">{item.value}</span>
-          </div>
-        ))}
-      </div>
-    </section>
-  );
-};
-
-/* ─────────────────────────────────────────
    SECTION 3: HOW IT WORKS PIPELINE
 ───────────────────────────────────────── */
 const LaptopIcon = () => (
@@ -868,9 +700,29 @@ const ArrowConnector = () => (
    ROOT EXPORT
 ───────────────────────────────────────── */
 export default function LocalFluxSections() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const isMobile = window.matchMedia("(max-width: 768px)").matches;
+    setIsMobile(isMobile);
+
+    const handleChange = (event) => setIsMobile(event.matches);
+
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", handleChange);
+      return () => mediaQuery.removeEventListener("change", handleChange);
+    }
+
+    mediaQuery.addListener(handleChange);
+    return () => mediaQuery.removeListener(handleChange);
+  }, []);
+
   return (
     <div className="min-h-screen relative font-geist">
-      <DynamicBackground />
+      {isMobile ? <LightBackground /> : <DynamicBackground />}
 
       <div style={{ position: "relative", zIndex: 1 }}>
         <GlobalStyles />
@@ -880,26 +732,7 @@ export default function LocalFluxSections() {
         <Features />
         <BentoGrid />
 
-        <DeveloperExperience />
-
-        {/* Enhanced section divider with glow */}
-        <div className="w-full max-w-3xl mx-auto px-6 my-8">
-          <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent relative">
-            <div className="absolute inset-0 blur-sm bg-gradient-to-r from-transparent via-emerald-400/10 to-transparent" />
-          </div>
-        </div>
-
-        <TerminalSection />
-
-        {/* Enhanced section divider with glass */}
-        <div className="w-full max-w-3xl mx-auto px-6 my-8">
-          <div className="h-px bg-gradient-to-r from-transparent via-white/20 to-transparent relative">
-            <div className="absolute inset-0 blur-sm bg-gradient-to-r from-transparent via-cyan-400/10 to-transparent" />
-          </div>
-        </div>
-
         <HowItWorks />
-        <SocialProof />
         <Contributors />
         <Footer />
       </div>
