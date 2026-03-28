@@ -365,7 +365,8 @@ export default function DeckStudio({ onBack, onHostDeck }) {
         .map((slide) => {
           const opts = slide.options || [];
           const correctAnswer = opts[slide.correctIndex] || opts[0] || '';
-          return `"${slide.prompt.replace(/"/g, '""')}","${(opts[0] || '').replace(/"/g, '""')}","${(opts[1] || '').replace(/"/g, '""')}","${(opts[2] || '').replace(/"/g, '""')}","${(opts[3] || '').replace(/"/g, '""')}","${correctAnswer.replace(/"/g, '""')}",""`;
+          const imageUrl = slide.imageUrl || '';
+          return `"${slide.prompt.replace(/"/g, '""')}","${(opts[0] || '').replace(/"/g, '""')}","${(opts[1] || '').replace(/"/g, '""')}","${(opts[2] || '').replace(/"/g, '""')}","${(opts[3] || '').replace(/"/g, '""')}","${correctAnswer.replace(/"/g, '""')}","${imageUrl.replace(/"/g, '""')}"`;
         })
         .join('\n');
       const csvData = csvHeaders + '\n' + csvRows;
@@ -651,11 +652,11 @@ export default function DeckStudio({ onBack, onHostDeck }) {
               </div>
             ) : (
               <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
-                <div className="relative h-full w-full rounded-2xl border border-slate-600/60 bg-slate-950/40 p-3 shadow-lg">
+                <div className="relative h-full w-full rounded-2xl border-2 border-cyan-400/60 bg-gradient-to-br from-slate-900/60 to-slate-950/80 p-3 shadow-2xl shadow-cyan-500/20">
                   <button
                     type="button"
                     onClick={() => activeSlide && updateImageUrl(activeSlide.id, '')}
-                    className="absolute right-2 top-2 z-10 rounded-full bg-black/55 p-1 text-white transition-colors hover:bg-rose-500"
+                    className="absolute right-2 top-2 z-10 rounded-full bg-black/70 p-2 text-white transition-all hover:bg-rose-500 hover:scale-110 shadow-lg"
                     aria-label="Remove image"
                   >
                     <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2">
@@ -666,8 +667,14 @@ export default function DeckStudio({ onBack, onHostDeck }) {
                   <img
                     src={imagePreviewUrl}
                     alt="Question visual preview"
-                    className="h-full max-h-full w-full rounded-xl border border-slate-500/40 object-contain shadow-md"
+                    className="h-full max-h-full w-full rounded-xl border-2 border-cyan-300/40 object-contain shadow-xl shadow-cyan-500/30 transition-all hover:scale-[1.02]"
                   />
+                  {/* Generated image indicator */}
+                  {currentImageUrl && (currentImageUrl.startsWith('http') || currentImageUrl.includes('unsplash')) && (
+                    <div className="absolute bottom-2 left-2 rounded-lg bg-black/70 px-2 py-1 text-xs text-cyan-300 font-medium shadow-lg">
+                      ✨ AI Generated
+                    </div>
+                  )}
                 </div>
               </div>
             )}

@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
+const { shuffle } = require('../core/shuffle');
 
 const QUESTION_BANKS = require('../data/questionBanks.json');
 const DECKS_DIR = path.join(__dirname, '../data/decks');
@@ -139,14 +140,14 @@ class HybridQuizGenerator {
         continue;
       }
 
-      const question = this.instantiateTemplate(template);
+      const question = await this.instantiateTemplate(template);
       questions.push(question);
     }
 
     // Pad with additional random templates if needed
     while (questions.length < count) {
       const randomTemplate = templates[Math.floor(Math.random() * templates.length)];
-      const question = this.instantiateTemplate(randomTemplate);
+      const question = await this.instantiateTemplate(randomTemplate);
       questions.push(question);
     }
 
@@ -187,13 +188,43 @@ class HybridQuizGenerator {
         throw new Error('Invalid API response');
       }
 
-      return response.data.results.map((q) => ({
-        type: 'typing',
-        prompt: this.decodeHTML(q.question),
-        correct_answer: this.decodeHTML(q.correct_answer),
-        acceptedAnswers: [this.decodeHTML(q.correct_answer)],
-        timeLimit: 15000
-      }));
+      // Process questions and add images
+      const questions = [];
+      for (const q of response.data.results) {
+        // Create MCQ options: 1 correct + 3 incorrect
+        const correctAnswer = this.decodeHTML(q.correct_answer);
+        const incorrectAnswers = q.incorrect_answers.map(ans => this.decodeHTML(ans));
+
+        // Shuffle the options
+        const allOptions = [correctAnswer, ...incorrectAnswers];
+        const shuffledOptions = shuffle(allOptions);
+
+        const question = {
+          type: 'multiple',
+          prompt: this.decodeHTML(q.question),
+          options: shuffledOptions,
+          correct_answer: correctAnswer,
+          acceptedAnswers: [correctAnswer],
+          timeLimit: 15000
+        };
+
+        // Try to fetch relevant image
+        try {
+          const imageData = await this.fetchRelevantImage(question.prompt, topic);
+          if (imageData) {
+            question.image = imageData.url;
+            question.imageThumb = imageData.thumb;
+            question.imageAlt = imageData.alt;
+            question.imageCredit = imageData.credit;
+          }
+        } catch (imgError) {
+          console.warn('Failed to fetch image for question:', imgError.message);
+        }
+
+        questions.push(question);
+      }
+
+      return questions;
     } catch (error) {
       throw new Error('Open Trivia DB unavailable');
     }
@@ -202,7 +233,7 @@ class HybridQuizGenerator {
   /**
    * Instantiate a template with random values
    */
-  instantiateTemplate(template) {
+  async instantiateTemplate(template) {
     let prompt = template.template;
     let answers = Array.isArray(template.answers) ? [...template.answers] : [];
     let fuzzy = Array.isArray(template.fuzzy) ? [...template.fuzzy] : [];
@@ -252,7 +283,7 @@ class HybridQuizGenerator {
       acceptedAnswers.push('Answer');
     }
 
-    return {
+    const question = {
       id: `q_${Date.now()}_${Math.random()}`,
       type: 'typing',
       prompt,
@@ -261,6 +292,21 @@ class HybridQuizGenerator {
       acceptedAnswers: [...new Set(acceptedAnswers)], // Remove duplicates
       timeLimit: 15000
     };
+
+    // Try to fetch relevant image for template questions too
+    try {
+      const imageData = await this.fetchRelevantImage(question.prompt, this.findCategoryName(template));
+      if (imageData) {
+        question.image = imageData.url;
+        question.imageThumb = imageData.thumb;
+        question.imageAlt = imageData.alt;
+        question.imageCredit = imageData.credit;
+      }
+    } catch (imgError) {
+      console.warn('Failed to fetch image for template question:', imgError.message);
+    }
+
+    return question;
   }
 
   /**
@@ -334,21 +380,179 @@ class HybridQuizGenerator {
   }
 
   /**
-   * Decode HTML entities in API responses
+   * Fetch relevant image for a question using Unsplash API
    */
-  decodeHTML(html) {
-    const entities = {
-      '&quot;': '"',
-      '&#039;': "'",
-      '&amp;': '&',
-      '&lt;': '<',
-      '&gt;': '>'
-    };
-    let decoded = html || '';
-    for (const [entity, char] of Object.entries(entities)) {
-      decoded = decoded.replace(new RegExp(entity, 'g'), char);
+  async fetchRelevantImage(questionText, topic) {
+    try {
+      // Extract keywords from question and topic
+      const keywords = this.extractImageKeywords(questionText, topic);
+
+      // Check if Unsplash API key is available
+      const unsplashKey = process.env.UNSPLASH_ACCESS_KEY;
+      if (unsplashKey) {
+        try {
+          // Use Unsplash API
+          const response = await axios.get('https://api.unsplash.com/search/photos', {
+            params: {
+              query: keywords,
+              per_page: 1,
+              orientation: 'landscape',
+              content_filter: 'high'
+            },
+            headers: {
+              'Authorization': `Client-ID ${unsplashKey}`
+            },
+            timeout: 3000
+          });
+
+          if (response.data.results && response.data.results.length > 0) {
+            const photo = response.data.results[0];
+            return {
+              url: photo.urls.regular,
+              thumb: photo.urls.thumb,
+              alt: photo.alt_description || `${topic} related image`,
+              credit: `Photo by ${photo.user.name} on Unsplash`
+            };
+          }
+        } catch (unsplashError) {
+          console.warn('Unsplash API failed, using fallback:', unsplashError.message);
+        }
+      }
+
+      // Fallback to placeholder images if Unsplash fails or no key
+      return this.getPlaceholderImage(topic, questionText);
+    } catch (error) {
+      console.warn('Image fetch failed:', error.message);
+      return this.getPlaceholderImage(topic, questionText);
     }
-    return decoded;
+  }
+
+  /**
+   * Extract relevant keywords from question text for image search
+   */
+  extractImageKeywords(questionText, topic) {
+    // Remove common question words and extract key terms
+    const cleaned = questionText
+      .toLowerCase()
+      .replace(/^(what|who|when|where|why|how|which|in what|on what|for what)/g, '')
+      .replace(/[?.!,;:]/g, '')
+      .trim();
+
+    // Extract nouns and important terms
+    const words = cleaned.split(/\s+/);
+    const keywords = [];
+
+    // Add topic as primary keyword
+    keywords.push(topic);
+
+    // Add relevant words from question
+    const relevantWords = words.filter(word =>
+      word.length > 3 &&
+      !['many', 'much', 'some', 'most', 'first', 'last', 'best', 'worst', 'same', 'different'].includes(word)
+    );
+
+    keywords.push(...relevantWords.slice(0, 2)); // Add up to 2 more keywords
+
+    return keywords.join(' ');
+  }
+
+  /**
+   * Find category name for a template (used for image fetching)
+   */
+  findCategoryName(template) {
+    // Try to find which category this template belongs to
+    for (const [categoryName, categoryData] of Object.entries(QUESTION_BANKS.categories)) {
+      if (categoryData.templates && categoryData.templates.includes(template)) {
+        return categoryName;
+      }
+    }
+    return 'general'; // Default fallback
+  }
+
+  /**
+   * Get placeholder image based on topic and question content
+   */
+  getPlaceholderImage(topic, questionText = '') {
+    const topicImages = {
+      science: [
+        'https://images.unsplash.com/photo-1532094349884-543bc11b234d?w=600&h=400&fit=crop&crop=center', // 0
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop&crop=center', // 1
+        'https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=600&h=400&fit=crop&crop=center', // 2
+        'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=600&h=400&fit=crop&crop=center', // 3
+        'https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=600&h=400&fit=crop&crop=center', // 4
+        'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&h=400&fit=crop&crop=center'  // 5
+      ],
+      history: [
+        'https://images.unsplash.com/photo-1461360370896-922624d12aa1?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1449824913935-59a10b8d2000?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1520637836862-4d197d17c1a8?w=600&h=400&fit=crop&crop=center'
+      ],
+      geography: [
+        'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1469474968028-56623f02e42e?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&crop=center'
+      ],
+      movies: [
+        'https://images.unsplash.com/photo-1489599735734-79b4dfe3b4a6?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1489599735734-79b4dfe3b4a6?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1489599735734-79b4dfe3b4a6?w=600&h=400&fit=crop&crop=center'
+      ],
+      sports: [
+        'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1551698618-1dfe5d97d256?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=600&h=400&fit=crop&crop=center'
+      ],
+      technology: [
+        'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&h=400&fit=crop&crop=center'
+      ],
+      literature: [
+        'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1481627834876-b7833e8f5570?w=600&h=400&fit=crop&crop=center'
+      ],
+      entertainment: [
+        'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1489599735734-79b4dfe3b4a6?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1489599735734-79b4dfe3b4a6?w=600&h=400&fit=crop&crop=center'
+      ],
+      general: [
+        'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1518709268805-4e9042af2176?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=600&h=400&fit=crop&crop=center',
+        'https://images.unsplash.com/photo-1520637836862-4d197d17c1a8?w=600&h=400&fit=crop&crop=center'
+      ]
+    };
+
+    // Get images for the topic, fallback to general
+    const images = topicImages[topic.toLowerCase()] || topicImages.general;
+
+    // Use random selection for guaranteed variety
+    const imageIndex = Math.floor(Math.random() * images.length);
+    const imageUrl = images[imageIndex];
+
+    return {
+      url: imageUrl,
+      thumb: imageUrl.replace('w=600', 'w=300').replace('h=400', 'h=200'),
+      alt: `${topic} related vibrant image`,
+      credit: 'High-quality placeholder image'
+    };
   }
 
   /**
