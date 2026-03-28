@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useDeckStudioStore } from '../deckStudio/store';
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog';
 import CloudDeckCard from '../components/CloudDeckCard';
 import AnimatedBackground from '../components/AnimatedBackground';
 import ConfirmActionModal from '../components/ConfirmActionModal';
+import QuizGeneratorModal from '../components/QuizGeneratorModal';
 import { getBackendUrl } from '../backendUrl';
 import { compressImageToWebP } from '../utils/imageCompressor';
 
@@ -54,8 +56,10 @@ export default function DeckStudio({ onBack, onHostDeck }) {
     historyFuture,
   } = useDeckStudioStore();
 
+  const location = useLocation();
   const [csvText, setCsvText] = useState('');
   const [actionMessage, setActionMessage] = useState('');
+  const [autoGenLoading, setAutoGenLoading] = useState(false);
   const [cloudDecks, setCloudDecks] = useState([]);
   const [cloudStatus, setCloudStatus] = useState('loading');
   const [cloudError, setCloudError] = useState('');
@@ -66,6 +70,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   const [showSlideScrollDownHint, setShowSlideScrollDownHint] = useState(false);
   const [isDeleteQuestionModalOpen, setIsDeleteQuestionModalOpen] = useState(false);
   const [deleteQuestionConfirmChecked, setDeleteQuestionConfirmChecked] = useState(false);
+  const [showQuizGeneratorModal, setShowQuizGeneratorModal] = useState(false);
   const promptTextareaRef = useRef(null);
   const slideListRef = useRef(null);
   const [hostName] = useState(() =>
@@ -254,10 +259,156 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   const activeQuestionNumber = activeIndex >= 0 ? activeIndex + 1 : 0;
 
   const onImportCsv = () => {
-    if (!csvText.trim()) return;
-    setActionMessage('');
+    if (!csvText.trim()) {
+      setActionMessage('CSV text is empty.');
+      return;
+    }
     importCsvText(csvText);
+    setCsvText('');
+    setActionMessage('CSV imported successfully.');
   };
+
+  const generateTopicInstant = async (topic, source = 'auto') => {
+    console.log('[generateTopicInstant] Called with topic:', topic, 'source:', source);
+    if (!topic || !topic.trim()) {
+      setActionMessage('Please choose a topic.');
+      return;
+    }
+
+    try {
+      setAutoGenLoading(true);
+      setActionMessage(`Generating deck for ${topic}...`);
+      const backendUrl = getBackendUrl();
+      console.log('[generateTopicInstant] Backend URL:', backendUrl);
+      const resp = await fetch(`${backendUrl}/api/quiz/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic: topic.trim(), count: 10, difficulty: 'mixed', source })
+      });
+      console.log('[generateTopicInstant] API response status:', resp.status);
+      const data = await resp.json();
+      console.log('[generateTopicInstant] API response data:', data);
+      if (!resp.ok) {
+        throw new Error(data.error || 'Failed to generate deck');
+      }
+
+      onDeckGenerated(data.deck);
+      setActionMessage(`✅ Generated '${topic}' quiz with ${data.deck.slides?.length || 0} questions.`);
+    } catch (err) {
+      console.error('[generateTopicInstant] Error:', err);
+      setActionMessage(`Error: ${err.message || 'generation failed'}`);
+    } finally {
+      setAutoGenLoading(false);
+    }
+  };
+
+  const onDeckGenerated = (generatedDeck) => {
+    try {
+      const normalizeQuestion = (slide, idx) => {
+        const prompt = String(slide.prompt || '').trim();
+        if (!prompt) return null;
+
+        const isTyping = slide.type === 'typing';
+        const acceptedAnswers = Array.isArray(slide.acceptedAnswers)
+          ? slide.acceptedAnswers.filter((a) => String(a || '').trim())
+          : [];
+
+        // Build or reuse options array
+        let options = Array.isArray(slide.options) && slide.options.length === 4
+          ? slide.options.map((o) => String(o || '').trim())
+          : [];
+
+        if (isTyping) {
+          // For typing content, create a safe MCQ fallback
+          const answer = acceptedAnswers[0] || String(slide.correct_answer || '').trim() || 'Answer';
+          const distractors = [
+            'None of these',
+            'Not sure',
+            'Maybe',
+            'I don\'t know'
+          ].map((v) => `${v} (${idx + 1})`);
+
+          options = [answer, ...distractors]
+            .slice(0, 4)
+            .map((v) => String(v).trim());
+        }
+
+        // Ensure we have 4 non-empty options
+        while (options.length < 4) {
+          options.push(`Option ${options.length + 1}`);
+        }
+
+        options = options.map((o) => (String(o || '').trim() || `Option ${Math.random().toString(36).slice(2, 6)}`));
+
+        const correctAnswer = acceptedAnswers[0] || String(slide.correct_answer || '').trim() || options[0];
+        const correctIndex = options.findIndex((opt) => opt.toLowerCase() === correctAnswer.toLowerCase());
+
+        return {
+          id: slide.id || `gen_${idx}`,
+          prompt,
+          imageUrl: String(slide.image || '').trim(),
+          options,
+          correctIndex: correctIndex >= 0 ? correctIndex : 0,
+          imported: true
+        };
+      };
+
+      // Convert generated deck to store format
+      const convertedSlides = (generatedDeck.slides || [])
+        .map((slide, idx) => normalizeQuestion(slide, idx))
+        .filter(Boolean);
+
+      // Clear current deck and add generated slides
+      // Store should handle this, but we'll import via CSV string for compatibility
+      const csvHeaders = 'prompt,optionA,optionB,optionC,optionD,correct,imageUrl';
+      const csvRows = convertedSlides
+        .map((slide) => {
+          const opts = slide.options || [];
+          const correctAnswer = opts[slide.correctIndex] || opts[0] || '';
+          return `"${slide.prompt.replace(/"/g, '""')}","${(opts[0] || '').replace(/"/g, '""')}","${(opts[1] || '').replace(/"/g, '""')}","${(opts[2] || '').replace(/"/g, '""')}","${(opts[3] || '').replace(/"/g, '""')}","${correctAnswer.replace(/"/g, '""')}",""`;
+        })
+        .join('\n');
+      const csvData = csvHeaders + '\n' + csvRows;
+
+      importCsvText(csvData);
+      setShowQuizGeneratorModal(false);
+      setActionMessage(
+        `✅ Quiz auto-generated! "${generatedDeck.deck_meta?.title || 'New Quiz'}" loaded with ${generatedDeck.slides?.length || 0} questions ready to edit.`
+      );
+    } catch (err) {
+      setActionMessage(`Error: ${err?.message || 'Failed to load generated deck'}`);
+    }
+  };
+
+  const queryParams = new URLSearchParams(location.search);
+  const autoTopicFromUrl = queryParams.get('autogen');
+  const autoSourceFromUrl = queryParams.get('source') || 'auto';
+  const [autoGenAttempted, setAutoGenAttempted] = useState(false);
+
+  useEffect(() => {
+    console.log('[DeckStudio] useEffect triggered, autoTopicFromUrl:', autoTopicFromUrl, 'autoGenAttempted:', autoGenAttempted);
+    if (!autoTopicFromUrl || autoGenAttempted) return;
+
+    setAutoGenAttempted(true);
+    const runAutoGen = async () => {
+      try {
+        console.log('[DeckStudio] Starting auto-generation for topic:', autoTopicFromUrl);
+        setActionMessage(`✨ Auto-generating quiz for "${autoTopicFromUrl}"...`);
+        setAutoGenLoading(true);
+        await generateTopicInstant(autoTopicFromUrl, autoSourceFromUrl);
+      } catch (err) {
+        console.error('[DeckStudio] Auto-gen error:', err);
+        setActionMessage(`Failed to auto-generate: ${err?.message || 'Unknown error'}`);
+        console.error('[AutoGen] Error:', err);
+      } finally {
+        setAutoGenLoading(false);
+      }
+    };
+
+    // Small delay to ensure DOM is ready
+    const timer = setTimeout(runAutoGen, 100);
+    return () => clearTimeout(timer);
+  }, [autoTopicFromUrl, autoGenAttempted]);
 
   const onExport = () => {
     const checked = validateDeck();
@@ -624,6 +775,21 @@ export default function DeckStudio({ onBack, onHostDeck }) {
           <section className="rounded-2xl border border-white/10 bg-black/20 p-4 shadow-inner">
             <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Advanced Tools</p>
             <div className="mt-3 space-y-4">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  {['Science', 'Geography', 'Movies', 'History'].map((theme) => (
+                    <button
+                      key={theme}
+                      onClick={() => generateTopicInstant(theme)}
+                      disabled={autoGenLoading}
+                      className="rounded-lg border border-teal-500/50 bg-teal-500/15 text-teal-100 px-3 py-2 text-xs font-bold hover:bg-teal-500/30 transition"
+                    >
+                      {autoGenLoading ? 'Generating…' : `Start: ${theme}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <button
                 onClick={onExport}
                 className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2.5 text-xs font-black uppercase tracking-wide text-slate-100 hover:border-emerald-500/60"
@@ -716,9 +882,19 @@ export default function DeckStudio({ onBack, onHostDeck }) {
             </div>
           )}
 
-          {actionMessage && (
-            <div className="rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
-              {actionMessage}
+          {(actionMessage || autoGenLoading) && (
+            <div className={`rounded-xl px-3 py-2.5 text-xs font-semibold flex items-center gap-2 ${
+              actionMessage?.includes('Failed') || actionMessage?.includes('Error')
+                ? 'border border-rose-500/40 bg-rose-500/10 text-rose-100'
+                : 'border border-emerald-400/40 bg-emerald-500/15 text-emerald-100 animate-pulse'
+            }`}>
+              {autoGenLoading && (
+                <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" opacity="0.25" />
+                  <path d="M4 12a8 8 0 018-8" stroke="currentColor" strokeWidth="2" fill="none" />
+                </svg>
+              )}
+              <span>{actionMessage || 'Auto-generating quiz...'}</span>
             </div>
           )}
         </div>
@@ -756,6 +932,13 @@ export default function DeckStudio({ onBack, onHostDeck }) {
         onConfirm={confirmDeleteQuestion}
         confirmLabel="Delete Question"
       />
+
+      {showQuizGeneratorModal && (
+        <QuizGeneratorModal
+          onDeckGenerated={onDeckGenerated}
+          onClose={() => setShowQuizGeneratorModal(false)}
+        />
+      )}
     </div>
   );
 }

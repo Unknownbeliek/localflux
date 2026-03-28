@@ -1,0 +1,121 @@
+{
+  "deck_meta": {
+    "id": "science_101",
+    "title": "Science 101 Quiz",
+    "author": "LocalFlux Generator",
+    "version": "1.0.0",
+    "total_questions": 12,
+    "category": "science",
+    "difficulty": "easy"
+  },
+  "slides": [
+    {
+      "id": "q_1",
+      "type": "typing",
+      "prompt": "What is the chemical symbol for Oxygen?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["O"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_2",
+      "type": "typing",
+      "prompt": "What is the chemical symbol for Hydrogen?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["H"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_3",
+      "type": "typing",
+      "prompt": "What is the process by which plants make food?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Photosynthesis", "photosynthesis"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_4",
+      "type": "typing",
+      "prompt": "Which planet is closest to the Sun?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Mercury", "mercury"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_5",
+      "type": "typing",
+      "prompt": "How many bones does an adult human have?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["206", "206 bones"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_6",
+      "type": "typing",
+      "prompt": "What is the largest planet in our solar system?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Jupiter", "jupiter"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_7",
+      "type": "typing",
+      "prompt": "What gas do plants absorb from the atmosphere?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Carbon Dioxide", "CO2", "carbon dioxide", "co2"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_8",
+      "type": "typing",
+      "prompt": "What is the chemical symbol for Gold?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Au"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_9",
+      "type": "typing",
+      "prompt": "How many chambers does a human heart have?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["4", "four"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_10",
+      "type": "typing",
+      "prompt": "What is the SI unit of temperature?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Kelvin", "kelvin"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_11",
+      "type": "typing",
+      "prompt": "Which metal is liquid at room temperature?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Mercury", "mercury"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_12",
+      "type": "typing",
+      "prompt": "What is the powerhouse of the cell?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Mitochondria", "mitochondria"],
+      "timeLimit": 15000
+    }
+  ]
+}

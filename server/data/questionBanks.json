@@ -1,0 +1,349 @@
+{
+  "categories": {
+    "science": {
+      "id": "science",
+      "title": "Science & Nature",
+      "description": "Biology, Chemistry, Physics, and Natural Sciences",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "science_1",
+          "template": "What is the chemical symbol for {element}?",
+          "elementBank": ["Hydrogen", "Oxygen", "Carbon", "Nitrogen", "Calcium", "Iron", "Gold", "Silver"],
+          "elementAnswers": ["H", "O", "C", "N", "Ca", "Fe", "Au", "Ag"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "science_2",
+          "template": "Which planet is closest to the Sun?",
+          "answers": ["Mercury"],
+          "fuzzy": ["mercury", "Mercury"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "science_3",
+          "template": "What is the speed of light in vacuum?",
+          "answers": ["299,792,458 m/s", "300,000 km/s"],
+          "fuzzy": ["3 x 10^8 m/s", "299792458", "300000"],
+          "difficulty": "hard"
+        },
+        {
+          "id": "science_4",
+          "template": "What is the process by which plants make food?",
+          "answers": ["Photosynthesis"],
+          "fuzzy": ["photosynthesis", "photo synthesis"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "science_5",
+          "template": "How many bones does an adult human have?",
+          "answers": ["206"],
+          "fuzzy": ["206 bones", "200", "207"],
+          "difficulty": "medium"
+        }
+      ]
+    },
+    "history": {
+      "id": "history",
+      "title": "World History",
+      "description": "Ancient, Medieval, and Modern History",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "history_1",
+          "template": "Who was the first President of the United States?",
+          "answers": ["George Washington"],
+          "fuzzy": ["washington", "George Washington"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "history_2",
+          "template": "In which year did World War II end?",
+          "answers": ["1945"],
+          "fuzzy": ["1945", "nineteen forty five"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "history_3",
+          "template": "Which ancient wonder of the world still stands today?",
+          "answers": ["Great Pyramid of Giza", "Pyramid of Giza"],
+          "fuzzy": ["pyramid", "giza", "great pyramid"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "history_4",
+          "template": "Who wrote the Declaration of Independence?",
+          "answers": ["Thomas Jefferson"],
+          "fuzzy": ["jefferson", "Thomas Jefferson"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "history_5",
+          "template": "In which country were the pyramids built?",
+          "answers": ["Egypt"],
+          "fuzzy": ["egypt", "Egyptian"],
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "geography": {
+      "id": "geography",
+      "title": "Geography & Capitals",
+      "description": "World capitals, countries, and landmarks",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "geo_1",
+          "template": "What is the capital of {country}?",
+          "countryBank": ["France", "Japan", "Brazil", "Germany", "India", "Australia", "Canada"],
+          "countryAnswers": ["Paris", "Tokyo", "Brasília", "Berlin", "New Delhi", "Canberra", "Ottawa"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "geo_2",
+          "template": "Which is the longest river in the world?",
+          "answers": ["Nile River"],
+          "fuzzy": ["nile", "nile river"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "geo_3",
+          "template": "What is the capital of {country}?",
+          "countryBank": ["Mexico", "Russia", "China", "South Korea"],
+          "countryAnswers": ["Mexico City", "Moscow", "Beijing", "Seoul"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "geo_4",
+          "template": "Which mountain is the highest in the world?",
+          "answers": ["Mount Everest"],
+          "fuzzy": ["everest", "mount everest"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "geo_5",
+          "template": "What is the largest desert in the world?",
+          "answers": ["Sahara Desert"],
+          "fuzzy": ["sahara", "sahara desert"],
+          "difficulty": "medium"
+        }
+      ]
+    },
+    "movies": {
+      "id": "movies",
+      "title": "Movies & Entertainment",
+      "description": "Cinema, actors, and blockbuster films",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "movies_1",
+          "template": "Who directed the film '{movie}'?",
+          "movieBank": ["Titanic", "Avatar", "Inception", "The Shawshank Redemption"],
+          "movieAnswers": ["James Cameron", "James Cameron", "Christopher Nolan", "Frank Darabont"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "movies_2",
+          "template": "Which actor played Superman in the film '{movie}'?",
+          "movieBank": ["Man of Steel"],
+          "movieAnswers": ["Henry Cavill"],
+          "fuzzy": ["cavill", "henry cavill"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "movies_3",
+          "template": "What year was the first Harry Potter film released?",
+          "answers": ["2001"],
+          "fuzzy": ["2001", "2000", "2002"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "movies_4",
+          "template": "How many films are in the original Star Wars trilogy?",
+          "answers": ["3"],
+          "fuzzy": ["three", "3 films"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "movies_5",
+          "template": "What is the name of the fictional home of Batman?",
+          "answers": ["Gotham City"],
+          "fuzzy": ["gotham", "gotham city"],
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "sports": {
+      "id": "sports",
+      "title": "Sports & Competitions",
+      "description": "Football, Basketball, Tennis, and more",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "sports_1",
+          "template": "How many players are on a basketball team on court?",
+          "answers": ["5"],
+          "fuzzy": ["five", "5 players"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "sports_2",
+          "template": "Which country won the FIFA World Cup in 2022?",
+          "answers": ["Argentina"],
+          "fuzzy": ["argentina"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "sports_3",
+          "template": "What is the maximum break in snooker?",
+          "answers": ["147"],
+          "fuzzy": ["147 points", "one hundred forty seven"],
+          "difficulty": "hard"
+        },
+        {
+          "id": "sports_4",
+          "template": "How many innings are in a cricket Test match?",
+          "answers": ["4"],
+          "fuzzy": ["four", "4 innings"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "sports_5",
+          "template": "What is the tennis Grand Slam tournament held in Australia called?",
+          "answers": ["Australian Open"],
+          "fuzzy": ["australian open"],
+          "difficulty": "medium"
+        }
+      ]
+    },
+    "literature": {
+      "id": "literature",
+      "title": "Literature & Authors",
+      "description": "Books, poems, and famous authors",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "lit_1",
+          "template": "Who wrote the novel '{book}'?",
+          "bookBank": ["1984", "Pride and Prejudice", "The Great Gatsby", "Moby Dick"],
+          "bookAnswers": ["George Orwell", "Jane Austen", "F. Scott Fitzgerald", "Herman Melville"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "lit_2",
+          "template": "What is the world's best-selling book?",
+          "answers": ["The Bible"],
+          "fuzzy": ["bible", "the bible"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "lit_3",
+          "template": "Who wrote 'Romeo and Juliet'?",
+          "answers": ["William Shakespeare"],
+          "fuzzy": ["shakespeare", "william shakespeare"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "lit_4",
+          "template": "Which author wrote the Harry Potter series?",
+          "answers": ["J.K. Rowling"],
+          "fuzzy": ["rowling", "jk rowling", "j.k. rowling"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "lit_5",
+          "template": "Who is the author of 'The Lord of the Rings'?",
+          "answers": ["J.R.R. Tolkien"],
+          "fuzzy": ["tolkien", "jrr tolkien"],
+          "difficulty": "easy"
+        }
+      ]
+    },
+    "technology": {
+      "id": "technology",
+      "title": "Technology & Computing",
+      "description": "Programming, internet, and tech innovation",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "tech_1",
+          "template": "Who is known as the founder of Microsoft?",
+          "answers": ["Bill Gates"],
+          "fuzzy": ["gates", "bill gates"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "tech_2",
+          "template": "In what year was the World Wide Web invented?",
+          "answers": ["1989"],
+          "fuzzy": ["1989", "1990"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "tech_3",
+          "template": "What does 'AI' stand for?",
+          "answers": ["Artificial Intelligence"],
+          "fuzzy": ["artificial intelligence", "artificial inteligence"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "tech_4",
+          "template": "Who developed the concept of 'Object-Oriented Programming'?",
+          "answers": ["Alan Kay"],
+          "fuzzy": ["kay", "alan kay"],
+          "difficulty": "hard"
+        },
+        {
+          "id": "tech_5",
+          "template": "What is the most popular programming language as of 2024?",
+          "answers": ["Python"],
+          "fuzzy": ["python"],
+          "difficulty": "medium"
+        }
+      ]
+    },
+    "general_knowledge": {
+      "id": "general_knowledge",
+      "title": "General Knowledge",
+      "description": "Mix of diverse topics and trivia",
+      "difficulty": "mixed",
+      "templates": [
+        {
+          "id": "gk_1",
+          "template": "What is the currency of {country}?",
+          "countryBank": ["India", "Japan", "UK"],
+          "countryAnswers": ["Rupee", "Yen", "Pound"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "gk_2",
+          "template": "How many continents are there?",
+          "answers": ["7"],
+          "fuzzy": ["seven", "7 continents"],
+          "difficulty": "easy"
+        },
+        {
+          "id": "gk_3",
+          "template": "What is the smallest country in the world?",
+          "answers": ["Vatican City"],
+          "fuzzy": ["vatican", "vatican city"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "gk_4",
+          "template": "How many strings does a standard violin have?",
+          "answers": ["4"],
+          "fuzzy": ["four", "4 strings"],
+          "difficulty": "medium"
+        },
+        {
+          "id": "gk_5",
+          "template": "What is the largest ocean in the world?",
+          "answers": ["Pacific Ocean"],
+          "fuzzy": ["pacific", "pacific ocean"],
+          "difficulty": "easy"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "deck_meta": {
+    "id": "world_capitals",
+    "title": "World Capitals Quiz",
+    "author": "LocalFlux Generator",
+    "version": "1.0.0",
+    "total_questions": 15,
+    "category": "geography",
+    "difficulty": "easy"
+  },
+  "slides": [
+    {
+      "id": "q_1",
+      "type": "typing",
+      "prompt": "What is the capital of France?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Paris", "paris"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_2",
+      "type": "typing",
+      "prompt": "What is the capital of Japan?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Tokyo", "tokyo"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_3",
+      "type": "typing",
+      "prompt": "What is the capital of Germany?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Berlin", "berlin"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_4",
+      "type": "typing",
+      "prompt": "What is the capital of Italy?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Rome", "rome"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_5",
+      "type": "typing",
+      "prompt": "What is the capital of Spain?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Madrid", "madrid"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_6",
+      "type": "typing",
+      "prompt": "What is the capital of Brazil?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Brasília", "brasilia", "Brasilia"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_7",
+      "type": "typing",
+      "prompt": "What is the capital of Canada?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Ottawa", "ottawa"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_8",
+      "type": "typing",
+      "prompt": "What is the capital of Australia?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Canberra", "canberra"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_9",
+      "type": "typing",
+      "prompt": "What is the capital of India?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["New Delhi", "new delhi", "Delhi"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_10",
+      "type": "typing",
+      "prompt": "What is the capital of Mexico?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Mexico City", "mexico city"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_11",
+      "type": "typing",
+      "prompt": "What is the capital of South Korea?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Seoul", "seoul"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_12",
+      "type": "typing",
+      "prompt": "What is the capital of Saudi Arabia?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Riyadh", "riyadh"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_13",
+      "type": "typing",
+      "prompt": "What is the capital of Argentina?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Buenos Aires", "buenos aires"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_14",
+      "type": "typing",
+      "prompt": "What is the capital of South Africa?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Pretoria", "Capetown", "pretoria", "capetown"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_15",
+      "type": "typing",
+      "prompt": "What is the capital of Thailand?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Bangkok", "bangkok"],
+      "timeLimit": 15000
+    }
+  ]
+}

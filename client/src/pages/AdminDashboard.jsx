@@ -634,6 +634,27 @@ export default function AdminDashboard() {
           )}
         </section>
 
+        <section className="mt-10">
+          <div className="mb-4">
+            <h2 className="text-xl font-black tracking-tight text-white">⚡ Quick Generate Quiz</h2>
+            <p className="text-xs uppercase tracking-[0.16em] text-slate-400 mt-1">Auto-create from topics</p>
+          </div>
+          
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {['Science', 'Geography', 'Movies', 'History'].map((topic) => (
+              <button
+                key={topic}
+                onClick={() => navigate(`/studio?autogen=${encodeURIComponent(topic)}&source=openapi`)}
+                className="rounded-xl border border-blue-500/40 bg-blue-500/15 px-4 py-3 text-sm font-bold text-blue-100 hover:bg-blue-500/25 transition flex items-center justify-center gap-2"
+              >
+                <span>⚡</span>
+                <span>{topic}</span>
+              </button>
+            ))}
+          </div>
+          <p className="mt-3 text-xs text-slate-400">Select a theme to instantly generate a quiz and open the deck editor.</p>
+        </section>
+
         {/* Error message */}
         {tokenError && (
           <div className="mt-6 rounded-lg border border-rose-400/50 bg-rose-950/30 p-4 backdrop-blur-sm">

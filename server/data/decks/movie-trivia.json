@@ -1,0 +1,103 @@
+{
+  "deck_meta": {
+    "id": "movie_trivia",
+    "title": "Movie Trivia",
+    "author": "LocalFlux Generator",
+    "version": "1.0.0",
+    "total_questions": 10,
+    "category": "movies",
+    "difficulty": "medium"
+  },
+  "slides": [
+    {
+      "id": "q_1",
+      "type": "typing",
+      "prompt": "Who directed Titanic?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["James Cameron", "james cameron"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_2",
+      "type": "typing",
+      "prompt": "In what year was the first Harry Potter film released?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["2001", "2000"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_3",
+      "type": "typing",
+      "prompt": "How many films are in the original Star Wars trilogy?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["3", "three"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_4",
+      "type": "typing",
+      "prompt": "What is the name of the fictional home of Batman?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Gotham City", "gotham city"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_5",
+      "type": "typing",
+      "prompt": "Who directed Avatar?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["James Cameron", "james cameron"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_6",
+      "type": "typing",
+      "prompt": "Who played Iron Man in the MCU?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Robert Downey Jr", "robert downey jr", "RDJ"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_7",
+      "type": "typing",
+      "prompt": "In which year was Inception released?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["2010"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_8",
+      "type": "typing",
+      "prompt": "Who directed The Shawshank Redemption?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Frank Darabont", "frank darabont"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_9",
+      "type": "typing",
+      "prompt": "What is the main character's name in The Matrix?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Neo", "neo"],
+      "timeLimit": 15000
+    },
+    {
+      "id": "q_10",
+      "type": "typing",
+      "prompt": "Who directed Pulp Fiction?",
+      "image": null,
+      "options": [],
+      "acceptedAnswers": ["Quentin Tarantino", "quentin tarantino"],
+      "timeLimit": 15000
+    }
+  ]
+}

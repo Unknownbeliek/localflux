@@ -142,6 +142,22 @@ export default function Hero() {
             </motion.button>
           </div>
 
+          <div className="mt-4 text-center">
+            <p className="text-sm text-slate-300 font-semibold mb-2">Instant Quiz Launch</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {['Science', 'Geography', 'Movies', 'History'].map((topic) => (
+                <a
+                  key={topic}
+                  href={`http://localhost:5173/studio?autogen=${encodeURIComponent(topic)}&source=openapi`}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-cyan-400/40 bg-cyan-600/15 text-cyan-100 text-xs font-bold hover:bg-cyan-500/20 transition"
+                >
+                  Launch {topic}
+                </a>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-slate-400">Auto-generates a deck and opens the Studio.</p>
+          </div>
+
           <div className="mb-8 text-center flex flex-col gap-2 mt-12">
             <span className="font-mono text-xs tracking-[0.25em] text-slate-500 uppercase">Developer Experience</span>
             <h2 className="text-2xl sm:text-3xl font-bold text-white">

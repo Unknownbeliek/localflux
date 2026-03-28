@@ -4,14 +4,16 @@ import { Navigate, Outlet } from 'react-router-dom'
 /**
  * Validates if the current hostname is a local machine
  */
-const isLocalhost = () => {
+const isLocalNetwork = () => {
   const hostname = window.location.hostname
   return (
     hostname === 'localhost' ||
     hostname === '127.0.0.1' ||
     hostname === '[::1]' ||
-    // Also include IPv6 loopback without brackets if browser formats it that way
-    hostname === '::1'
+    hostname === '::1' ||
+    hostname.startsWith('192.168.') ||
+    hostname.startsWith('10.') ||
+    hostname.startsWith('172.') // includes 172.16.0.0/12 private block
   )
 }
 
@@ -26,8 +28,8 @@ const isLocalhost = () => {
  * Or as a Layout Route: <Route element={<LocalhostBouncer />}> <Route ... /> </Route>
  */
 export function LocalhostBouncer({ children }) {
-  if (!isLocalhost()) {
-    console.warn('[LocalhostBouncer] Access from network IP blocked, redirecting to /play')
+  if (!isLocalNetwork()) {
+    console.warn('[LocalhostBouncer] Access from non-local network IP blocked, redirecting to /play')
     return <Navigate to="/play" replace />
   }
 

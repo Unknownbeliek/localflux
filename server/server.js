@@ -23,6 +23,7 @@ const crypto = require('crypto');
 const { loadDeck, DEFAULT_DECK_PATH } = require('./core/deckLoader');
 const { registerHandlers } = require('./network/handlers');
 const { HostTokenManager } = require('./core/hostTokenManager');
+const quizGeneratorRoutes = require('./routes/quizGeneratorRoutes');
 
 const PORT = Number(process.env.PORT || 3000);
 const CLIENT_PORT = Number(process.env.CLIENT_PORT || 5173);
@@ -176,6 +177,10 @@ app.get('/api/network-info', (_req, res) => {
     clientPort: CLIENT_PORT,
   });
 });
+
+//  Quiz Generator Routes
+
+app.use('/api', quizGeneratorRoutes);
 
 //  Start 
 
