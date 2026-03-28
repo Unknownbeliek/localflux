@@ -41,18 +41,25 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
     const rawGuess = String(text || '').trim().slice(0, MAX_GUESS_LENGTH);
     if (!rawGuess) return callback?.({ ok: false, reason: 'empty_guess' });
 
-    const gameMode = room.gameMode || 'arcade';
+    const gameMode = room.gameMode || 'casual';
     const validationResult = validateAnswer(currentQ, rawGuess, gameMode, true);
 
     if (validationResult.correct) {
       const timeRemainingMs = Math.max(0, (room.currentQEndsAt || Date.now()) - Date.now());
       const totalTimeMs = Number(currentQ.timeLimit) > 0 ? Number(currentQ.timeLimit) : 20000;
-      const currentStreak = player.streak || 0;
-      
-      const scoreResult = calculateScore(true, currentQ.difficulty, gameMode, timeRemainingMs, totalTimeMs, currentStreak);
-      
-      player.score = Number(player.score || 0) + scoreResult.points;
-      player.streak = scoreResult.newStreak;
+      const isExactMatch = validationResult.matchType === 'exact';
+      const isFuzzyMatch = validationResult.matchType === 'fuzzy';
+
+      const scoreResult = calculateScore({
+        difficulty: currentQ.difficulty,
+        hostMode: gameMode,
+        timeRemaining: timeRemainingMs,
+        totalTime: totalTimeMs,
+        isExactMatch,
+        isFuzzyMatch,
+      });
+
+      player.score = Number(player.score || 0) + scoreResult.finalScore;
       room.answersIn[socket.id] = rawGuess;
       
       const answerCount = Object.keys(room.answersIn || {}).length;
@@ -62,7 +69,7 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
         id: createMessageId('guess_correct', socket.id),
         from: 'system',
         name: 'System',
-        text: `${player.name} guessed correctly! +${scoreResult.points} pts`,
+        text: `${player.name} guessed correctly! +${scoreResult.finalScore} pts`,
         event: 'guess_correct',
         isCorrectGuess: true,
         ts: Date.now(),
@@ -84,7 +91,7 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
         matched: true,
         matchType: validationResult.matchType,
         submitted: true,
-        scoreAwarded: scoreResult.points,
+        scoreAwarded: scoreResult.finalScore,
       });
 
       io.to(room.hostId).emit('answer_count', {
@@ -97,27 +104,6 @@ function registerTypeGuessHandlers({ socket, io, getRoom, LAN_ROOM_ID, settleCur
       }
 
       return;
-    } else {
-      // Wrong answer - apply penalty if configured
-      const timeRemainingMs = Math.max(0, (room.currentQEndsAt || Date.now()) - Date.now());
-      const totalTimeMs = Number(currentQ.timeLimit) > 0 ? Number(currentQ.timeLimit) : 20000;
-      const currentStreak = player.streak || 0;
-      
-      const scoreResult = calculateScore(false, currentQ.difficulty, gameMode, timeRemainingMs, totalTimeMs, currentStreak);
-      
-      if (scoreResult.penalty < 0) {
-        player.score = Math.max(0, Number(player.score || 0) + scoreResult.penalty);
-        player.streak = scoreResult.newStreak;
-        
-        emitMessage(LAN_ROOM_ID, {
-          id: createMessageId('guess_penalty', socket.id),
-          from: 'system',
-          name: 'System',
-          text: `${player.name} got a wrong answer penalty: ${scoreResult.penalty} pts`,
-          event: 'guess_penalty',
-          ts: Date.now(),
-        });
-      }
     }
 
     const chatMode = typeof getChatMode === 'function' ? String(getChatMode() || 'FREE') : 'FREE';

@@ -104,11 +104,11 @@ describe('submitAnswer()', () => {
     return room;
   }
 
-  test('awards 100 points for the correct answer', () => {
+  test('awards 1500 points for a default-difficulty exact answer at full remaining time', () => {
     const room = startedRoom();
     submitAnswer(room, SLIDES, 'p1', 'Nolan');
     const p1 = room.players.find((p) => p.id === 'p1');
-    expect(p1.score).toBe(100);
+    expect(p1.score).toBe(1500);
   });
 
   test('does not award points for a wrong answer', () => {
@@ -135,7 +135,7 @@ describe('submitAnswer()', () => {
     const res = submitAnswer(room, SLIDES, 'p1', 'Nolan');
     expect(res.alreadyAnswered).toBe(true);
     // Score should not be doubled
-    expect(room.players.find((p) => p.id === 'p1').score).toBe(100);
+    expect(room.players.find((p) => p.id === 'p1').score).toBe(1500);
   });
 
   test('tracks answer count correctly', () => {

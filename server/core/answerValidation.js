@@ -54,12 +54,12 @@ function buildAcceptedAnswers(slide) {
  * 
  * @param {object} slide - The current question slide
  * @param {string|number} answer - The submitted answer
- * @param {string} gameMode - 'casual', 'arcade', 'pro'
+ * @param {string} gameMode - 'casual', 'moderate', 'pro' (legacy 'arcade' supported)
  * @param {boolean} isTypeGuess - Force typing validation
  * 
  * @returns {{ correct: boolean, matchType: string|null, score: number, reason: string }}
  */
-function validateAnswer(slide, answer, gameMode = 'arcade', isTypeGuess = false) {
+function validateAnswer(slide, answer, gameMode = 'casual', isTypeGuess = false) {
   if (!slide) return { correct: false, matchType: null, score: 0, reason: 'no_slide' };
 
   const type = isTypeGuess ? 'typing' : String(slide.answer_mode === 'type_guess' ? 'typing' : 'mcq').trim().toLowerCase();
@@ -74,7 +74,7 @@ function validateAnswer(slide, answer, gameMode = 'arcade', isTypeGuess = false)
     };
   } else {
     // Typing validation
-    const safeMode = MODE_CONFIG[gameMode] ? gameMode : 'arcade';
+    const safeMode = MODE_CONFIG[gameMode] ? gameMode : 'casual';
     const config = MODE_CONFIG[safeMode];
 
     const acceptedAnswers = buildAcceptedAnswers(slide);

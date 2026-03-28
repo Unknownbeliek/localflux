@@ -20,6 +20,12 @@ const MODE_CONFIG = {
     penalty: 0,          // No penalty for wrong answers
     fuzzyThreshold: 0.65 // Very forgiving (allows 3-4 typos)
   },
+  moderate: {
+    decayFloor: 0.5,     // Points drop to 50% at t=0
+    penalty: 0,          // No penalty for wrong answers
+    fuzzyThreshold: 0.85 // Moderate (allows 1-2 typos)
+  },
+  // Backward compatibility alias for legacy clients/config values.
   arcade: {
     decayFloor: 0.5,     // Points drop to 50% at t=0
     penalty: 0,          // No penalty for wrong answers

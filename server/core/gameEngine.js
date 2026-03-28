@@ -12,6 +12,7 @@
 'use strict';
 
 const { sanitizeQuestion } = require('./deckLoader');
+const { calculateScore } = require('./scoringEngine');
 
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
@@ -48,13 +49,6 @@ function isTypingCorrect(slide, answer) {
   return accepted.some((item) => normalizeText(item) === submitted);
 }
 
-function calculateScoreForCorrect(slide) {
-  const raw = Number(slide?.timeLimit);
-  const safe = Number.isFinite(raw) && raw > 0 ? raw : 20000;
-  const derived = Math.round(safe / 200); // 20s => 100
-  return Math.max(50, Math.min(300, derived));
-}
-
 /**
  * Start a game in the given room.
  * Mutates room.status, room.currentQ, room.answersIn.
@@ -80,7 +74,7 @@ function startGame(room, slides) {
 
 /**
  * Record a player's answer for the current question.
- * Awards +100 points for the first correct submission per player per round.
+ * Awards score based on difficulty, time remaining, and host mode.
  * Idempotent — subsequent calls from the same player are rejected.
  *
  * @param {object} room
@@ -115,7 +109,24 @@ function submitAnswer(room, slides, socketId, answer) {
 
   if (correct) {
     const player = room.players.find((p) => p.id === socketId);
-    if (player) player.score += calculateScoreForCorrect(slide);
+    if (player) {
+      const totalTime = Number(slide?.timeLimit) > 0 ? Number(slide.timeLimit) : 20000;
+      const hasRoundEndTime = Number.isFinite(Number(room?.currentQEndsAt));
+      const timeRemaining = hasRoundEndTime
+        ? Math.max(0, Number(room.currentQEndsAt) - Date.now())
+        : totalTime;
+
+      const scoreResult = calculateScore({
+        difficulty: slide?.difficulty,
+        hostMode: room?.gameMode || 'casual',
+        timeRemaining,
+        totalTime,
+        isExactMatch: true,
+        isFuzzyMatch: false,
+      });
+
+      player.score += scoreResult.finalScore;
+    }
   }
 
   room.answersIn[socketId] = answer;
