@@ -18,3 +18,7 @@ export async function saveDraft(deck) {
 export async function loadDraft(id) {
   return deckStudioDB.drafts.get(id);
 }
+
+export async function listDrafts() {
+  return deckStudioDB.drafts.orderBy('updatedAt').reverse().toArray();
+}
