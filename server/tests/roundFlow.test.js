@@ -16,11 +16,11 @@
 describe('roundFlow module', () => {
   let mockIo, mockRoom, roundFlow;
   let questionTimeoutTimers, roundLockTimers, roundTransitionTimers;
-  let clearedTimers, createdTimers;
+  let clearedTimers;
 
   beforeEach(() => {
+    jest.useFakeTimers();
     clearedTimers = [];
-    createdTimers = [];
     questionTimeoutTimers = new Map();
     roundLockTimers = new Map();
     roundTransitionTimers = new Map();
@@ -46,18 +46,30 @@ describe('roundFlow module', () => {
     const mockGetRoom = jest.fn(() => mockRoom);
     const mockDeleteRoom = jest.fn();
     const mockMarkRoomClosed = jest.fn();
-    const mockAdvanceQuestion = jest.fn();
+    const mockAdvanceQuestion = jest.fn(() => ({
+      result: { correct_answer: 'A', scores: [] },
+      next: { index: 1, total: 5, question: { prompt: 'Next?' } },
+      gameOver: null,
+    }));
     const mockClearTimerByRoom = jest.fn((timersMap, roomId) => {
       if (timersMap.has(roomId)) {
         clearedTimers.push({ mapType: 'timersMap', roomId });
         timersMap.delete(roomId);
       }
     });
-    const mockClearRoundTimers = jest.fn((timersMap) => {
-      for (const timer of timersMap.values()) {
+    const mockClearRoundTimers = jest.fn(() => {
+      for (const timer of questionTimeoutTimers.values()) {
         clearTimeout(timer);
       }
-      timersMap.clear();
+      for (const timer of roundLockTimers.values()) {
+        clearTimeout(timer);
+      }
+      for (const timer of roundTransitionTimers.values()) {
+        clearTimeout(timer);
+      }
+      questionTimeoutTimers.clear();
+      roundLockTimers.clear();
+      roundTransitionTimers.clear();
     });
     const mockWithQuestionTiming = jest.fn((payload) => ({
       ...payload,
@@ -86,7 +98,20 @@ describe('roundFlow module', () => {
   });
 
   afterEach(() => {
-    jest.clearAllTimers();
+    for (const timer of questionTimeoutTimers.values()) {
+      clearTimeout(timer);
+    }
+    for (const timer of roundLockTimers.values()) {
+      clearTimeout(timer);
+    }
+    for (const timer of roundTransitionTimers.values()) {
+      clearTimeout(timer);
+    }
+
+    questionTimeoutTimers.clear();
+    roundLockTimers.clear();
+    roundTransitionTimers.clear();
+    jest.useRealTimers();
   });
 
   // ── emitNextQuestionForRound Tests ────────────────────────────────────────
@@ -135,7 +160,6 @@ describe('roundFlow module', () => {
     });
 
     test('sets timeout based on question duration', () => {
-      jest.useFakeTimers();
       const nextQuestion = {
         index: 0,
         total: 5,
@@ -146,12 +170,9 @@ describe('roundFlow module', () => {
       roundFlow.emitNextQuestionForRound(mockRoom, nextQuestion);
 
       expect(questionTimeoutTimers.has('lan_room')).toBe(true);
-
-      jest.useRealTimers();
     });
 
     test('defaults timeout to 20000ms if durationMs is missing', () => {
-      jest.useFakeTimers();
       const nextQuestion = {
         index: 0,
         total: 5,
@@ -162,12 +183,9 @@ describe('roundFlow module', () => {
 
       // Timer should be created with default timeouts
       expect(questionTimeoutTimers.has('lan_room')).toBe(true);
-
-      jest.useRealTimers();
     });
 
     test('stores timeout handle in map for cleanup', () => {
-      jest.useFakeTimers();
       const nextQuestion = {
         index: 0,
         total: 5,
@@ -181,8 +199,6 @@ describe('roundFlow module', () => {
       expect(handle).toBeDefined();
       // In Jest fake timers, setTimeout returns a Timeout object, not a number
       expect(handle).not.toBeNull();
-
-      jest.useRealTimers();
     });
   });
 
@@ -280,7 +296,6 @@ describe('roundFlow module', () => {
 
   describe('timer cleanup', () => {
     test('existing timeout is cleared before setting new one', () => {
-      jest.useFakeTimers();
       const nextQuestion1 = {
         index: 0,
         total: 5,
@@ -289,7 +304,6 @@ describe('roundFlow module', () => {
       };
 
       roundFlow.emitNextQuestionForRound(mockRoom, nextQuestion1);
-      const firstHandle = questionTimeoutTimers.get('lan_room');
 
       // Emit another question
       mockRoom.roundId = 2;
@@ -304,8 +318,6 @@ describe('roundFlow module', () => {
 
       // Timer should be cleared and replaced
       expect(clearedTimers.length).toBeGreaterThan(0);
-
-      jest.useRealTimers();
     });
   });
 
@@ -367,7 +379,6 @@ describe('roundFlow module', () => {
     });
 
     test('handles zero duration timeout', () => {
-      jest.useFakeTimers();
       const nextQuestion = {
         index: 0,
         total: 5,
@@ -378,12 +389,9 @@ describe('roundFlow module', () => {
       // Should default to 20000ms
       roundFlow.emitNextQuestionForRound(mockRoom, nextQuestion);
       expect(questionTimeoutTimers.has('lan_room')).toBe(true);
-
-      jest.useRealTimers();
     });
 
     test('handles negative duration gracefully', () => {
-      jest.useFakeTimers();
       const nextQuestion = {
         index: 0,
         total: 5,
@@ -394,8 +402,6 @@ describe('roundFlow module', () => {
       // Should use fallback
       roundFlow.emitNextQuestionForRound(mockRoom, nextQuestion);
       expect(questionTimeoutTimers.has('lan_room')).toBe(true);
-
-      jest.useRealTimers();
     });
   });
 });
