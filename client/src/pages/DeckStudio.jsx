@@ -45,6 +45,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
     updateImageUrl,
     updateOption,
     setCorrectIndex,
+    setDifficulty,
     importCsvText,
     exportFlux,
     validateDeck,
@@ -520,6 +521,32 @@ export default function DeckStudio({ onBack, onHostDeck }) {
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
+            <label className="block text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">
+              Question Difficulty <span className="text-slate-500">(Optional - defaults to Easy)</span>
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              {['easy', 'medium', 'hard'].map((difficulty) => (
+                <button
+                  key={difficulty}
+                  type="button"
+                  onClick={() => activeSlide && setDifficulty(activeSlide.id, difficulty)}
+                  className={`rounded-xl px-3 py-2.5 text-xs font-black uppercase tracking-[0.2em] transition-all border ${
+                    activeSlide?.difficulty === difficulty
+                      ? difficulty === 'easy'
+                        ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200 shadow-[0_0_15px_rgba(52,211,153,0.3)]'
+                        : difficulty === 'medium'
+                        ? 'bg-amber-500/20 border-amber-400/50 text-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.3)]'
+                        : 'bg-rose-500/20 border-rose-400/50 text-rose-200 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                      : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white hover:border-white/20'
+                  }`}
+                >
+                  {difficulty === 'easy' && '🟢'} {difficulty === 'medium' && '🟡'} {difficulty === 'hard' && '🔴'} {difficulty}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

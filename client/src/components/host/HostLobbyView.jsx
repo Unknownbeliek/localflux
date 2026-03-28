@@ -102,6 +102,10 @@ export default function HostLobbyView({
   socket,
   roomId,
   onHostAnnouncement,
+  gameMode,
+  gameModeOptions,
+  gameModeLabels,
+  syncGameMode,
 }) {
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const [announcementText, setAnnouncementText] = useState('');
@@ -465,6 +469,27 @@ export default function HostLobbyView({
                         }`}
                     >
                       {answerModeLabels[mode] || mode}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="section-header mb-2.5">Scoring Mode</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {gameModeOptions.map((mode) => (
+                    <button
+                      key={mode}
+                      onClick={() => syncGameMode(mode)}
+                      className={`rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide transition-all duration-150 ${gameMode === mode
+                          ? mode === 'casual'
+                            ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
+                            : mode === 'moderate'
+                            ? 'bg-amber-400 text-black shadow-md shadow-amber-500/20'
+                            : 'bg-rose-400 text-black shadow-md shadow-rose-500/20'
+                          : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
+                        }`}
+                    >
+                      {gameModeLabels[mode]?.split(' ')[0] || mode}
                     </button>
                   ))}
                 </div>

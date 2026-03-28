@@ -167,6 +167,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [mutedSet, setMutedSet] = useState(new Set());
   const [chatMode, setChatMode] = useState('RESTRICTED');
   const [answerMode, setAnswerMode] = useState('multiple_choice');
+  const [gameMode, setGameMode] = useState('casual');
   const [allowedList, setAllowedList] = useState([]);
   const [newAllowedText, setNewAllowedText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -226,6 +227,12 @@ export default function Host({ onBack, studioQuestions = null }) {
     auto: 'AUTO DECK',
     multiple_choice: '4 OPTIONS',
     type_guess: 'TYPE GUESS',
+  };
+  const gameModeOptions = ['casual', 'moderate', 'pro'];
+  const gameModeLabels = {
+    casual: 'CASUAL (Fuzzy OK)',
+    moderate: 'MODERATE (Exact Only)',
+    pro: 'PRO (1.25× Bonus)',
   };
 
   const requestFreshHostToken = useCallback(() => {
@@ -1185,6 +1192,31 @@ export default function Host({ onBack, studioQuestions = null }) {
     );
   };
 
+  const syncGameMode = (mode, options = {}) => {
+    const { requireLobby = true } = options;
+    const normalizedMode = String(mode || '').trim().toLowerCase();
+    if (!['casual', 'moderate', 'pro'].includes(normalizedMode)) return;
+    if (requireLobby && phase !== 'lobby') {
+      setError('Game mode can only be changed in lobby.');
+      return;
+    }
+
+    setGameMode(normalizedMode);
+    if (!roomId || !socketRef.current?.connected) return;
+
+    socketRef.current.emit(
+      'host:set_game_mode',
+      { mode: normalizedMode, hostToken, hostSessionId: hostSessionIdRef.current },
+      (ack) => {
+        if (!ack?.ok) {
+          setError(ack?.reason || 'Failed to set game mode.');
+          return;
+        }
+        if (ack.mode) setGameMode(ack.mode);
+      }
+    );
+  };
+
   const addAllowedMessage = () => {
     const text = newAllowedText.trim();
     if (!text) return;
@@ -1478,6 +1510,10 @@ export default function Host({ onBack, studioQuestions = null }) {
         mutedSet={mutedSet}
         answerMode={answerMode}
         answerModeLabels={answerModeLabels}
+        gameMode={gameMode}
+        gameModeOptions={gameModeOptions}
+        gameModeLabels={gameModeLabels}
+        syncGameMode={syncGameMode}
         onHostAnnouncement={sendHostAnnouncement}
         onEndGameRequest={handleEndGameRequest}
         isEndGameModalOpen={isEndGameModalOpen}
@@ -1566,6 +1602,10 @@ export default function Host({ onBack, studioQuestions = null }) {
         answerModeOptions={answerModeOptions}
         answerModeLabels={answerModeLabels}
         syncAnswerMode={syncAnswerMode}
+        gameMode={gameMode}
+        gameModeOptions={gameModeOptions}
+        gameModeLabels={gameModeLabels}
+        syncGameMode={syncGameMode}
         modeOptions={modeOptions}
         syncChatMode={syncChatMode}
         chatMode={chatMode}
