@@ -10,6 +10,7 @@ import HostResultView from './host/HostResultView';
 import HostQuestionView from './host/HostQuestionView';
 import HostGameOverView from './host/HostGameOverView';
 import HostLobbyView from './host/HostLobbyView';
+import CreateRoom from './host/CreateRoom';
 import { resolveQuestionTiming } from '../utils/questionTiming';
 import { useBgm } from '../context/BgmProvider';
 import { playGameSfx } from '../utils/gameFeel';
@@ -150,7 +151,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const socketRef = useRef(null);
   const [hostSocket, setHostSocket] = useState(null);
   const [connected, setConnected] = useState(false);
-  const [roomName, setRoomName] = useState(savedHostState?.roomName || '');
+  const [roomName, setRoomName] = useState(savedHostState?.roomName || 'Movie Night');
   const [roomId, setRoomId] = useState(savedHostState?.roomId || null);
   const [players, setPlayers] = useState(savedHostState?.players || []);
   const [error, setError] = useState('');
@@ -167,6 +168,8 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [mutedSet, setMutedSet] = useState(new Set());
   const [chatMode, setChatMode] = useState('RESTRICTED');
   const [answerMode, setAnswerMode] = useState('multiple_choice');
+  const [questionTimer, setQuestionTimer] = useState(15);
+  const [gameDifficulty, setGameDifficulty] = useState('Normal');
   const [allowedList, setAllowedList] = useState([]);
   const [newAllowedText, setNewAllowedText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -206,6 +209,9 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [autoAdvanceIn, setAutoAdvanceIn] = useState(0);
   const [isStartConfirmArmed, setIsStartConfirmArmed] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
+  const [isReadyMode, setIsReadyMode] = useState(false);
+  const [countdownSeconds, setCountdownSeconds] = useState(0);
+  const [isCountdownActive, setIsCountdownActive] = useState(false);
   const [isEndGameModalOpen, setIsEndGameModalOpen] = useState(false);
   const [endGameConfirmChecked, setEndGameConfirmChecked] = useState(false);
   const [isLeaveHostModalOpen, setIsLeaveHostModalOpen] = useState(false);
@@ -214,6 +220,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [isDeleteDraftModalOpen, setIsDeleteDraftModalOpen] = useState(false);
   const [deleteDraftConfirmChecked, setDeleteDraftConfirmChecked] = useState(false);
   const startConfirmTimerRef = useRef(null);
+  const countdownIntervalRef = useRef(null);
   const tokenRefreshInFlightRef = useRef(false);
   const profilePulseTimersRef = useRef(new Map());
   const prevPhaseRef = useRef(phase);
@@ -713,11 +720,74 @@ export default function Host({ onBack, studioQuestions = null }) {
     };
   }, []);
 
+  // Cleanup countdown interval on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        window.clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+      if (startConfirmTimerRef.current) {
+        window.clearTimeout(startConfirmTimerRef.current);
+        startConfirmTimerRef.current = null;
+      }
+    };
+  }, []);
+
   const filteredStudioDecks = useMemo(() => {
     const q = studioDeckQuery.trim().toLowerCase();
     if (!q) return studioDecks;
     return studioDecks.filter((draft) => String(draft?.title || '').toLowerCase().includes(q));
   }, [studioDecks, studioDeckQuery]);
+
+  const createRoomDeckOptions = useMemo(() => {
+    const serverDeckOptions = availableDecks.map((deck) => ({
+      value: `server:${deck.file}`,
+      label: `Bundled: ${deck.name} (${deck.count} questions)`,
+    }));
+    const studioDeckOptions = studioDecks.map((deck) => ({
+      value: `studio:${deck.id}`,
+      label: `Studio: ${deck.title || 'Untitled'} (${Array.isArray(deck.slides) ? deck.slides.length : 0} questions)`,
+    }));
+    const sessionOption = Array.isArray(studioQuestions) && studioQuestions.length > 0
+      ? [{ value: 'studio:session', label: `Studio Session (${studioQuestions.length} questions)` }]
+      : [];
+    return [...sessionOption, ...serverDeckOptions, ...studioDeckOptions];
+  }, [availableDecks, studioDecks, studioQuestions]);
+
+  const handleSetupDeckSelect = (value) => {
+    setSelectedDeckKey(value);
+
+    if (value === 'studio:session') {
+      const count = Array.isArray(studioQuestions) ? studioQuestions.length : 0;
+      setSelectedDeckSource('studio');
+      setSelectedDeckCount(count);
+      setDeckLabel(`Studio Session (${count} questions)`);
+      return;
+    }
+
+    if (String(value).startsWith('server:')) {
+      const file = String(value).replace('server:', '');
+      const deck = availableDecks.find((item) => item.file === file);
+      setSelectedDeckSource('server');
+      setSelectedDeckCount(deck?.count || 0);
+      setDeckLabel(deck?.name || 'Bundled Deck');
+      return;
+    }
+
+    if (String(value).startsWith('studio:')) {
+      const id = String(value).replace('studio:', '');
+      const draft = studioDecks.find((item) => item.id === id);
+      setSelectedDeckSource('studio');
+      setSelectedDeckCount(Array.isArray(draft?.slides) ? draft.slides.length : 0);
+      setDeckLabel(draft?.title || 'Studio Draft');
+      return;
+    }
+
+    setSelectedDeckSource('none');
+    setSelectedDeckCount(null);
+    setDeckLabel('No deck selected');
+  };
 
   const handleLoadMoreCloudDecks = async () => {
     if (cloudStatus === 'loading' || !isOnline) return;
@@ -806,6 +876,7 @@ export default function Host({ onBack, studioQuestions = null }) {
 
   const handleCreate = () => {
     if (!roomName.trim()) return setError('Enter a room name.');
+    if (!selectedDeckKey) return setError('Select a deck before launching lobby.');
     if (!socketRef.current?.connected) return setError('Not connected.');
     if (!hostToken) return setError('Host token invalid. Restart the application.');
     setError('');
@@ -814,12 +885,13 @@ export default function Host({ onBack, studioQuestions = null }) {
       if (res.success) {
         setRoomId(LAN_ROOM);
         setPhase('lobby');
-        setAnswerMode(String(res.answerMode || 'auto'));
-        setSelectedDeckKey('');
-        setSelectedDeckSource('none');
-        setSelectedDeckCount(null);
-        setDeckLabel('No deck selected');
-        setIsDeckReady(false);
+        setAnswerMode((current) => current || String(res.answerMode || 'auto'));
+
+        handleDeckSelection({ target: { value: selectedDeckKey } });
+        syncAnswerMode(answerMode, { requireLobby: false });
+        syncTimer(questionTimer);
+        syncDifficulty(gameDifficulty);
+
         if (chatMode) {
           const modePayload = { mode: chatMode, hostToken };
           if (chatMode === 'RESTRICTED' && allowedList.length > 0) modePayload.allowed = allowedList;
@@ -1067,41 +1139,101 @@ export default function Host({ onBack, studioQuestions = null }) {
       ? 'Need at least 1 player'
       : !isDeckReady
         ? 'Need a deck selected'
-        : isStartConfirmArmed
-          ? 'Press again to confirm'
+        : isReadyMode
+          ? 'Click to start countdown'
           : 'Ready to launch';
-  const startButtonLabel = isStartingGame ? 'LAUNCHING...' : isStartConfirmArmed ? 'CONFIRM START' : 'START GAME';
+  
+  const startButtonLabel = isCountdownActive 
+    ? (countdownSeconds > 0 ? `${countdownSeconds}` : 'LAUNCHING...')
+    : isStartingGame 
+      ? 'LAUNCHING...' 
+      : isReadyMode 
+        ? 'START GAME' 
+        : 'READY';
 
-  const handleStart = () => {
+  const speakCountdown = (text) => {
+    if (typeof window === 'undefined') return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.2;
+    utterance.pitch = 1;
+    utterance.volume = 0.7;
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const startCountdown = () => {
     if (!startReady || isStartingGame) return;
     if (!socketRef.current?.connected) return setError('Lost connection.');
-    if (!isStartConfirmArmed) {
+
+    setIsReadyMode(false);
+    setIsCountdownActive(true);
+    setCountdownSeconds(5);
+    let elapsed = 0;
+    let hasSpokenGetSet = false;
+
+    // Speak the initial message at 0-2 seconds
+    speakCountdown('Get set, quiz coming in');
+    playGameSfx('round_start');
+
+    countdownIntervalRef.current = window.setInterval(() => {
+      elapsed += 0.1;
+      const remaining = Math.max(0, 5 - elapsed);
+      const secondsLeft = Math.ceil(remaining);
+
+      setCountdownSeconds(secondsLeft);
+
+      // Speak 3, 2, 1 at the appropriate times
+      if (secondsLeft <= 3 && secondsLeft > 0) {
+        speakCountdown(String(secondsLeft));
+        playGameSfx('timer_warning');
+      }
+
+      // When timer reaches 0, emit start_game
+      if (remaining <= 0) {
+        if (countdownIntervalRef.current) {
+          window.clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
+        setIsCountdownActive(false);
+        setCountdownSeconds(0);
+        setIsStartingGame(true);
+        setError('');
+        socketRef.current.emit('start_game', { hostSessionId: hostSessionIdRef.current }, (res) => {
+          if (!res?.success) {
+            setIsStartingGame(false);
+            setIsCountdownActive(false);
+            setIsReadyMode(false);
+            setError(res?.error || 'Could not start.');
+          }
+        });
+      }
+    }, 100);
+  };
+
+  const handleStart = () => {
+    if (!startReady || isStartingGame || isCountdownActive) return;
+    if (!socketRef.current?.connected) return setError('Lost connection.');
+    
+    if (!isReadyMode) {
+      // First click: enter ready mode
       setError('');
-      setIsStartConfirmArmed(true);
+      setIsReadyMode(true);
       if (startConfirmTimerRef.current) {
         window.clearTimeout(startConfirmTimerRef.current);
       }
       startConfirmTimerRef.current = window.setTimeout(() => {
-        setIsStartConfirmArmed(false);
+        setIsReadyMode(false);
         startConfirmTimerRef.current = null;
-      }, 3000);
+      }, 4000);
       return;
     }
 
+    // Second click: start the countdown
     if (startConfirmTimerRef.current) {
       window.clearTimeout(startConfirmTimerRef.current);
       startConfirmTimerRef.current = null;
     }
-
-    setIsStartConfirmArmed(false);
-    setIsStartingGame(true);
-    setError('');
-    socketRef.current.emit('start_game', { hostSessionId: hostSessionIdRef.current }, (res) => {
-      if (!res?.success) {
-        setIsStartingGame(false);
-        setError(res?.error || 'Could not start.');
-      }
-    });
+    startCountdown();
   };
 
   const handleMute = (socketId) => {
@@ -1181,6 +1313,43 @@ export default function Host({ onBack, studioQuestions = null }) {
           return;
         }
         if (ack.mode) setAnswerMode(ack.mode);
+      }
+    );
+  };
+
+  const syncTimer = (seconds) => {
+    const validSeconds = [15, 30, 60].includes(seconds) ? seconds : 30;
+    setQuestionTimer(validSeconds);
+    if (!roomId || !socketRef.current?.connected) return;
+
+    socketRef.current.emit(
+      'host:set_question_timer',
+      { seconds: validSeconds, hostToken, hostSessionId: hostSessionIdRef.current },
+      (ack) => {
+        if (!ack?.ok) {
+          setError(ack?.reason || 'Failed to set question timer.');
+          return;
+        }
+        if (ack.seconds) setQuestionTimer(ack.seconds);
+      }
+    );
+  };
+
+  const syncDifficulty = (level) => {
+    const validLevels = ['Easy', 'Normal', 'Hard'];
+    const normalizedLevel = validLevels.includes(level) ? level : 'Normal';
+    setGameDifficulty(normalizedLevel);
+    if (!roomId || !socketRef.current?.connected) return;
+
+    socketRef.current.emit(
+      'host:set_game_difficulty',
+      { difficulty: normalizedLevel, hostToken, hostSessionId: hostSessionIdRef.current },
+      (ack) => {
+        if (!ack?.ok) {
+          setError(ack?.reason || 'Failed to set game difficulty.');
+          return;
+        }
+        if (ack.difficulty) setGameDifficulty(ack.difficulty);
       }
     );
   };
@@ -1558,7 +1727,9 @@ export default function Host({ onBack, studioQuestions = null }) {
         handleKick={handleKick}
         startReady={startReady}
         isStartingGame={isStartingGame}
-        isStartConfirmArmed={isStartConfirmArmed}
+        isReadyMode={isReadyMode}
+        isCountdownActive={isCountdownActive}
+        countdownSeconds={countdownSeconds}
         handleStart={handleStart}
         startButtonLabel={startButtonLabel}
         startStatusText={startStatusText}
@@ -1566,6 +1737,10 @@ export default function Host({ onBack, studioQuestions = null }) {
         answerModeOptions={answerModeOptions}
         answerModeLabels={answerModeLabels}
         syncAnswerMode={syncAnswerMode}
+        questionTimer={questionTimer}
+        syncTimer={syncTimer}
+        gameDifficulty={gameDifficulty}
+        syncDifficulty={syncDifficulty}
         modeOptions={modeOptions}
         syncChatMode={syncChatMode}
         chatMode={chatMode}
@@ -1577,46 +1752,30 @@ export default function Host({ onBack, studioQuestions = null }) {
         removeAllowedMessage={removeAllowedMessage}
         socket={hostSocket}
         roomId={LAN_ROOM}
+        roomName={roomName}
         onHostAnnouncement={sendHostAnnouncement}
       />
     );
   }
 
   return (
-    <div className="relative min-h-screen bg-slate-950 text-white flex flex-col items-center justify-center p-6">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(70%_50%_at_50%_0%,rgba(16,185,129,0.20),rgba(2,6,23,0)_70%)]" />
-      <button onClick={handleBackRequest} className="absolute top-5 left-5 text-slate-500 hover:text-white text-sm transition-colors">back</button>
-      <div className="z-10 w-full max-w-sm rounded-3xl border border-slate-800 bg-slate-900/80 p-6 shadow-xl shadow-black/30 animate-phase-in">
-        <h1 className="mb-8 text-5xl font-black tracking-tight">New Room</h1>
-        <div className="w-full">
-        <input
-          type="text"
-          placeholder="Room name"
-          value={roomName}
-          onChange={(e) => setRoomName(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
-          className="mb-3 w-full rounded-2xl border border-slate-700 bg-slate-950 px-4 py-4 text-lg font-semibold text-white placeholder-slate-500 transition-colors focus:border-emerald-400 focus:outline-none"
-        />
-        {error && <p className="mb-3 rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs font-mono text-red-300">{error}</p>}
-        <button onClick={handleCreate} disabled={!connected} className="w-full rounded-2xl bg-emerald-400 py-5 text-xl font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400">
-          CREATE
-        </button>
-        <div className={`mt-3 flex items-center justify-center gap-2 text-xs font-mono ${connected ? 'text-emerald-400' : 'text-amber-300'}`}>
-          {connected ? (
-            <span>connected</span>
-          ) : (
-            <>
-              <span>connecting</span>
-              <span className="status-dot" />
-              <span className="status-dot" />
-              <span className="status-dot" />
-            </>
-          )}
-        </div>
-        {resumeNotice && <p className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200">{resumeNotice}</p>}
-        </div>
-
-      </div>
-    </div>
+    <CreateRoom
+      onBack={handleBackRequest}
+      connected={connected}
+      error={error}
+      resumeNotice={resumeNotice}
+      roomName={roomName}
+      setRoomName={setRoomName}
+      deckOptions={createRoomDeckOptions}
+      selectedDeckKey={selectedDeckKey}
+      onSelectDeck={handleSetupDeckSelect}
+      gameDifficulty={gameDifficulty}
+      setGameDifficulty={setGameDifficulty}
+      questionTimer={questionTimer}
+      setQuestionTimer={setQuestionTimer}
+      answerMode={answerMode}
+      setAnswerMode={setAnswerMode}
+      onLaunchLobby={handleCreate}
+    />
   );
 }

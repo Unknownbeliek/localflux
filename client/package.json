@@ -20,6 +20,7 @@
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.1",
     "socket.io-client": "^4.8.3",
+    "styled-components": "^6.3.12",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
   },
