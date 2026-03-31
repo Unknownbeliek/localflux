@@ -208,9 +208,9 @@ Fuzzy matching uses Levenshtein distance (configurable typo tolerance) plus vari
    }
    ```
 
-3. **Edit distance**: Default is 2 characters. If student typed "Pibongyang" → `maxEditDistance` in `server/config/typeGuessPolicy.js`:
+3. **Threshold tuning**: Increase `TYPE_GUESS_THRESHOLD` strictness only if needed. Lower values are more forgiving:
    ```javascript
-   maxEditDistance: 3  // Allow up to 3-character typos
+   TYPE_GUESS_THRESHOLD: 0.75
    ```
 
 4. **Test the matching**:

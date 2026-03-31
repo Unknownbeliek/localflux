@@ -1,10 +1,8 @@
 # VIP Bouncer
 
-> **Status: Planned** — not yet implemented.
+> **Status: Partially Implemented**
 
-This page describes the design for the VIP Bouncer — a two-tier admission
-system that prevents consumer routers from being overwhelmed by simultaneous
-WebSocket connection attempts.
+LocalFlux already enforces capacity limits at join time. A full visual waiting queue is still planned.
 
 ---
 
@@ -18,58 +16,39 @@ unreachable for several seconds.
 
 ---
 
-## Design
+## Current implementation
 
-### Two caps
+### Capacity controls
 
-| Cap | Value | Behaviour |
-|---|---|---|
-| Soft cap | 40 players | New connections are accepted normally below this |
-| Hard cap | 50 players | Connections above 40 are placed in a **waiting queue** |
+| Control | Source | Default | Behavior |
+|---|---|---|---|
+| Default room cap | `DEFAULT_ROOM_MAX_PLAYERS` env | `20` | Initial max players for created room |
+| Hard clamp | `HARD_MAX_PLAYERS` env | `250` | Upper bound server will accept |
+| Hotspot cap | `HOTSPOT_MAX_PLAYERS` constant | `10` | Effective cap when hotspot-like network is detected |
 
-Both values will be configurable via environment variables:
+When room capacity is reached, join handlers return a structured `room_full` response containing:
 
-```bash
-VIP_SOFT_CAP=40
-VIP_HARD_CAP=50
-```
+- `maxPlayers`
+- `effectiveMaxPlayers`
+- `currentPlayers`
 
-### Queue behaviour
-
-When a 41st player connects:
-
-1. Their socket is accepted (TCP handshake completes — this is intentional; dropping at TCP level is worse for routers)
-2. They receive a `queue_position` event with their place in line
-3. They see a "You're in the queue — position X" screen in the client
-4. As existing players leave, the queue drains in FIFO order
-5. When their slot opens they receive `queue_admitted` and proceed to the normal join flow
-
-### Host visibility
-
-The host lobby will show:
-
-- Active players (≤ soft cap)
-- Queue depth ("12 waiting")
+There is currently no server-managed queue admission flow.
 
 ---
 
-## Implementation plan
+## Planned next step
 
-1. Add `softCap` and `hardCap` to room creation options in `roomStore.js`
-2. In `handlers.js` `join_room`: check `room.players.length` against caps before calling `addPlayer()`
-3. Add a `queue` array to the room shape: `queue: [{ socketId, playerName }]`
-4. On player disconnect: drain one from `queue` if present, emit `queue_admitted`
-5. Add `queue_position` and `queue_admitted` socket events to `Player.jsx`
-6. Add queue depth display to `Host.jsx` lobby screen
+1. Add FIFO queue state to room runtime shape
+2. Emit queue position updates to waiting players
+3. Auto-admit queued players when slots open
+4. Add host UI for queue depth/health
 
 ---
 
-## Files that will change
+## Relevant files
 
-| File | Change |
+| File | Purpose |
 |---|---|
-| `server/core/roomStore.js` | Add `queue` array to room shape; add `enqueuePlayer()` and `drainQueue()` helpers |
-| `server/network/handlers.js` | Gate `join_room` on cap; emit `queue_position` |
-| `client/src/components/Player.jsx` | New `queued` phase with position display |
-| `client/src/components/Host.jsx` | Queue depth badge in lobby |
-| `server/tests/roomStore.test.js` | Tests for `enqueuePlayer`, `drainQueue` |
+| `server/network/handlers.js` | Capacity checks, effective max calculation, room full responses |
+| `server/core/roomStore.js` | Stores room max player metadata |
+| `server/utils/networkUtils.js` | Hotspot detection used to lower effective cap |

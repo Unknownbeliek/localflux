@@ -1,11 +1,25 @@
 import { z } from 'zod';
 
+function isValidImageReference(value) {
+  const trimmed = String(value || '').trim();
+  if (!trimmed) return true;
+
+  // Accept absolute URLs, root-relative paths, and simple deck asset names.
+  return (
+    /^https?:\/\//i.test(trimmed) ||
+    trimmed.startsWith('/') ||
+    !trimmed.includes(' ')
+  );
+}
+
 export const SlideSchema = z.object({
   id: z.string().min(1),
   prompt: z.string().trim().min(1, 'Prompt is required.'),
   options: z.array(z.string().trim().min(1, 'All 4 answer options are required.')).length(4),
   correctIndex: z.number().int().min(0).max(3),
-  imageUrl: z.string().trim().url('Image URL must be a valid URL.').or(z.literal('')),
+  imageUrl: z.string().trim().refine(isValidImageReference, {
+    message: 'Image reference must be an absolute URL or a local image path.',
+  }),
   difficulty: z.enum(['easy', 'medium', 'hard']).optional().default('easy'),
 });
 

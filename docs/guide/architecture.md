@@ -170,11 +170,11 @@ Features:
 - Configurable warning threshold before mute
 
 ### Scoring Policies
-Defined in `config/scoringPolicy.js`, allows overriding default +100 flat scoring:
+Defined across `core/scoringEngine.js`, `core/gameEngine.js`, and `config/scoringPolicy.js`.
 
-- **Base score**: Points for correctness
-- **Time multiplier**: Bonus/penalty based on answer speed
-- **Difficulty multiplier**: Scales per-question difficulty (Easy/Normal/Speed/Chaos modes)
+- MCQ flow currently uses legacy time/streak scoring behavior
+- Type Guess flow uses the object-based scoring breakdown engine
+- Mode config (`casual`, `moderate`/`arcade`, `pro`) also influences fuzzy validation thresholds
 
 ### Answer Validation
 `answerValidation.js` and `typeGuessMatcher.js` handle fuzzy matching:

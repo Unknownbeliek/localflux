@@ -13,7 +13,7 @@ Presents four answer options to each player. Players select the correct one.
 1. **Question Screen**: Host sees question text; players see 4 options labeled A, B, C, D
 2. **Answer Window**: Players tap their choice within the time limit
 3. **Validation**: Server checks if the selection matches the deck's correct answer
-4. **Scoring**: Player receives +100 points for correct answers
+4. **Scoring**: Server computes score with current MCQ runtime logic (time + streak aware)
 5. **Reveal**: Host clicks "Reveal" to show the correct answer and updated scores
 
 ### When to Use
@@ -53,7 +53,7 @@ Players type their own answer. The server uses fuzzy matching to validate answer
    - Checks if player input matches the correct answer exactly
    - If not, checks registered variants/aliases (configurable edit distance)
 4. **Validation**: Server sends `correct_answer` to host; host presses "Reveal" to show it to players
-5. **Scoring**: Player receives +100 points if match is found
+5. **Scoring**: Server computes score using difficulty/time/match-quality breakdown
 6. **Reveal**: Host and players see the official answer and score update
 
 ### When to Use
@@ -111,7 +111,7 @@ Show an image and ask players to identify it from four options. Currently in dev
 
 ---
 
-## Host Mode Override
+## Host Mode Override (Answer Mode)
 
 Hosts can enforce a single mode for the entire game, overriding deck settings.
 
@@ -120,13 +120,13 @@ Hosts can enforce a single mode for the entire game, overriding deck settings.
 1. After creating a room, host sees **Game Mode** selector in the lobby
 2. Options:
    - **Auto (Deck-Driven)**: Run questions as authored
-   - **Force Multiple Choice**: All questions become MCQ
-   - **Force Type Guess**: All questions become Type Guess
+   - **Multiple Choice**: All questions run as MCQ
+   - **Type Guess**: All questions run as type guess
 3. This setting applies to all questions in the current game
 
 ### Mode Conversion Matrix
 
-| Deck Setting | Auto | Force MCQ | Force Type Guess |
+| Deck Setting | Auto | Multiple Choice | Type Guess |
 |---|---|---|---|
 | **MCQ** | MCQ | MCQ | First option becomes answer |
 | **Type Guess** | Type Guess | Auto-generate 3 options | Type Guess |
@@ -149,7 +149,7 @@ Hosts can enforce a single mode for the entire game, overriding deck settings.
 | **Cheating resistance** | Moderate (tap can be guessed) | High (matching required) |
 | **Cognitive load** | Recognition | Recall |
 | **Scalability** | Excellent (50+) | Good (up to 50) |
-| **Scoring** | +100 flat | +100 flat |
+| **Scoring** | MCQ legacy runtime scoring | Breakdown scoring engine |
 
 ---
 
@@ -193,24 +193,20 @@ Server-side fuzzy matching configuration:
 
 ```javascript
 {
-  maxEditDistance: 2,        // Levenshtein distance tolerance
-  caseSensitive: false,      // Normalize to lowercase
-  trimWhitespace: true,      // Remove leading/trailing spaces
-  enableSubstringMatch: false // Optional: partial matches
+   TYPE_GUESS_THRESHOLD: 0.85,
+   TYPE_GUESS_POINTS: 100,
+   MAX_GUESS_LENGTH: 180
 }
 ```
 
-### Scoring (scoringPolicy.js)
+### Scoring and Validation
 
-Base scoring and multipliers:
+MCQ and Type Guess currently use different scoring paths.
 
-```javascript
-{
-  baseScore: 100,            // Points for correct answer
-  timeMultiplier: 1.0,       // Bonus for fast answers (in Speed mode)
-  difficultyMultiplier: 1.0  // Scales with Difficulty Engine mode
-}
-```
+- MCQ: legacy positional scoring in `gameEngine`
+- Type Guess: object-based `calculateScore` in `typeGuessHandlers`
+
+See [Scoring Engine](/guide/scoring-engine) for details.
 
 ---
 
@@ -232,8 +228,8 @@ Base scoring and multipliers:
 
 Type Guess uses fuzzy matching:
 - If you registered the variant in `fuzzy_allowances`, it's accepted
-- If not, the server checks Levenshtein distance (configurable, default 2 chars)
-- If still no match, the answer is marked wrong and host can manually override
+- If not, matcher score is checked against the active threshold
+- If still no match, the answer is marked wrong
 
 ### How do I know if my Type Guess questions are good?
 

@@ -1,24 +1,36 @@
-# LocalFlux Scoring Engine Documentation
+# LocalFlux Scoring Engine
 
 ## Overview
 
-The LocalFlux scoring engine is a robust utility system for calculating player scores based on:
-- **Question Difficulty** (base score)
-- **Time Remaining** (bonus points)
-- **Answer Accuracy** (exact match, fuzzy match, or wrong)
-- **Host Mode** (casual, moderate, or pro)
+LocalFlux currently exposes two compatible scoring paths through `calculateScore()`:
 
-The new scoring engine replaces inline calculations with a centralized, thoroughly tested `calculateScore()` function.
+- Legacy positional API used by MCQ runtime (`gameEngine`)
+- Object-based breakdown API used by type-guess runtime (`typeGuessHandlers`)
+
+Both paths are covered by tests and kept for backward compatibility.
 
 ---
 
-## Mathematical Formula
+## Object API formula
 
 ```
-Final Score = Math.floor((Base Score + Time Bonus) × Accuracy Multiplier)
+Final Score = Math.floor((Base Score + Time Bonus) * Accuracy Multiplier)
 ```
 
-### Components
+### Used when
+
+This formula is used when `calculateScore` receives an object payload:
+
+```js
+calculateScore({
+  difficulty,
+  hostMode,
+  timeRemaining,
+  totalTime,
+  isExactMatch,
+  isFuzzyMatch,
+})
+```
 
 #### 1. Base Score (by Difficulty)
 | Difficulty | Points |
@@ -66,11 +78,29 @@ The multiplier depends on the **Host Mode** and the **answer type**:
 
 ---
 
-## Implementation Details
+## Legacy API behavior
+
+When called with positional arguments, scoring falls back to legacy mode:
+
+```js
+calculateScore(correct, difficulty, hostMode, timeRemainingMs, totalTimeMs, currentStreak)
+```
+
+Legacy behavior includes:
+
+- Correct answer points based on remaining time (`50..100`)
+- Streak-based bonus growth
+- Pro-mode wrong answer penalty
+
+This is currently how MCQ answers are scored in `gameEngine.submitAnswer()`.
+
+---
+
+## Implementation details
 
 ### File: `server/core/scoringEngine.js`
 
-The main scoring engine exports:
+`server/core/scoringEngine.js` exports `calculateScore` with signature detection.
 
 ```javascript
 const { calculateScore } = require('../core/scoringEngine');
@@ -84,7 +114,7 @@ const scoreResult = calculateScore({
   isFuzzyMatch: false,          // Boolean: fuzzy (typo-tolerant) match?
 });
 
-// Returns ScoreBreakdown object:
+// Returns ScoreBreakdown object (object API only):
 // {
 //   baseScore: 2000,
 //   timeBonus: 375,
@@ -127,42 +157,29 @@ const scoreResult = calculateScore({
 
 ## Integration Points
 
-### 1. MCQ Mode Scoring
+### 1. MCQ mode scoring
 
-**File**: `server/core/gameEngine.js` (lines ~100-130)
+**File**: `server/core/gameEngine.js`
 
 ```javascript
 const { calculateScore } = require('./scoringEngine');
 
 function submitAnswer(room, slides, socketId, answer) {
-  // ... validation logic ...
-  
-  if (correct) {
-    const player = room.players.find((p) => p.id === socketId);
-    if (player) {
-      const totalTime = Number(slide?.timeLimit) > 0 ? Number(slide.timeLimit) : 20000;
-      const timeRemaining = Math.max(0, (room.currentQEndsAt || Date.now()) - Date.now());
-
-      const scoreResult = calculateScore({
-        difficulty: slide?.difficulty,
-        hostMode: room?.gameMode || 'casual',
-        timeRemaining,
-        totalTime,
-        isExactMatch: true,
-        isFuzzyMatch: false,
-      });
-
-      player.score += scoreResult.finalScore;
-    }
-  }
-  
-  // ... rest of function ...
+  // Calls legacy positional form for now.
+  const scoreResult = calculateScore(
+    correct,
+    slide?.difficulty,
+    room.gameMode || 'arcade',
+    timeRemainingMs,
+    totalTimeMs,
+    currentStreak,
+  );
 }
 ```
 
-### 2. Type Guess Mode Scoring
+### 2. Type-guess mode scoring
 
-**File**: `server/network/typeGuessHandlers.js` (lines ~45-70)
+**File**: `server/network/typeGuessHandlers.js`
 
 ```javascript
 const { calculateScore } = require('../core/scoringEngine');
@@ -196,7 +213,7 @@ socket.on('player:chat_guess', ({ text } = {}, callback) => {
 
 ---
 
-## Edge Cases & Robustness
+## Edge cases and robustness
 
 The `calculateScore()` function handles the following edge cases:
 
@@ -213,7 +230,7 @@ The `calculateScore()` function handles the following edge cases:
 | Non-numeric time values | Converted via `Number()` |
 | NaN values | Treated as 0 or safely ignored |
 | Case-sensitivity | Normalized to lowercase |
-| `arcade` mode (legacy) | Aliased to 'moderate' for backward compatibility |
+| `arcade` mode (legacy) | Aliased to `moderate` for compatibility |
 
 ---
 
@@ -275,25 +292,12 @@ calculateScore({
 
 ---
 
-## Migration Notes
+## Migration status
 
-### What Changed?
-- **Replaced**: Inline score calculations in multiple files
-- **Centralized**: All scoring logic now in `scoringEngine.js`
-- **Improved**: Added comprehensive edge case handling
-- **Documented**: JSDoc types and test cases
-
-### Files Modified
-1. ✅ `server/core/scoringEngine.js` - New robust implementation
-2. ✅ `server/core/gameEngine.js` - Uses `calculateScore()` for MCQ
-3. ✅ `server/network/typeGuessHandlers.js` - Uses `calculateScore()` for type guess
-4. ✅ `server/tests/scoringEngine.test.js` - Comprehensive test suite
-
-### Backward Compatibility
-- ✅ Function signature unchanged
-- ✅ Return structure consistent
-- ✅ All existing integrations work without modification
-- ✅ `arcade` mode aliased to `moderate` for legacy support
+- Central scoring utility exists and is tested.
+- Type-guess path is on object-based breakdown scoring.
+- MCQ path still intentionally uses positional legacy scoring.
+- Full unification can be done later without breaking API consumers.
 
 ---
 

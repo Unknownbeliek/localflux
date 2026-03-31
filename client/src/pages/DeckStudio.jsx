@@ -302,7 +302,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
     window.setTimeout(() => validateDeck(), 0);
   };
 
-  const onHostDirectly = () => {
+  const onHostDirectly = async () => {
     const checked = validateDeck();
     if (!checked.ok) {
       setActionMessage('Cannot launch game yet. Fix validation errors first.');
@@ -322,6 +322,15 @@ export default function DeckStudio({ onBack, onHostDeck }) {
       time_limit_ms: 20000,
       fuzzy_allowances: [],
     }));
+
+    try {
+      await saveDraft({ ...deck, updatedAt: Date.now() });
+      localStorage.setItem('lf_lastDraftId', deck.id);
+      localStorage.setItem('lf_lastSavedAt', String(Date.now()));
+    } catch {
+      // Continue launch even if draft persistence fails.
+    }
+
     onHostDeck(questions);
     setActionMessage('Launching host with this deck...');
   };
@@ -594,6 +603,9 @@ export default function DeckStudio({ onBack, onHostDeck }) {
               </div>
             )}
           </div>
+          {activeErrors.imageUrl && (
+            <p className="text-center text-sm font-semibold text-rose-400 drop-shadow-sm">{activeErrors.imageUrl}</p>
+          )}
 
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
             <label className="block text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">

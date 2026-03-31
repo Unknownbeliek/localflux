@@ -9,8 +9,29 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { LocalhostBouncer } from './components/LocalhostBouncer'
 import { BgmProvider } from './context/BgmProvider'
 
+const STUDIO_LAUNCH_QUESTIONS_KEY = 'lf_studio_launch_questions'
+
 function App() {
   const [studioQuestions, setStudioQuestions] = useState(null)
+
+  const launchHostFromStudio = (questions) => {
+    setStudioQuestions(questions)
+
+    if (typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem(STUDIO_LAUNCH_QUESTIONS_KEY, JSON.stringify(questions || []))
+      } catch {
+        // Ignore storage failures; in-memory state still works for same-session navigation.
+      }
+
+      const token = new URLSearchParams(window.location.search).get('token')
+      const target = token
+        ? `/host?token=${encodeURIComponent(token)}`
+        : '/host'
+
+      window.location.href = target
+    }
+  }
 
   return (
     <HostTokenProvider>
@@ -30,10 +51,7 @@ function App() {
               <ProtectedRoute element={
                 <DeckStudio
                   onBack={() => window.location.href = '/'}
-                  onHostDeck={(questions) => {
-                    setStudioQuestions(questions)
-                    window.location.href = '/host'
-                  }}
+                  onHostDeck={launchHostFromStudio}
                 />
               } />
             }
@@ -44,10 +62,7 @@ function App() {
               <ProtectedRoute element={
                 <DeckStudio
                   onBack={() => window.location.href = '/'}
-                  onHostDeck={(questions) => {
-                    setStudioQuestions(questions)
-                    window.location.href = '/host'
-                  }}
+                  onHostDeck={launchHostFromStudio}
                 />
               } />
             }

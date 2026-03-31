@@ -1,363 +1,129 @@
 # Configuration
 
-All runtime configuration is provided through environment variables. There is no configuration file to edit at runtime — only `.env` files loaded by Node.js (`server/`) and Vite (`client/`). This page documents every supported variable, its default value, and when to change it.
+LocalFlux runtime config comes from environment variables plus a few server constants. This page reflects what is currently implemented.
 
 ## Server environment variables
 
-Set these in `server/.env`, or pass them inline when starting the server. Values in `server/.env` take effect automatically when the server starts.
+Set these before running `server/server.js`.
 
 ### `PORT`
 
-| | |
+| Key | Value |
 |---|---|
-| **Default** | `3000` |
-| **Type** | integer |
-| **Scope** | server |
+| Default | `3000` |
+| Scope | Server HTTP + Socket.IO |
 
-The TCP port the HTTP + WebSocket server listens on.
+Main backend listen port.
 
-::: code-group
+### `CLIENT_PORT`
 
-```bash [macOS / Linux]
-# Pass inline
-PORT=8080 npm run dev
+| Key | Value |
+|---|---|
+| Default | `5173` |
+| Scope | Server network info + startup logs |
 
-# Or add to server/.env
-echo "PORT=8080" >> server/.env
-```
-
-```powershell [Windows]
-# Pass inline (current session only)
-$env:PORT=8080; npm run dev
-
-# Or add to server/.env
-Add-Content server\.env "PORT=8080"
-```
-
-:::
-
-::: warning Update the client too
-If you change `PORT`, update `VITE_BACKEND_URL` in `client/.env` to match —
-otherwise the client will still try to connect on 3000.
-:::
-
----
+Used for printed LAN join hints and `/api/network-info` metadata.
 
 ### `DECK_PATH`
 
-| | |
+| Key | Value |
 |---|---|
-| **Default** | `data/decks/movie.json` (resolved relative to the repo root) |
-| **Type** | file path (absolute or relative to the repo root) |
-| **Scope** | server |
+| Default | `data/decks/movie.json` |
+| Scope | Deck loaded at server startup |
 
-Path to the deck JSON file that gets loaded on server start. The file must conform to the [Deck Schema](/guide/deck-schema).
+Accepts absolute path or repo-relative path.
 
-::: code-group
+### `DEFAULT_ROOM_MAX_PLAYERS`
 
-```bash [macOS / Linux]
-# Absolute path
-DECK_PATH=/home/user/events/quiz-night.json npm run dev
+| Key | Value |
+|---|---|
+| Default | `20` |
+| Scope | Initial room capacity |
 
-# Path relative to the repo root
-DECK_PATH=data/decks/pub-trivia.json npm run dev
-```
+Applied when host creates a room and does not provide a value.
 
-```powershell [Windows]
-# Absolute path
-$env:DECK_PATH="C:\Users\User\events\quiz-night.json"; npm run dev
+### `HARD_MAX_PLAYERS`
 
-# Path relative to the repo root
-$env:DECK_PATH="data\decks\pub-trivia.json"; npm run dev
-```
+| Key | Value |
+|---|---|
+| Default | `250` |
+| Scope | Upper bound clamp |
 
-:::
-
-::: tip Multiple decks
-Only one deck is loaded per server instance. To switch decks, restart the
-server with a different `DECK_PATH`. Deck hot-reload is on the roadmap.
-:::
+Server never allows room capacity above this value.
 
 ---
 
 ## Client environment variables
 
-Set these in `client/.env`. Vite reads `.env` files at **build time** — restart
-`npm run dev` after any change.
+Set these in `client/.env`.
 
 ### `VITE_BACKEND_URL`
 
-| | |
+| Key | Value |
 |---|---|
-| **Default** | `http://<window.location.hostname>:3000` (auto-detected at runtime) |
-| **Type** | URL string |
-| **Scope** | client (Vite) |
+| Default | Runtime fallback to current hostname on port `3000` |
+| Scope | Frontend socket/API target |
 
-The full URL of the LocalFlux backend. Used by `client/src/backendUrl.js` to
-resolve the Socket.io connection target.
+Examples:
 
-**When to set it explicitly:**
+- Local: `http://localhost:3000`
+- LAN: `http://192.168.1.42:3000`
+- Custom port: `http://192.168.1.42:8080`
 
-| Scenario | Value |
-|---|---|
-| Local dev (same machine) | `http://localhost:3000` |
-| LAN event (players on other devices) | `http://192.168.1.42:3000` — your machine's LAN IP |
-| GitHub Codespaces | Your forwarded port URL, e.g. `https://xxx-3000.app.github.dev` |
-| Custom port | `http://localhost:8080` |
-
-**Auto-detection fallback:**
-
-When `VITE_BACKEND_URL` is not set, the client falls back to:
-
-```
-<protocol>//<hostname>:3000
-```
-
-This means the app automatically connects to port 3000 on whatever host served
-the frontend. For a LAN event where both server and client are served from the
-host machine, this often works without any config — players just open the
-frontend URL and the socket connects automatically.
+Restart Vite after changing env values.
 
 ---
 
-## `.env` file reference
+## Current `.env` examples
 
-### `server/.env` (example)
+### `server/.env`
 
 ```bash
 PORT=3000
+CLIENT_PORT=5173
 DECK_PATH=data/decks/movie.json
+DEFAULT_ROOM_MAX_PLAYERS=20
+HARD_MAX_PLAYERS=250
 ```
 
-### `client/.env` (example)
+### `client/.env`
 
 ```bash
 VITE_BACKEND_URL=http://localhost:3000
 ```
 
-A `client/.env.example` file is included in the repository. Copy it on first setup:
+---
 
-::: code-group
+## Runtime constants (not env yet)
 
-```bash [macOS / Linux]
-cp client/.env.example client/.env
-```
+These are currently hardcoded in server modules:
 
-```powershell [Windows]
-copy client\.env.example client\.env
-```
-
-:::
+- `HOTSPOT_MAX_PLAYERS = 10` in `server/network/handlers.js`
+- `HOST_RECONNECT_GRACE_MS = 45000`
+- `PLAYER_RECONNECT_GRACE_MS = 45000`
+- Round timing constants (`ROUND_LOCK_DELAY_MS`, `ROUND_TRANSITION_DELAY_MS`)
 
 ---
 
-## Environment variables at a glance
+## Host-controlled room settings
 
-| Variable | File | Default | Purpose |
-|---|---|---|---|
-| `PORT` | `server/.env` | `3000` | Server listen port |
-| `DECK_PATH` | `server/.env` | `data/decks/movie.json` | Deck JSON to load |
-| `VITE_BACKEND_URL` | `client/.env` | auto-detected | Backend URL for Socket.io |
-| `NODE_ENV` | `server/.env` | `development` | Runtime mode (development/production) |
+These are set through socket events during lobby phase:
 
----
+- `host:set_answer_mode` -> `auto | multiple_choice | type_guess`
+- `host:set_question_timer` -> one of `5,10,15,...,60` seconds
+- `host:set_game_difficulty` -> `Easy | Normal | Hard`
+- `host:set_max_players`
 
-## Advanced Configuration
-
-### Server-side (Node.js only)
-
-#### `NODE_ENV`
-
-| | |
-|---|---|
-| **Default** | `development` |
-| **Type** | string |
-| **Values** | `development`, `production` |
-
-Controls logging verbosity and error handling:
-- **development**: Verbose logs, detailed error messages
-- **production**: Minimal logging, error details hidden from clients
-
-```bash
-NODE_ENV=production npm run dev
-```
+When deck slides are loaded, timer and difficulty selections are applied server-side to the active question set.
 
 ---
 
-### Game Room Settings
+## Chat configuration snapshot
 
-These are configured programmatically when a host creates a room, not via environment variables.
+Chat manager currently starts with:
 
-#### Room Configuration Object (Host sets in UI)
+- `tokenRefillMs: 1200`
+- `tokenCap: 3`
+- Modes: `FREE | RESTRICTED | OFF`
 
-```javascript
-{
-  gameMode: "auto",           // "auto" | "force-mcq" | "force-type-guess"
-  difficulty: "normal",       // "easy" | "normal" | "speed" | "chaos"
-  chatMode: "free",           // "free" | "restricted" | "off"
-  timerEnabled: true,         // Show countdown timer
-  scoreVisibility: "public"   // "public" | "host-only"
-}
-```
-
-Hosts configure these when creating a room in the UI. See [Game Modes](/guide/game-modes) and [Chat Guide](/guide/chat) for details.
-
----
-
-### Scoring & Difficulty
-
-Scoring multipliers are defined in `server/config/scoringPolicy.js`:
-
-```javascript
-{
-  baseScore: 100,              // Points per correct answer
-  speedBonus: 50,              // Max bonus in Speed mode
-  easyMultiplier: 0.5,         // Reduce difficulty
-  normalMultiplier: 1.0,       // Default
-  speedDifficulty: "hard",     // Speed mode is harder for players
-  chaosMultipliers: [1, 1, 1, 2, 2, 3]  // Weighted random multipliers
-}
-```
-
-To customize scoring, edit `server/config/scoringPolicy.js` before starting the server.
-
----
-
-### Type Guess Matching
-
-Fuzzy matching rules are in `server/config/typeGuessPolicy.js`:
-
-```javascript
-{
-  maxEditDistance: 2,          // Levenshtein distance tolerance
-  caseSensitive: false,        // Convert both to lowercase
-  trimWhitespace: true,        // Remove leading/trailing spaces
-  enableSubstringMatch: false  // Allow "paris" to match "paris france"
-}
-```
-
-To adjust fuzzy matching strictness, edit this file.
-
----
-
-### Chat System Configuration
-
-Chat settings are defined in `server/core/chatManager.js`:
-
-| Setting | Default | Purpose |
-|---|---|---|
-| `tokenCapacity` | `1` | Max messages per token bucket |
-| `tokenRefillMs` | `2000` | Milliseconds per token refill (1 msg / 2s) |
-| `maxWarnings` | `3` | Warnings before mute |
-| `staleEntryMs` | `600000` | Cleanup stale bucket entries (10 min) |
-
-Hosts can switch between chat modes in the lobby UI:
-- **FREE**: Rate-limited, profanity-filtered
-- **RESTRICTED**: Pre-canned messages only
-- **OFF**: Chat disabled
-
----
-
-### VIP Bouncer (Planned)
-
-ConnectionQueue system (not yet implemented) will support:
-
-```javascript
-{
-  softCap: 40,        // Normal connections below this
-  hardCap: 50,        // Queue new connections above this
-  queueTimeout: 300000 // 5 minutes max wait in queue
-}
-```
-
-When implemented, these will be configurable via `VIP_SOFT_CAP` and `VIP_HARD_CAP` environment variables.
-
----
-
-## Deployment Scenarios
-
-### Development (Local Machine)
-
-```bash
-# server/.env
-PORT=3000
-DECK_PATH=data/decks/movie.json
-NODE_ENV=development
-
-# client/.env
-VITE_BACKEND_URL=http://localhost:3000
-```
-
-Run both from the repo root:
-
-```bash
-npm run dev
-```
-
----
-
-### LAN Event (Multiple Devices)
-
-Find your LAN IP, then update the client:
-
-::: code-group
-
-```bash [macOS]
-ipconfig getifaddr en0
-```
-
-```bash [Linux]
-ip route get 1 | awk '{print $7; exit}'
-```
-
-```powershell [Windows]
-ipconfig | findstr /i "IPv4"
-```
-
-:::
-
-```bash
-# server/.env
-PORT=3000
-DECK_PATH=data/decks/event-quiz.json
-
-# client/.env
-VITE_BACKEND_URL=http://192.168.1.42:3000
-```
-
-Restart the Vite dev server after changing `client/.env`.
-
----
-
-### Production (Static Build)
-
-For a stable, single-binary deployment:
-
-```bash
-# Build the client
-cd client && npm run build
-
-# Serve from Express
-# Add to server.js (before socket setup):
-app.use(express.static(path.join(__dirname, '../client/dist')));
-```
-
-Then start only the server:
-
-```bash
-cd server && npm run dev
-```
-
-The frontend HTML is now served directly from the backend, so you only manage one port.
-
----
-
-## Configuration Checklist
-
-- [ ] **Port**: Set `PORT` if 3000 is unavailable
-- [ ] **Deck**: Point `DECK_PATH` to your trivia file
-- [ ] **Backend URL**: Set `VITE_BACKEND_URL` if running on LAN or custom port
-- [ ] **Firewall**: Open ports 3000 (server) and 5173 (client dev) if on LAN
-- [ ] **Game settings**: Configure Room options (mode, difficulty, chat) in the Host UI before starting
-- [ ] **Scoring**: Adjust `scoringPolicy.js` if wanted
-- [ ] **Type Guess**: Tune `typeGuessPolicy.js` for answer matching sensitivity
+Host can switch chat mode with `chat:host_set_mode` and provide custom allowed canned messages for `RESTRICTED` mode.

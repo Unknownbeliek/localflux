@@ -19,6 +19,7 @@ import { triggerHaptic } from '../utils/haptics';
 
 const HOST_SESSION_KEY = 'lf_host_session_id';
 const HOST_STATE_KEY = 'lf_host_state';
+const STUDIO_LAUNCH_QUESTIONS_KEY = 'lf_studio_launch_questions';
 const LAN_ROOM = 'local_flux_main';
 
 function isLoopbackHost(hostname) {
@@ -236,6 +237,20 @@ export default function Host({ onBack, studioQuestions = null }) {
   const prevAutoAdvanceRef = useRef(0);
   const modeOptions = ['FREE', 'RESTRICTED', 'OFF'];
   const modeLabels = { FREE: 'OPEN', RESTRICTED: 'GUIDED', OFF: 'SILENT' };
+  const resolvedStudioQuestions = useMemo(() => {
+    if (Array.isArray(studioQuestions) && studioQuestions.length > 0) return studioQuestions;
+    if (typeof window === 'undefined') return [];
+
+    try {
+      const raw = window.sessionStorage.getItem(STUDIO_LAUNCH_QUESTIONS_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }, [studioQuestions]);
+
   const answerModeOptions = ['auto', 'multiple_choice', 'type_guess'];
   const answerModeLabels = {
     auto: 'AUTO DECK',
@@ -781,11 +796,11 @@ export default function Host({ onBack, studioQuestions = null }) {
       value: `studio:${deck.id}`,
       label: `Studio: ${deck.title || 'Untitled'} (${Array.isArray(deck.slides) ? deck.slides.length : 0} questions)`,
     }));
-    const sessionOption = Array.isArray(studioQuestions) && studioQuestions.length > 0
-      ? [{ value: 'studio:session', label: `Studio Session (${studioQuestions.length} questions)` }]
+    const sessionOption = Array.isArray(resolvedStudioQuestions) && resolvedStudioQuestions.length > 0
+      ? [{ value: 'studio:session', label: `Studio Session (${resolvedStudioQuestions.length} questions)` }]
       : [];
     return [...magicDeckOption, ...sessionOption, ...serverDeckOptions, ...studioDeckOptions];
-  }, [magicGeneratedDeck, availableDecks, studioDecks, studioQuestions]);
+  }, [magicGeneratedDeck, availableDecks, studioDecks, resolvedStudioQuestions]);
 
   const routeRequestedDeckKey = useMemo(() => {
     const params = new URLSearchParams(location.search || '');
@@ -910,7 +925,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
 
     if (value === 'studio:session') {
-      const count = Array.isArray(studioQuestions) ? studioQuestions.length : 0;
+      const count = Array.isArray(resolvedStudioQuestions) ? resolvedStudioQuestions.length : 0;
       setSelectedDeckSource('studio');
       setSelectedDeckCount(count);
       setDeckLabel(`Studio Session (${count} questions)`);
@@ -938,7 +953,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     setSelectedDeckSource('none');
     setSelectedDeckCount(null);
     setDeckLabel('No deck selected');
-  }, [magicGeneratedDeck, studioQuestions, availableDecks, studioDecks]);
+  }, [magicGeneratedDeck, resolvedStudioQuestions, availableDecks, studioDecks]);
 
   useEffect(() => {
     if (phase !== 'setup') return;
@@ -1024,10 +1039,10 @@ export default function Host({ onBack, studioQuestions = null }) {
 
     if (value === 'studio:session') {
       setSelectedDeckSource('studio');
-      const count = Array.isArray(studioQuestions) ? studioQuestions.length : 0;
+      const count = Array.isArray(resolvedStudioQuestions) ? resolvedStudioQuestions.length : 0;
       setSelectedDeckCount(count);
       setDeckLabel(`Studio Session (${count} questions)`);
-      if (count > 0) emitSelectedDeck('Studio Session', 'studio', studioQuestions || []);
+      if (count > 0) emitSelectedDeck('Studio Session', 'studio', resolvedStudioQuestions || []);
       return;
     }
 
@@ -1933,7 +1948,7 @@ export default function Host({ onBack, studioQuestions = null }) {
         handleDeckSelection={handleDeckSelection}
         availableDecks={availableDecks}
         isLoadingBundledDecks={isLoadingBundledDecks}
-        studioQuestions={studioQuestions}
+        studioQuestions={resolvedStudioQuestions}
         filteredStudioDecks={filteredStudioDecks}
         studioDecks={studioDecks}
         selectedDeckSource={selectedDeckSource}

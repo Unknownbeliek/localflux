@@ -29,20 +29,20 @@ local subnet — latency measured in single-digit milliseconds, not hundreds.
 | **Room create / join** | Host generates a 4-digit PIN; players join by name + PIN |
 | **Live lobby** | Host sees players appear in real time as they join |
 | **Full quiz loop** | Questions → player answers → reveal → scores → game over |
-| **Server-side scoring** | +100 pts per correct answer; answers validated on the server, never the client |
+| **Server-side scoring** | MCQ uses legacy timed/streak score; type-guess uses breakdown scoring engine |
 | **LAN play** | Any device on the same Wi-Fi — phones, tablets, laptops |
 | **Deck format** | JSON schema with `text_only` and `image_guess` types, per-question time limits, fuzzy-match variants |
 | **Deck Studio** | Browser-based deck editor with CSV import, validation, and .flux export |
-| **In-room chat** | Host-managed chat modes (Open, Guided, Silent) with moderation controls |
+| **In-room chat** | Host-managed chat modes (`FREE`, `RESTRICTED`, `OFF`) with moderation controls |
 | **Session recovery** | Host and player reconnect recovery after accidental refresh/disconnect |
-| **Unit tests** | 48 Jest tests covering core gameplay and chat moderation |
+| **Server tests** | Jest suites across gameplay, handlers, chat, scoring, deck, and integration flow |
 
 ## What is planned
 
-These features are designed and documented but not yet implemented:
+These features are still in progress:
 
 | Feature | Doc |
 |---|---|
-| **VIP Bouncer** | Connection queue with soft/hard player caps to protect the router | [→](/guide/vip-bounce) |
-| **Difficulty Engine** | Per-question scoring multipliers and time pressure modes | [→](/guide/difficulty-engine) |
+| **VIP Queue UX** | Position-aware waiting queue (capacity enforcement already exists) | [→](/guide/vip-bounce) |
+| **Advanced Difficulty Modes** | Speed/Chaos style runtime scoring modes | [→](/guide/difficulty-engine) |
 | **Accolades** | Post-game achievement badges (Speed Demon, Comeback Kid, etc.) | — |

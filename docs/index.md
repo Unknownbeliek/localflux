@@ -52,12 +52,11 @@ features:
     title: Real-Time Chat & Moderation
     details: >
       Server-side profanity filtering, rate limiting, and host-controlled chat modes
-      (Open, Guided, Silent). Players stay engaged in the waiting room.
+      (FREE, RESTRICTED, OFF). Players stay engaged in the waiting room.
 ---
 
-::: warning ⚠️ Work In Progress
-LocalFlux is currently under active development and is **not production-ready yet**.
-Features and behavior may change while we finalize gameplay stability, UX polish, and deployment flow.
+::: tip v1.0.0 Stable Core
+LocalFlux core gameplay is finalized for LAN events. Some advanced flows (full queue UX and next-gen difficulty modes) are still being iterated.
 :::
 
 ## How it works
@@ -91,9 +90,11 @@ Project v1.0.0 is **feature-complete for core gameplay**.
 | **Session recovery** (reconnect during game) | ✓ Shipped |
 | **Profanity filtering** (server-side moderation) | ✓ Shipped |
 | **QR code sharing** (projectable join link) | ✓ Shipped |
-| **48 unit tests** (Jest, all critical paths) | ✓ Shipped |
-| **VIP Bouncer** (connection queue) | 🔜 v1.1.0 |
-| **Difficulty Engine** (Speed / Chaos modes) | 🔜 v1.1.0 |
+| **Comprehensive Jest suites** (engine, handlers, scoring, chat, flow) | ✓ Shipped |
+| **VIP capacity enforcement** (cap + reject) | ✓ Shipped |
+| **VIP queue UX** (position + admission) | 🔜 Next |
+| **Difficulty labels** (Easy/Normal/Hard slide apply) | ✓ Shipped |
+| **Speed / Chaos scoring modes** | 🔜 Next |
 | **Image delivery** (image_guess type rendering) | 🔜 v1.1.0 |
 | **Accolades** (post-game badges) | 🔜 v1.2.0 |
 | **Deck hot-reload** (switch decks without restart) | 🔜 v1.2.0 |

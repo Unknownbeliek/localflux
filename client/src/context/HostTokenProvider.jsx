@@ -29,7 +29,6 @@ export function HostTokenProvider({ children }) {
       setToken(urlToken);
       // Calculate expiration: assume 10-minute TTL from now
       setExpiresAt(Date.now() + 10 * 60 * 1000);
-      console.log('[HostTokenProvider] Token loaded from URL');
     }
   }, []);
 
@@ -42,7 +41,6 @@ export function HostTokenProvider({ children }) {
     setToken(newToken);
     const expiresIn = Date.now() + safeTtlMs;
     setExpiresAt(expiresIn);
-    console.log(`[HostTokenProvider] Token set (expires in ${safeTtlMs}ms)`);
   }, []);
 
   /**
@@ -51,7 +49,6 @@ export function HostTokenProvider({ children }) {
   const clearToken = useCallback(() => {
     setToken(null);
     setExpiresAt(null);
-    console.log('[HostTokenProvider] Token cleared');
   }, []);
 
   /**
@@ -89,7 +86,6 @@ export function HostTokenProvider({ children }) {
     // Set timeout to clear token when it expires
     const timeout = setTimeout(() => {
       clearToken();
-      console.log('[HostTokenProvider] Token expired');
     }, ttl);
 
     return () => clearTimeout(timeout);

@@ -41,6 +41,7 @@ export default defineConfig({
         items: [
           { text: 'Architecture', link: '/guide/architecture' },
           { text: 'Deck Schema', link: '/guide/deck-schema' },
+          { text: 'Scoring Engine', link: '/guide/scoring-engine' },
           { text: 'Testing', link: '/guide/testing' },
         ]
       },
@@ -52,7 +53,7 @@ export default defineConfig({
         ]
       },
       {
-        text: 'Roadmap',
+        text: 'Roadmap / Status',
         items: [
           { text: 'VIP Bouncer', link: '/guide/vip-bounce' },
           { text: 'Difficulty Engine', link: '/guide/difficulty-engine' },
