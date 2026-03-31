@@ -159,39 +159,221 @@ server/tests/
 
 ---
 
-## Pull request checklist
+## Architecture and Module Guidelines
 
-Before opening a PR, confirm:
+Before implementing a feature, understand the three-layer structure:
 
-- [ ] `npm test --prefix server` passes with no failures
-- [ ] New behaviour has test coverage
-- [ ] Commit messages follow the Conventional Commits format
-- [ ] Branch is up to date with `main` (rebase if needed)
-- [ ] PR title follows Conventional Commits format
-- [ ] PR description explains *what* changed and *why*
+**Layer 1 — Core Logic** (`server/core/`)
+- Pure functions with no side effects
+- Examples: `gameEngine.js`, `answerValidation.js`, `shuffle.js`
+- **Test every public function**
+
+**Layer 2 — Socket Wiring** (`server/network/`)
+- Thin adapters between Socket.io and core logic
+- Examples: `handlers.js`, `typeGuessHandlers.js`
+- **Do NOT put complex logic here — call core/ instead**
+
+**Layer 3 — Bootstrap** (`server/server.js`)
+- HTTP/Socket.io initialization only
+- **Minimal business logic**
+
+### Adding a new game mechanic
+
+1. Write pure logic in `core/gameEngine.js` or a new `core/myFeature.js`
+2. Write tests in `server/tests/myFeature.test.js`
+3. Wire it in `network/handlers.js` or `network/myFeatureHandlers.js`
+4. Update React components (`client/src/components/`) to react to new events
+5. Document the feature in [docs/guide/](/guide/get-started)
+
+### Adding a new socket event
+
+1. Define the core logic (pure function) in `core/`
+2. Add the handler function in `network/handlers.js` or a new file
+3. Emit the event with `io.to(roomId).emit('event_name', payload)`
+4. Add a test for the handler logic
+5. Update the client to listen for the event:
+   ```javascript
+   socket.on('event_name', (payload) => { /* react */ });
+   ```
 
 ---
 
-## Reporting bugs
+## Client-side development
 
-Open a [GitHub issue](https://github.com/Unknownbeliek/localflux/issues/new)
-with:
+### Component structure
 
-- Steps to reproduce
-- Expected behaviour
-- Actual behaviour
-- Node.js and npm versions (`node -v && npm -v`)
-- Any error messages from the browser console or server terminal
+```
+client/src/
+├── components/
+│   ├── Host.jsx           # Host control panel (stateful, orchestrates UI flows)
+│   ├── Player.jsx         # Player join/answer screen
+│   ├── Chat.jsx           # Chat system reusable component
+│   ├── host/              # Host sub-components (detailed dashboard screens)
+│   └── [other-feature]/
+├── pages/
+│   ├── AdminDashboard.jsx
+│   └── DeckStudio.jsx
+├── hooks/
+│   └── usePing.js
+├── context/
+│   └── HostTokenProvider.jsx
+├── deckStudio/
+│   └── [store, schemas, etc.]
+└── utils/
+    └── imageCompressor.js
+```
+
+### Best practices
+
+- **Keep components <200 lines**: Shard complexity into child components
+- **Use React hooks for state**: Prefer `useState` + `useContext` over Redux
+- **Socket connection**: Managed globally in `App.jsx`, injected via context
+- **Tailwind CSS only** — no inline styles or external CSS files
+- **Mobile-first**: Build for iPhone first, then desktop
+
+### Testing (future)
+
+Client tests are planned for v1.2.0. For now, manual browser testing is required.
+
+### Hot reload
+
+Vite handles hot module reload. Changes to `.jsx` files **automatically refresh** the browser.
 
 ---
 
-## Suggesting features
+## Documentation updates
 
-Open a GitHub issue labelled `enhancement`. Describe:
+### When to update docs
 
-- The problem you are trying to solve
-- Your proposed solution
-- Any alternatives you considered
+- [ ] Added a new feature? Update the relevant guide (e.g., `/guide/architecture.md`)
+- [ ] Changed an API? Update API reference in `/guide/`
+- [ ] Fixed a bug due to confusion? Add to [Troubleshooting](/guide/troubleshooting)
+- [ ] Changed configuration? Update [Configuration](/guide/configuration)
 
-For large features, discuss in an issue before writing code — it avoids wasted
-effort if the direction does not align with the project roadmap.
+### How to add a new documentation page
+
+1. Create `docs/guide/my-feature.md`
+2. Follow the structure of existing guides (intro → why → how → examples → troubleshooting)
+3. Add a link in `.vitepress/config.mts` (sidebar navigation)
+4. Open a PR and link it to a GitHub issue
+
+### Documentation style
+
+- **Headings**: Use `#` top-level, then `##`, `###`
+- **Code blocks**: Use triple-backtick with language (` ```javascript `)
+- **Links**: Internal links use relative paths: `[Chat Guide](/guide/chat)`
+- **Tables**: Markdown tables with proper alignment
+- **Admonitions**: Use VitePress syntax for tips/warnings:
+  ```markdown
+  ::: tip
+  This is helpful context
+  :::
+  ```
+
+---
+
+## Release process (Maintainers)
+
+1. Create a `release-v1.x.x` branch
+2. Update `CHANGELOG.md` and `docs/guide/release-notes.md`
+3. Bump version in `server/package.json` and `client/package.json` (if needed)
+4. Submit a PR labeled `release`
+5. After merge, tag the commit:
+   ```bash
+   git checkout main && git pull
+   git tag v1.x.x
+   git push origin v1.x.x
+   ```
+6. Create a GitHub release with release notes
+
+---
+
+## Performance considerations
+
+### Server
+
+| Concern | Limit | Solution |
+|---|---|---|
+| Concurrent players | 50–80 | VIP Bouncer (v1.1.0) |
+| Chat spam | — | Token bucket rate limiter |
+| Large deck | 1000+ questions | Lazy load questions |
+| Memory leaks | — | Session cleanup on disconnect |
+
+### Client
+
+| Concern | Solution |
+|---|---|
+| Mobile keyboard resize | Use `100dvh` instead of `100vh` |
+| Large decks | Paginate question rendering |
+| Image loading | WebP + compression |
+
+---
+
+## Debugging
+
+### Server-side
+
+```bash
+# Enable verbose logging
+DEBUG=* npm run dev --prefix server
+
+# Run a single test with logging
+npm test --prefix server -- --testNamePattern="submitAnswer"
+
+# Profile a specific function
+node --prof server.js
+node --prof-process isolate-0001-v8.log > profile.txt
+```
+
+### Client-side
+
+Use Chrome DevTools:
+- **Network tab**: Monitor Socket.io handshake and message sizes
+- **Console**: Check for socket connection errors or client-side exceptions
+- **React DevTools**: Inspect component state and props
+
+### Common issues
+
+| Error | Cause | Fix |
+|---|---|---|
+| "Deck not found" | `DECK_PATH` is wrong or file missing | Check file exists: `ls server/data/decks/` |
+| "Cannot connect" | Backend firewall or port wrong | Ensure `PORT` matches `VITE_BACKEND_URL` |
+| Test fails with "module not found" | Running from wrong directory | Run from `server/`: `cd server && npm test` |
+
+---
+
+## Development workflow example
+
+```bash
+# 1. Start from main
+git checkout main && git pull
+
+# 2. Create a feature branch
+git checkout -b feat/difficulty-speed-mode
+
+# 3. Edit code — run tests frequently
+npm test --prefix server
+
+# 4. Implement the feature in layers
+# - server/core/scoringEngine.js (pure logic)
+# - server/network/handlers.js (socket event)
+# - client/src/components/Host.jsx (UI)
+
+# 5. Commit with Conventional Commits
+git add .
+git commit -m "feat(engine): add speed mode scoring (50-100 pts based on time)"
+
+# 6. Push and open PR
+git push -u origin feat/difficulty-speed-mode
+```
+
+---
+
+## Resources
+
+- 📚 **Architecture**: [Architecture Guide](/guide/architecture)
+- 🧪 **Testing**: [Testing Guide](/guide/testing)
+- 🎮 **Game Design**: [Game Modes](/guide/game-modes)
+- 📐 **Deck Format**: [Deck Schema](/guide/deck-schema)
+- ✅ **Roadmap**: [Planned Features](/guide/difficulty-engine), [VIP Bouncer](/guide/vip-bounce)
+

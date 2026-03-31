@@ -242,6 +242,12 @@ export default function Host({ onBack, studioQuestions = null }) {
     multiple_choice: '4 OPTIONS', 
     type_guess: 'TYPE GUESS',
   };
+  const gameModeOptions = ['casual', 'moderate', 'pro'];
+  const gameModeLabels = {
+    casual: 'CASUAL (Fuzzy OK)',
+    moderate: 'MODERATE (Exact Only)',
+    pro: 'PRO (1.25× Bonus)',
+  };
 
   const requestFreshHostToken = useCallback(() => {
     if (!socketRef.current?.connected) {
@@ -1856,6 +1862,10 @@ export default function Host({ onBack, studioQuestions = null }) {
         mutedSet={mutedSet}
         answerMode={answerMode}
         answerModeLabels={answerModeLabels}
+        gameMode={gameMode}
+        gameModeOptions={gameModeOptions}
+        gameModeLabels={gameModeLabels}
+        syncGameMode={syncGameMode}
         onHostAnnouncement={sendHostAnnouncement}
         onEndGameRequest={handleEndGameRequest}
         isEndGameModalOpen={isEndGameModalOpen}

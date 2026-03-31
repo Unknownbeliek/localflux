@@ -21,24 +21,38 @@ hero:
 
 features:
   -
-    title: Works Offline
+    title: Works Offline, Scales Online
     details: >
-      The host machine is the server. Players connect over Wi-Fi directly
-      to it - no internet uplink required. Traffic never leaves the local
-      subnet, so latency is measured in single-digit milliseconds.
+      The host machine is the server. All 50 players connect over Wi-Fi directly
+      to it — no internet uplink required. Sub-100ms LAN latency guaranteed.
+      Works in auditoriums, classrooms, underground hackathons.
   -
-    title: Server-Authoritative
+    title: Server-Authoritative, Cheat-Proof
     details: >
-      Correct answers live exclusively in server RAM and are only
-      broadcast at the exact moment a round ends. Players never see
-      the question bank - making pre-game answer scraping structurally
-      impossible.
+      Correct answers live exclusively in server RAM and are only broadcast
+      at round end. The client never sees the question bank — making pre-game
+      answer-scraping structurally impossible.
+  -
+    title: Zero Configuration, Pure Node.js
+    details: >
+      No Docker, no database, no cloud accounts, no subscriptions. Deploy from
+      a single laptop with npm. All game state lives in RAM or JSON files on disk.
   -
     title: Drop-In Decks
     details: >
-      Any .json deck placed in data/decks/ is immediately playable.
-      The schema supports text questions, image rounds, per-question time
-      limits, and fuzzy-match allowances for spelling variants.
+      Any .json deck placed in data/decks/ is instantly playable.
+      Schema supports text questions, images (coming soon),
+      type-guess answers with fuzzy matching, and per-question time limits.
+  -
+    title: Browser-Based Deck Studio
+    details: >
+      Create and edit quiz decks in the browser. CSV import for bulk questions.
+      Validation catches errors before deployment. Export as .flux JSON.
+  -
+    title: Real-Time Chat & Moderation
+    details: >
+      Server-side profanity filtering, rate limiting, and host-controlled chat modes
+      (Open, Guided, Silent). Players stay engaged in the waiting room.
 ---
 
 ::: warning ⚠️ Work In Progress
@@ -64,20 +78,25 @@ room PIN, and the game begins.
 
 ## What is built
 
+Project v1.0.0 is **feature-complete for core gameplay**.
+
 | Feature | Status |
 |---|---|
-| Room create / join with 4-digit PIN | Done |
-| Host lobby with live player list | Done |
-| Full quiz loop (questions - answers - scores - game over) | Done |
-| Server-side answer validation + scoring | Done |
-| LAN play (any device on the same Wi-Fi) | Done |
-| Structured deck format (text + image types) | Done |
-| Unit test suite (48 tests, Jest) | Done |
-| VIP Bouncer (connection queue) | Planned |
-| Difficulty Engine | Planned |
-| Accolades / post-game badges | Planned |
-| Deck Studio (browser-based editor) | Done |
-| In-room chat | Done |
+| **LAN play** (50+ on same Wi-Fi) | ✓ Shipped |
+| **Quiz loop** (questions, answers, scores, results) | ✓ Shipped |
+| **Room PIN system** (join by 4-digit code) | ✓ Shipped |
+| **Two game modes** (MCQ + Type Guess) | ✓ Shipped |
+| **Deck Studio** (browser-based editor + CSV import) | ✓ Shipped |
+| **Real-time chat** (Open / Restricted / Off modes) | ✓ Shipped |
+| **Session recovery** (reconnect during game) | ✓ Shipped |
+| **Profanity filtering** (server-side moderation) | ✓ Shipped |
+| **QR code sharing** (projectable join link) | ✓ Shipped |
+| **48 unit tests** (Jest, all critical paths) | ✓ Shipped |
+| **VIP Bouncer** (connection queue) | 🔜 v1.1.0 |
+| **Difficulty Engine** (Speed / Chaos modes) | 🔜 v1.1.0 |
+| **Image delivery** (image_guess type rendering) | 🔜 v1.1.0 |
+| **Accolades** (post-game badges) | 🔜 v1.2.0 |
+| **Deck hot-reload** (switch decks without restart) | 🔜 v1.2.0 |
 
 ## New here?
 

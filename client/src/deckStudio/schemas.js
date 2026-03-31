@@ -6,6 +6,7 @@ export const SlideSchema = z.object({
   options: z.array(z.string().trim().min(1, 'All 4 answer options are required.')).length(4),
   correctIndex: z.number().int().min(0).max(3),
   imageUrl: z.string().trim().url('Image URL must be a valid URL.').or(z.literal('')),
+  difficulty: z.enum(['easy', 'medium', 'hard']).optional().default('easy'),
 });
 
 export const DeckSchema = z.object({

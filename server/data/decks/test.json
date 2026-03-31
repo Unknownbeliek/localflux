@@ -9,8 +9,10 @@
       "image": "deck-images/1.webp",
       "options": ["Alpha", "Beta", "Gamma", "Delta"],
       "correctIndex": 0,
-      "timeLimit": 20000
-    },
+      "timeLimit": 20000,
+      "diifficulty": "easy"
+
+    },  
     {
       "id": "slide-img-2",
       "type": "mcq",

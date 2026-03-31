@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDeckStudioStore } from '../deckStudio/store';
+import { listDrafts, saveDraft } from '../deckStudio/db';
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog';
 import CloudDeckCard from '../components/CloudDeckCard';
 import AnimatedBackground from '../components/AnimatedBackground';
@@ -45,6 +46,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
     updateImageUrl,
     updateOption,
     setCorrectIndex,
+    setDifficulty,
     importCsvText,
     exportFlux,
     validateDeck,
@@ -66,6 +68,9 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   const [showSlideScrollDownHint, setShowSlideScrollDownHint] = useState(false);
   const [isDeleteQuestionModalOpen, setIsDeleteQuestionModalOpen] = useState(false);
   const [deleteQuestionConfirmChecked, setDeleteQuestionConfirmChecked] = useState(false);
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+  const [exitDraftName, setExitDraftName] = useState('');
+  const [isSavingDraftOnExit, setIsSavingDraftOnExit] = useState(false);
   const promptTextareaRef = useRef(null);
   const slideListRef = useRef(null);
   const [hostName] = useState(() =>
@@ -335,6 +340,74 @@ export default function DeckStudio({ onBack, onHostDeck }) {
     setActionMessage('Deck exported as .flux. Send this file to the host machine and load it there.');
   };
 
+  const deepClone = (value) => {
+    if (typeof structuredClone === 'function') {
+      return structuredClone(value);
+    }
+    return JSON.parse(JSON.stringify(value));
+  };
+
+  const createDraftId = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return `draft_${crypto.randomUUID()}`;
+    }
+    return `draft_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  };
+
+  const resolveNextUntitledName = async () => {
+    const drafts = await listDrafts();
+    let maxNumber = 0;
+
+    for (const draft of drafts) {
+      const title = String(draft?.title || '').trim();
+      const match = /^untitled\s+deck\s*(\d+)$/i.exec(title);
+      if (!match) continue;
+      const value = Number(match[1]);
+      if (Number.isInteger(value) && value > maxNumber) {
+        maxNumber = value;
+      }
+    }
+
+    return `Untitled Deck ${maxNumber + 1}`;
+  };
+
+  const handleExitClick = () => {
+    setExitDraftName(String(deck?.title || '').trim());
+    setActionMessage('');
+    setIsExitModalOpen(true);
+  };
+
+  const handleExitWithoutSaving = () => {
+    setIsExitModalOpen(false);
+    onBack?.();
+  };
+
+  const handleSaveDraftAndExit = async () => {
+    setActionMessage('');
+    setIsSavingDraftOnExit(true);
+
+    try {
+      const customName = String(exitDraftName || '').trim();
+      const finalName = customName || await resolveNextUntitledName();
+      const draftToSave = deepClone(deck);
+
+      draftToSave.id = createDraftId();
+      draftToSave.title = finalName;
+      draftToSave.updatedAt = Date.now();
+
+      await saveDraft(draftToSave);
+      localStorage.setItem('lf_lastDraftId', draftToSave.id);
+      localStorage.setItem('lf_lastSavedAt', String(Date.now()));
+
+      setIsExitModalOpen(false);
+      onBack?.();
+    } catch (err) {
+      setActionMessage(err?.message || 'Failed to save draft before exit.');
+    } finally {
+      setIsSavingDraftOnExit(false);
+    }
+  };
+
   const onDownloadCloudDeck = async (deckMeta) => {
     if (!deckMeta?.deckUrl || downloadingDeckId) return;
     setActionMessage('');
@@ -522,6 +595,32 @@ export default function DeckStudio({ onBack, onHostDeck }) {
             )}
           </div>
 
+          <div className="rounded-2xl border border-white/10 bg-white/5 p-5 backdrop-blur-sm">
+            <label className="block text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">
+              Question Difficulty <span className="text-slate-500">(Optional - defaults to Easy)</span>
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              {['easy', 'medium', 'hard'].map((difficulty) => (
+                <button
+                  key={difficulty}
+                  type="button"
+                  onClick={() => activeSlide && setDifficulty(activeSlide.id, difficulty)}
+                  className={`rounded-xl px-3 py-2.5 text-xs font-black uppercase tracking-[0.2em] transition-all border ${
+                    activeSlide?.difficulty === difficulty
+                      ? difficulty === 'easy'
+                        ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200 shadow-[0_0_15px_rgba(52,211,153,0.3)]'
+                        : difficulty === 'medium'
+                        ? 'bg-amber-500/20 border-amber-400/50 text-amber-200 shadow-[0_0_15px_rgba(251,191,36,0.3)]'
+                        : 'bg-rose-500/20 border-rose-400/50 text-rose-200 shadow-[0_0_15px_rgba(239,68,68,0.3)]'
+                      : 'bg-white/5 border-white/10 text-slate-400 hover:bg-white/10 hover:text-white hover:border-white/20'
+                  }`}
+                >
+                  {difficulty === 'easy' && '🟢'} {difficulty === 'medium' && '🟡'} {difficulty === 'hard' && '🔴'} {difficulty}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {(activeSlide?.options || ['', '', '', '']).map((option, optionIndex) => {
               const optionStyles = [
@@ -584,8 +683,8 @@ export default function DeckStudio({ onBack, onHostDeck }) {
           <div className="flex items-center justify-between gap-3">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Settings</p>
             <button
-              onClick={onBack}
-              className="rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+              onClick={handleExitClick}
+              className="rounded-xl border border-rose-400/50 bg-rose-500/15 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.15em] text-rose-100 transition-colors hover:bg-rose-500/25 hover:text-white"
             >
               Exit
             </button>
@@ -756,6 +855,54 @@ export default function DeckStudio({ onBack, onHostDeck }) {
         onConfirm={confirmDeleteQuestion}
         confirmLabel="Delete Question"
       />
+
+      {isExitModalOpen && (
+        <div className="fixed inset-0 z-120 flex items-center justify-center bg-black/65 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 p-5 text-slate-100 shadow-2xl">
+            <h3 className="text-lg font-black text-white">Save Draft Before Exit?</h3>
+            <p className="mt-2 text-sm text-slate-300">
+              Save this deck as a draft. You can type a name, or leave it empty to auto-name it like Untitled Deck 1, 2, 3.
+            </p>
+
+            <label className="mt-4 block text-xs font-black uppercase tracking-[0.18em] text-slate-400">
+              Draft Name
+            </label>
+            <input
+              value={exitDraftName}
+              onChange={(e) => setExitDraftName(e.target.value)}
+              placeholder="Untitled Deck"
+              className="mt-2 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-400/50"
+              maxLength={80}
+              autoFocus
+            />
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsExitModalOpen(false)}
+                className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleExitWithoutSaving}
+                className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-500/20"
+              >
+                Exit Without Saving
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveDraftAndExit}
+                disabled={isSavingDraftOnExit}
+                className="rounded-lg border border-emerald-500/40 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSavingDraftOnExit ? 'Saving...' : 'Save Draft & Exit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

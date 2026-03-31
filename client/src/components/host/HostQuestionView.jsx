@@ -46,6 +46,10 @@ export default function HostQuestionView({
   setEndGameConfirmChecked,
   onEndGameCancel,
   onEndGameConfirm,
+  gameMode,
+  gameModeOptions,
+  gameModeLabels,
+  syncGameMode,
 }) {
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const timerProgress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
@@ -165,6 +169,28 @@ export default function HostQuestionView({
                   {modeLabels[mode]}
                 </button>
               ))}
+            </div>
+
+            <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+              <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-3">Scoring Mode</p>
+              <div className="grid grid-cols-3 gap-2">
+                {gameModeOptions.map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => syncGameMode(mode)}
+                    className={`rounded-lg px-2 py-2.5 text-[10px] font-black tracking-wide transition-all duration-150 ${gameMode === mode
+                        ? mode === 'casual'
+                          ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
+                          : mode === 'moderate'
+                          ? 'bg-amber-400 text-black shadow-md shadow-amber-500/20'
+                          : 'bg-rose-400 text-black shadow-md shadow-rose-500/20'
+                        : 'bg-white/5 text-slate-400 hover:bg-white/10 hover:text-white'
+                      }`}
+                  >
+                    {mode === 'casual' && '🟢'} {mode === 'moderate' && '🟡'} {mode === 'pro' && '🔴'} {mode.toUpperCase()}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {chatMode === 'RESTRICTED' && (

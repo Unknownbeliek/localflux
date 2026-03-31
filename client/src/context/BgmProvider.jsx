@@ -115,7 +115,11 @@ export function BgmProvider({ children }) {
     if (!Number.isFinite(raw)) return 0.7;
     return Math.max(0, Math.min(1, raw));
   });
-  const [supported, setSupported] = useState(true);
+  const [supported] = useState(() => {
+    if (typeof window === 'undefined' || typeof Audio === 'undefined') return false;
+    // Basic audio support check
+    return true;
+  });
   const [musicPhase, setMusicPhase] = useState('lobby');
 
   useEffect(() => {
@@ -157,14 +161,13 @@ export function BgmProvider({ children }) {
     };
 
     engineRef.current = engine;
-    setSupported(Boolean(engine.supported));
     engine.setVolume(volume);
 
     return () => {
       engine.destroy();
       engineRef.current = null;
     };
-  }, []);
+  }, [volume]);
 
   useEffect(() => {
     engineRef.current?.setTrack(musicPhase);
@@ -223,12 +226,12 @@ export function BgmProvider({ children }) {
       }
       await engineRef.current?.start();
     },
-  }), [enabled, volume, supported]);
+  }), [enabled, volume, supported, musicPhase]);
 
   return <BgmContext.Provider value={value}>{children}</BgmContext.Provider>;
 }
 
-export function useBgm() {
+export function useBgm() { // eslint-disable-line react-refresh/only-export-components
   const value = useContext(BgmContext);
   if (!value) {
     throw new Error('useBgm must be used inside BgmProvider');

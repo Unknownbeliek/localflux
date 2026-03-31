@@ -140,7 +140,19 @@ VITE_BACKEND_URL=http://localhost:3000
 Replace `http://localhost:3000` with the forwarded port URL shown in the **Ports** tab of your Codespace. See [Troubleshooting → Codespaces](/guide/troubleshooting#failed-to-connect-in-github-codespaces) for details.
 :::
 
-## 4) Start the backend
+## 4) Start both server and client (root directory)
+
+Starting from the repository root, you can run both simultaneously using concurrently:
+
+```bash
+npm run dev
+```
+
+This will start:
+- Backend on `http://localhost:3000`
+- Frontend on `http://localhost:5173`
+
+**Or, start them separately:**
 
 From `server/`:
 

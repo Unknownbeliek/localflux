@@ -1,66 +1,94 @@
 'use strict';
 
-const { DIFFICULTY_POINTS, MODE_CONFIG, STREAK_BONUSES } = require('../config/scoringPolicy');
+/**
+ * @typedef {'easy'|'medium'|'hard'|string|null|undefined} Difficulty
+ */
 
 /**
- * Calculates the score for a given answer based on difficulty, time taken, game mode, and current streak.
- * 
- * @param {boolean} isCorrect - Whether the user's answer was validated as correct
- * @param {string} difficulty - 'easy', 'standard', 'medium', 'hard' (defaults to standard)
- * @param {string} gameMode - 'casual', 'arcade', 'pro' (defaults to arcade)
- * @param {number} timeRemainingMs - Time left in the question when answered
- * @param {number} totalTimeMs - Total time limit for the question
- * @param {number} currentStreak - The player's current consecutive correct answers BEFORE this answer
- * 
- * @returns {{ points: number, newStreak: number, basePoints: number, streakBonus: number, penalty: number }}
+ * @typedef {'casual'|'moderate'|'pro'|'arcade'|string|null|undefined} HostMode
  */
-function calculateScore(isCorrect, difficulty, gameMode, timeRemainingMs, totalTimeMs, currentStreak = 0) {
-  const safeDiff = typeof difficulty === 'string' && DIFFICULTY_POINTS[difficulty] ? difficulty : 'standard';
-  const basePoints = DIFFICULTY_POINTS[safeDiff];
 
-  const safeMode = typeof gameMode === 'string' && MODE_CONFIG[gameMode] ? gameMode : 'arcade';
-  const config = MODE_CONFIG[safeMode];
+/**
+ * @typedef {object} CalculateScoreParams
+ * @property {Difficulty} difficulty
+ * @property {HostMode} hostMode
+ * @property {number} timeRemaining
+ * @property {number} totalTime
+ * @property {boolean} isExactMatch
+ * @property {boolean} isFuzzyMatch
+ */
 
-  let points = 0;
-  let newStreak = isCorrect ? currentStreak + 1 : 0;
-  let streakBonus = 0;
-  let penalty = 0;
+/**
+ * @typedef {object} ScoreBreakdown
+ * @property {number} baseScore
+ * @property {number} timeBonus
+ * @property {number} multiplier
+ * @property {number} finalScore
+ */
 
-  if (isCorrect) {
-    // 1. Calculate time decay multiplier
-    // Clamp the ratio between 0 and 1 to be safe against negative / oversized times
-    const ratioRaw = totalTimeMs > 0 ? timeRemainingMs / totalTimeMs : 0;
-    const ratio = Math.max(0, Math.min(1, ratioRaw));
+const BASE_BY_DIFFICULTY = {
+  easy: 1000,
+  medium: 1500,
+  hard: 2000,
+};
 
-    // multiplier = floor + (1 - floor) * ratio
-    const multiplier = config.decayFloor + (1 - config.decayFloor) * ratio;
-    
-    // 2. Base score with time decay
-    const timedScore = Math.round(basePoints * multiplier);
+const MULTIPLIERS = {
+  casual: { exact: 1.0, fuzzy: 0.8 },
+  moderate: { exact: 1.0, fuzzy: 0.0 },
+  pro: { exact: 1.25, fuzzy: 0.0 },
+};
 
-    // 3. Streak bonus calculation
-    for (const tier of STREAK_BONUSES) {
-      if (newStreak >= tier.min) {
-        streakBonus = tier.bonus;
-        break; // STREAK_BONUSES is sorted descending by min
-      }
-    }
+function normalizeHostMode(mode) {
+  const normalized = String(mode || 'casual').trim().toLowerCase();
+  if (normalized === 'arcade') return 'moderate'; // Backward compatibility.
+  if (normalized === 'casual' || normalized === 'moderate' || normalized === 'pro') return normalized;
+  return 'casual';
+}
 
-    points = timedScore + streakBonus;
-  } else {
-    // Handling wrong answers
-    if (config.penalty !== 0) {
-      penalty = Math.round(basePoints * config.penalty);
-      points = penalty; // This will return a negative number
-    }
-  }
+function getBaseScore(difficulty) {
+  const normalized = String(difficulty || 'easy').trim().toLowerCase();
+  return BASE_BY_DIFFICULTY[normalized] || BASE_BY_DIFFICULTY.easy;
+}
+
+function getAccuracyMultiplier(hostMode, isExactMatch, isFuzzyMatch) {
+  if (isExactMatch) return MULTIPLIERS[hostMode].exact;
+  if (isFuzzyMatch) return MULTIPLIERS[hostMode].fuzzy;
+  return 0;
+}
+
+/**
+ * Calculates LocalFlux score using base difficulty, time bonus, and host-mode multiplier.
+ *
+ * Formula: floor((base + (timeRemaining / totalTime) * 500) * multiplier)
+ *
+ * @param {CalculateScoreParams} params
+ * @returns {ScoreBreakdown}
+ */
+function calculateScore(params) {
+  const {
+    difficulty,
+    hostMode,
+    timeRemaining,
+    totalTime,
+    isExactMatch,
+    isFuzzyMatch,
+  } = params || {};
+
+  const safeMode = normalizeHostMode(hostMode);
+  const baseScore = getBaseScore(difficulty);
+  const safeTotalTime = Number.isFinite(Number(totalTime)) ? Number(totalTime) : 0;
+  const safeRemaining = Math.max(0, Number.isFinite(Number(timeRemaining)) ? Number(timeRemaining) : 0);
+
+  const ratio = safeTotalTime > 0 ? Math.max(0, Math.min(1, safeRemaining / safeTotalTime)) : 0;
+  const timeBonus = ratio * 500;
+  const multiplier = getAccuracyMultiplier(safeMode, Boolean(isExactMatch), Boolean(isFuzzyMatch));
+  const finalScore = Math.floor((baseScore + timeBonus) * multiplier);
 
   return {
-    points,
-    newStreak,
-    basePoints,
-    streakBonus,
-    penalty
+    baseScore,
+    timeBonus,
+    multiplier,
+    finalScore,
   };
 }
 

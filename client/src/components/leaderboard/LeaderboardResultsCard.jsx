@@ -53,7 +53,6 @@ export default function LeaderboardResultsCard({
   const rankedFinalScores = [...finalScores].sort((a, b) => Number(b?.score || 0) - Number(a?.score || 0));
   const topThree = rankedFinalScores.slice(0, 3);
   const restOfPack = rankedFinalScores.slice(3);
-  const champion = topThree[0] || null;
   const meEntry = rankedFinalScores.find((p) => p?.id === highlightPlayerId) || null;
   const myRank = meEntry ? rankedFinalScores.findIndex((p) => p?.id === highlightPlayerId) + 1 : 0;
   const myLeadFromBelow = myRank > 0 && myRank < rankedFinalScores.length

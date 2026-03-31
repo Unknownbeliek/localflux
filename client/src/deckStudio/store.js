@@ -16,6 +16,7 @@ function createSlide() {
     options: ['', '', '', ''],
     correctIndex: 0,
     imageUrl: '',
+    difficulty: undefined,
   };
 }
 
@@ -193,6 +194,22 @@ export const useDeckStudioStore = create(
         set((state) => {
           const slide = state.deck.slides.find((s) => s.id === slideId);
           if (slide) slide.correctIndex = correctIndex;
+        });
+        touchDeck();
+      },
+
+      setDifficulty: (slideId, difficulty) => {
+        pushHistory();
+        set((state) => {
+          const slide = state.deck.slides.find((s) => s.id === slideId);
+          if (slide) {
+            // Toggle: if already selected, clear it (set to undefined)
+            if (slide.difficulty === difficulty) {
+              slide.difficulty = undefined;
+            } else if (['easy', 'medium', 'hard'].includes(difficulty)) {
+              slide.difficulty = difficulty;
+            }
+          }
         });
         touchDeck();
       },

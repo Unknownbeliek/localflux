@@ -74,7 +74,7 @@ function startGame(room, slides) {
 
 /**
  * Record a player's answer for the current question.
- * Awards +100 points for the first correct submission per player per round.
+ * Awards score based on difficulty, time remaining, and host mode.
  * Idempotent — subsequent calls from the same player are rejected.
  *
  * @param {object} room

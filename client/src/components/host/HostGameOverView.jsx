@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import LeaderboardResultsCard from '../leaderboard/LeaderboardResultsCard';
 import { playGameSfx } from '../../utils/gameFeel';
 import { triggerHaptic } from '../../utils/haptics';
@@ -26,28 +26,29 @@ export default function HostGameOverView({
   handleDeleteStudioDraft,
 }) {
   const [showRevealCurtain, setShowRevealCurtain] = useState(true);
-  const [showConfetti, setShowConfetti] = useState(true);
   const [celebrationFxEnabled, setCelebrationFxEnabled] = useState(() => {
     if (typeof window === 'undefined') return true;
     const value = window.localStorage.getItem(CELEBRATION_FX_KEY);
     return value !== 'false';
   });
-  const confettiPieces = useMemo(
-    () =>
-      Array.from({ length: 42 }, (_, index) => ({
-        id: index,
-        left: `${Math.random() * 100}%`,
-        delay: `${Math.random() * 0.45}s`,
-        duration: `${2.1 + Math.random() * 1.3}s`,
-        hue: 130 + Math.floor(Math.random() * 130),
-        drift: `${-22 + Math.random() * 44}px`,
-      })),
-    []
+  const [showConfetti, setShowConfetti] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    const value = window.localStorage.getItem(CELEBRATION_FX_KEY);
+    return value !== 'false';
+  });
+
+  const [confettiPieces] = useState(() =>
+    Array.from({ length: 42 }, (_, index) => ({
+      id: index,
+      left: `${Math.random() * 100}%`,
+      delay: `${Math.random() * 0.45}s`,
+      duration: `${2.1 + Math.random() * 1.3}s`,
+      hue: 130 + Math.floor(Math.random() * 130),
+      drift: `${-22 + Math.random() * 44}px`,
+    }))
   );
 
   useEffect(() => {
-    setShowConfetti(celebrationFxEnabled);
-
     if (celebrationFxEnabled) {
       playGameSfx('streak', { intensity: 1 });
       triggerHaptic('success');
@@ -70,6 +71,7 @@ export default function HostGameOverView({
   const toggleCelebrationFx = () => {
     setCelebrationFxEnabled((current) => {
       const next = !current;
+      setShowConfetti(next);
       if (typeof window !== 'undefined') {
         window.localStorage.setItem(CELEBRATION_FX_KEY, String(next));
       }

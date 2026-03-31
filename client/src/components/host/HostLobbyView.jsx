@@ -228,6 +228,10 @@ export default function HostLobbyView({
   roomId,
   roomName,
   onHostAnnouncement,
+  gameMode,
+  gameModeOptions,
+  gameModeLabels,
+  syncGameMode,
 }) {
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const [announcementText, setAnnouncementText] = useState('');
@@ -789,7 +793,7 @@ export default function HostLobbyView({
       <ConfirmActionModal
         open={isDeleteDraftModalOpen}
         title="Delete Studio Draft"
-        message={`\"${deleteDraftTargetTitle || 'this draft'}\" will be removed from your local Studio library.`}
+        message={`"${deleteDraftTargetTitle || 'this draft'}" will be removed from your local Studio library.`}
         checkboxLabel="I understand this draft delete cannot be undone."
         checked={deleteDraftConfirmChecked}
         onCheckedChange={setDeleteDraftConfirmChecked}

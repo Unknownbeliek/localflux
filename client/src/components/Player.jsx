@@ -76,7 +76,6 @@ export default function Player({ onBack }) {
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
   const [nextQuestionIn, setNextQuestionIn] = useState(0);
-  const [chatDrawerOpen, setChatDrawerOpen] = useState(false);
   const [joinRetryIn, setJoinRetryIn] = useState(0);
   const [awaitingRoomCreation, setAwaitingRoomCreation] = useState(false);
   const [isLeaveModalOpen, setIsLeaveModalOpen] = useState(false);
@@ -130,7 +129,6 @@ export default function Player({ onBack }) {
     setPrivateGuessHistory([]);
     setResultData(null);
     setNextQuestionIn(0);
-    setChatDrawerOpen(false);
     setTimerDangerActive(false);
     const fallbackMs = Number(nextQuestion?.time_limit_ms) || 20000;
     const { normalizedMs, remainingMs, targetEndsAt } = resolveQuestionTiming({

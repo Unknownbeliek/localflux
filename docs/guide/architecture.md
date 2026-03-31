@@ -7,28 +7,70 @@ An overview of how LocalFlux is structured so contributors can find their way ar
 ## Directory layout
 
 ```
-foss-hack-quiz-engine/
+localflux/
 ├── client/                  # React + Vite frontend
 │   └── src/
+│       ├── App.jsx          # Main app router and provider setup
 │       ├── components/
 │       │   ├── Host.jsx     # Host control panel (setup → lobby → quiz → results)
-│       │   └── Player.jsx   # Player mobile UI (join → answer → results)
-│       └── pages/
-│           └── Home.jsx     # Landing page — HOST / JOIN buttons
+│       │   ├── Player.jsx   # Player mobile UI (join → answer → results)
+│       │   ├── Chat.jsx     # In-game chat system (FREE/RESTRICTED/OFF modes)
+│       │   ├── PingIndicator.jsx    # Network latency monitor
+│       │   ├── CloudDeckCard.jsx    # Cloud/Deck Studio card display
+│       │   └── LocalhostBouncer.jsx # Local dev routing
+│       ├── host/            # Host-specific components (dashboard, lobby, game screens)
+│       ├── pages/
+│       │   ├── AdminDashboard.jsx  # Admin controls and monitoring
+│       │   └── DeckStudio.jsx      # Deck editor (create, import, export)
+│       ├── deckStudio/      # Deck Studio state and logic
+│       │   ├── store.js     # Redux-like state
+│       │   ├── db.js        # Local persistence
+│       │   ├── schemas.js   # Validation schemas
+│       │   └── cloudCatalog.js  # Cloud deck integration
+│       ├── context/
+│       │   └── HostTokenProvider.jsx # Host authentication context
+│       ├── hooks/
+│       │   └── usePing.js   # Latency detection hook
+│       └── utils/
+│           └── imageCompressor.js # WebP/image optimization
 │
 ├── server/                  # Node.js + Socket.IO backend
 │   ├── server.js            # Entry point — HTTP server, deck load, socket wiring
+│   ├── config/
+│   │   ├── scoringPolicy.js # Scoring multipliers and rules
+│   │   └── typeGuessPolicy.js # Type Guess game mode config
 │   ├── core/
 │   │   ├── deckLoader.js    # Load deck JSON from disk, sanitize questions
 │   │   ├── roomStore.js     # In-memory room CRUD + player management
-│   │   └── gameEngine.js    # Pure game logic — start, answer, advance
+│   │   ├── gameEngine.js    # Pure game logic — start, answer, advance
+│   │   ├── answerValidation.js  # Answer matching and variant handling
+│   │   ├── chatManager.js   # Chat moderation and rate limiting
+│   │   ├── hostTokenManager.js # Host authentication tokens
+│   │   ├── scoringEngine.js # Scoring calculations and multipliers
+│   │   └── shuffle.js       # Fisher-Yates shuffle algorithm
 │   ├── network/
-│   │   └── handlers.js      # Socket event handlers (thin wiring layer)
-│   └── tests/               # Jest unit tests (see testing.md)
+│   │   ├── handlers.js      # Main socket event handlers
+│   │   ├── typeGuessHandlers.js # Type Guess mode socket handlers
+│   │   ├── roundFlow.js     # Round state machine
+│   │   └── handlerUtils.js  # Helper functions for handlers
+│   ├── services/
+│   │   └── typeGuessMatcher.js # Fuzzy string matching for type answers
+│   ├── data/
+│   │   └── decks/           # Deck JSON files
+│   │       ├── movie.json   # Default deck
+│   │       └── *.json       # User-uploaded decks
+│   └── tests/               # Jest unit tests
 │
-└── data/
-    └── decks/
-        └── movie.json       # Default quiz deck (Hollywood Blockbusters)
+├── docs/                    # VitePress documentation
+│   ├── .vitepress/
+│   │   └── config.mts       # VitePress configuration
+│   ├── guide/               # Documentation pages
+│   ├── public/              # Static assets
+│   └── index.md             # Home page
+│
+└── landing/                 # Landing page (separate Vite app)
+    └── src/
+        └── NetworkTopology.jsx # Visual network diagram
 ```
 
 ---
@@ -64,14 +106,93 @@ LocalFlux uses a strict three-layer server architecture so contributors can work
 | `deckLoader.js` | Read JSON from disk, expose `sanitizeQuestion` | Yes (fs) — runs once at startup |
 | `roomStore.js` | CRUD on the in-memory `rooms` map | Yes (mutates state) |
 | `gameEngine.js` | Start game, score answers, advance questions | **No** — pure functions on room objects |
+| `answerValidation.js` | Fuzzy-match and normalize player answers | No — pure functions |
+| `chatManager.js` | Chat mode enforcement, rate limiting, moderation | Yes (mutates token buckets) |
+| `hostTokenManager.js` | Generate and validate host authentication tokens | No — pure functions |
+| `scoringEngine.js` | Apply difficulty modes and multipliers to scores | No — pure functions |
+| `shuffle.js` | Fisher-Yates deck shuffling | No — pure functions |
 | `network/handlers.js` | Wire socket events to core, broadcast results | Yes (socket.io) |
+| `network/typeGuessHandlers.js` | Type Guess mode socket handlers | Yes (socket.io) |
 | `server.js` | Bootstrap only | Yes (http, socket.io) |
 
 ---
 
-## Data flow — a single question round
+## Game Modes
 
-```
+LocalFlux supports two primary game modes that can be mixed within a single deck:
+
+### Standard Mode (Multiple Choice)
+- Four answer options presented to players
+- Players click/tap an option
+- Server-side answer validation
+- Questions tagged as `type: "text_only"` or `type: "image_guess"`
+
+### Type Guess Mode
+- Players type their answer as free text
+- Server performs fuzzy matching against correct answer
+- Supports answer variants/aliases defined in deck
+- Questions tagged as `type: "typing"`
+- Uses `typeGuessMatcher.js` for string normalization and matching
+
+### Mode Switching
+Hosts can override deck defaults in the lobby (see "Host Mode Policy Matrix" below):
+
+| Mode | Standard MCQ | Type Guess |
+|---|---|---|
+| **Auto** | Uses deck settings | Uses deck settings |
+| **Force 4 Options** | Enabled | Auto-generates distractors |
+| **Force Type Guess** | Converting first option to answer | Enabled |
+
+---
+
+## Advanced Features
+
+### Host Authentication
+Each host session gets a secure token generated by `hostTokenManager.js`. This prevents:
+- Players from impersonating the host
+- Unauthorized room control commands
+
+Tokens are passed in the `HostTokenProvider` React context and included in host-only socket events.
+
+### Chat System
+Implemented in `chatManager.js` with three modes:
+
+| Mode | Behavior |
+|---|---|
+| **FREE** | Players send any text; server rate-limits (1 msg/2s) and filters profanity |
+| **RESTRICTED** | Only pre-canned messages allowed; host approves options |
+| **OFF** | Chat disabled entirely |
+
+Features:
+- Token-bucket rate limiter per socket
+- Leo-profanity integration
+- Mute/unmute individual players
+- Configurable warning threshold before mute
+
+### Scoring Policies
+Defined in `config/scoringPolicy.js`, allows overriding default +100 flat scoring:
+
+- **Base score**: Points for correctness
+- **Time multiplier**: Bonus/penalty based on answer speed
+- **Difficulty multiplier**: Scales per-question difficulty (Easy/Normal/Speed/Chaos modes)
+
+### Answer Validation
+`answerValidation.js` and `typeGuessMatcher.js` handle fuzzy matching:
+- Configurable edit distance (Levenshtein)
+- Case-insensitive and whitespace-normalized comparisons
+- Support for deck-defined variants/aliases
+
+### Deck Studio
+Browser-based deck editor with:
+- Local in-memory state management (`deckStudio/store.js`)
+- CSV import and auto-mapping
+- Client-side schema validation (`deckStudio/schemas.js`)
+- Export to `.flux` JSON format
+- Optional cloud deck catalog support
+
+---
+
+## Data flow — a single question round
 Host clicks START
   → client emits start_game { pin }
     → handlers.js validates host ownership
