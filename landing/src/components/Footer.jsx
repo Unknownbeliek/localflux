@@ -3,10 +3,10 @@ import { GitBranch, BookOpen, FileText, Terminal } from "lucide-react";
 
 export default function Footer() {
   const links = [
-    { icon: GitBranch, label: "GitHub" },
-    { icon: BookOpen, label: "Docs" },
-    { icon: FileText, label: "License" },
-    { icon: Terminal, label: "CLI" },
+    { icon: GitBranch, label: "GitHub", href: "https://github.com/Unknownbeliek/localflux" },
+    { icon: BookOpen, label: "Docs", href: "http://localhost:5173/guide" },
+    { icon: FileText, label: "License", href: "https://github.com/Unknownbeliek/localflux/blob/main/LICENSE" },
+    { icon: Terminal, label: "CLI", href: "https://github.com/Unknownbeliek/localflux#quick-start" },
   ];
 
   return (
@@ -45,8 +45,11 @@ export default function Footer() {
           {/* Links */}
           <div className="flex flex-wrap justify-center gap-6">
             {links.map((link, i) => (
-              <motion.div
+              <motion.a
                 key={i}
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
                 initial={{ opacity: 0, y: 10 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
@@ -66,7 +69,7 @@ export default function Footer() {
                   <link.icon className="w-4 h-4 transition-transform duration-300 group-hover:scale-125 group-hover:rotate-12" />
                   <span className="relative">{link.label}</span>
                 </motion.div>
-              </motion.div>
+              </motion.a>
             ))}
           </div>
         </motion.div>
