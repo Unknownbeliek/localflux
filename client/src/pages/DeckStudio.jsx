@@ -441,7 +441,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
           <div
             ref={slideListRef}
             style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            className="h-full space-y-3 overflow-y-auto pr-1 [&::-webkit-scrollbar]:hidden"
+            className="h-full space-y-3 overflow-y-auto scroll-smooth pr-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           >
           {deck.slides.map((slide, index) => {
             const isActive = slide.id === activeSlide?.id;
@@ -702,7 +702,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
           </div>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="flex-1 space-y-5 overflow-y-auto scroll-smooth p-5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <section className="grid grid-cols-2 gap-3">
             <button
               onClick={undo}

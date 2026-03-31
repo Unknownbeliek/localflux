@@ -1,24 +1,140 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import styled from 'styled-components';
+import { Check, Copy, Expand, Mic, MicOff, Settings, UserX } from 'lucide-react';
 import Chat from '../Chat';
 import PingIndicator from '../PingIndicator';
+import VolumeKnob from '../VolumeKnob';
 import { QRCodeSVG } from 'qrcode.react';
 import AnimatedBackground from '../AnimatedBackground';
 import ConfirmActionModal from '../ConfirmActionModal';
-import BgmControl from '../BgmControl';
+import { normalizeAvatarObject, resolvePresetPath } from '../../utils/avatarObject';
 
-function normalizeAvatarObject(input) {
-  if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
-  const value = String(input.value || '').trim();
-  if (input.type !== 'preset' || !value) return { type: 'preset', value: '1.jpg' };
-  return { type: 'preset', value };
-}
+// Styled Glass Button Component
+const GlassStartButton = styled.button`
+  perspective: 1000px;
+  width: auto;
+  border-radius: 24px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.2),
+    rgba(139, 92, 246, 0.1),
+    rgba(255, 255, 255, 0.08)
+  );
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.5),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.3),
+    0 8px 16px rgba(0, 0, 0, 0.3),
+    0 0 30px rgba(255, 255, 255, 0.15),
+    0 0 50px rgba(139, 92, 246, 0.2);
+  transform: rotateX(15deg) translateZ(0);
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+  position: relative;
+  cursor: pointer;
+  animation: glassButtonPulse 2s infinite ease-in-out;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  font-weight: 900;
+  padding: 12px 28px;
+  font-size: 15px;
+  font-family: Outfit, sans-serif;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
 
-function presetPath(value) {
-  const cleaned = String(value || '').trim();
-  if (!cleaned) return '/avatars/1.png';
-  return cleaned.includes('.') ? `/avatars/${cleaned}` : `/avatars/${cleaned}.png`;
-}
+  &::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -50px;
+    width: 50px;
+    height: 100%;
+    background: linear-gradient(
+      to right,
+      transparent,
+      rgba(255, 255, 255, 0.1),
+      rgba(255, 255, 255, 0.2),
+      rgba(255, 255, 255, 0.1),
+      transparent
+    );
+    transform: skewX(-25deg);
+    animation: glassShine 3s infinite linear;
+    pointer-events: none;
+    z-index: 1;
+  }
 
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: -8px;
+    left: 10%;
+    width: 80%;
+    height: 8px;
+    background: radial-gradient(
+      ellipse at center,
+      rgba(0, 0, 0, 0.3) 0%,
+      transparent 70%
+    );
+    z-index: -1;
+  }
+
+  &:hover {
+    /* No jump - same transform, just enhanced glow */
+    transform: rotateX(15deg) translateZ(0);
+    box-shadow:
+      inset 0 1px 2px rgba(255, 255, 255, 0.5),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.3),
+      0 12px 24px rgba(0, 0, 0, 0.4),
+      0 0 60px rgba(255, 255, 255, 0.3),
+      0 0 80px rgba(139, 92, 246, 0.3);
+    border-color: rgba(139, 92, 246, 0.4);
+  }
+
+  &:active {
+    transform: rotateX(15deg) translateZ(0) scale(0.98);
+    box-shadow:
+      inset 0 1px 2px rgba(255, 255, 255, 0.4),
+      inset 0 -1px 2px rgba(0, 0, 0, 0.2),
+      0 2px 4px rgba(0, 0, 0, 0.2),
+      0 0 10px rgba(255, 255, 255, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  @keyframes glassButtonPulse {
+    0%, 100% {
+      box-shadow:
+        inset 0 1px 2px rgba(255, 255, 255, 0.5),
+        inset 0 -1px 2px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.3),
+        0 0 30px rgba(255, 255, 255, 0.15),
+        0 0 50px rgba(139, 92, 246, 0.2);
+    }
+    50% {
+      box-shadow:
+        inset 0 1px 2px rgba(255, 255, 255, 0.5),
+        inset 0 -1px 2px rgba(0, 0, 0, 0.3),
+        0 8px 16px rgba(0, 0, 0, 0.3),
+        0 0 50px rgba(255, 255, 255, 0.25),
+        0 0 80px rgba(139, 92, 246, 0.3);
+    }
+  }
+
+  @keyframes glassShine {
+    0% {
+      left: -50px;
+    }
+    100% {
+      left: 250px;
+    }
+  }
+`;
+
+// Styled Glass Button with Rose Accent (for END GAME)
 export default function HostLobbyView({
   handleBack,
   onEndGameRequest,
@@ -82,7 +198,9 @@ export default function HostLobbyView({
   handleKick,
   startReady,
   isStartingGame,
-  isStartConfirmArmed,
+  isReadyMode,
+  isCountdownActive,
+  countdownSeconds,
   handleStart,
   startButtonLabel,
   startStatusText,
@@ -90,6 +208,13 @@ export default function HostLobbyView({
   answerModeOptions,
   answerModeLabels,
   syncAnswerMode,
+  questionTimer,
+  syncTimer,
+  gameDifficulty,
+  syncDifficulty,
+  maxPlayers,
+  effectiveMaxPlayers,
+  syncMaxPlayers,
   modeOptions,
   syncChatMode,
   chatMode,
@@ -101,6 +226,7 @@ export default function HostLobbyView({
   removeAllowedMessage,
   socket,
   roomId,
+  roomName,
   onHostAnnouncement,
   gameMode,
   gameModeOptions,
@@ -110,13 +236,37 @@ export default function HostLobbyView({
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const [announcementText, setAnnouncementText] = useState('');
   const [announcementFeedback, setAnnouncementFeedback] = useState('');
+  const [isChatSettingsOpen, setIsChatSettingsOpen] = useState(false);
+  const [isRoomSettingsOpen, setIsRoomSettingsOpen] = useState(false);
+  const [pendingDeckKey, setPendingDeckKey] = useState('');
+  const [pendingTimer, setPendingTimer] = useState(30);
+  const [pendingDifficulty, setPendingDifficulty] = useState('Normal');
+  const [pendingMaxPlayers, setPendingMaxPlayers] = useState(20);
+  const playerListEndRef = useRef(null);
+
+  const answerModeSettingOptions = answerModeOptions.filter((mode) => mode === 'auto' || mode === 'type_guess');
+
+  const deckOptions = [
+    ...(Array.isArray(availableDecks)
+      ? availableDecks.map((deck) => ({
+          value: `server:${deck.file}`,
+          label: `${deck.name} (${deck.count})`,
+        }))
+      : []),
+    ...(Array.isArray(studioDecks)
+      ? studioDecks.map((deck) => ({
+          value: `studio:${deck.id}`,
+          label: `${deck.title || 'Untitled'} (${Array.isArray(deck.slides) ? deck.slides.length : 0})`,
+        }))
+      : []),
+  ];
 
   const renderLobbyAvatar = (player) => {
     const avatarObject = normalizeAvatarObject(player?.avatarObject);
     return (
-      <div className="relative mx-auto mb-2 flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-slate-600/60 bg-linear-to-br from-slate-800 to-slate-700 p-0.5 shadow-md shadow-black/30">
+      <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-600/60 bg-linear-to-br from-slate-800 to-slate-700 p-0.5 shadow-md shadow-black/30">
         <img
-          src={presetPath(avatarObject.value)}
+          src={resolvePresetPath(avatarObject.value)}
           alt={`${player?.name || 'Player'} avatar`}
           onError={(event) => {
             event.currentTarget.style.display = 'none';
@@ -145,7 +295,8 @@ export default function HostLobbyView({
   const handleSendAnnouncement = () => {
     const text = announcementText.trim();
     if (!text || !onHostAnnouncement) return;
-    onHostAnnouncement(text, (ack) => {
+    const formattedText = text.startsWith('[HOST]') ? text : `[HOST] ${text}`;
+    onHostAnnouncement(formattedText, (ack) => {
       if (!ack?.ok) {
         setAnnouncementFeedback('Could not send announcement.');
         return;
@@ -156,442 +307,436 @@ export default function HostLobbyView({
     });
   };
 
+  const handleOpenRoomSettings = () => {
+    setPendingDeckKey(selectedDeckKey || deckOptions[0]?.value || '');
+    setPendingTimer(questionTimer || 30);
+    setPendingDifficulty(gameDifficulty || 'Normal');
+    setPendingMaxPlayers(Number(maxPlayers) || 20);
+    setIsRoomSettingsOpen(true);
+  };
+
+  const handleSaveRoomSettings = () => {
+    if (pendingDeckKey) {
+      handleDeckSelection({ target: { value: pendingDeckKey } });
+    }
+    syncTimer(pendingTimer);
+    syncDifficulty(pendingDifficulty);
+    syncMaxPlayers(pendingMaxPlayers);
+    setIsRoomSettingsOpen(false);
+  };
+
+  useEffect(() => {
+    playerListEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [players]);
+
   return (
-    <div className="relative min-h-[100dvh] overflow-x-hidden bg-slate-950 text-white p-4 md:p-8 animate-phase-in z-0">
+    <div className="relative min-h-dvh overflow-x-hidden bg-slate-950 text-white animate-phase-in z-0">
       <AnimatedBackground />
 
-      {/* ── Header Bar ── */}
-      <div className="relative z-10 -mx-4 md:-mx-8 mb-6 border-b border-white/10 bg-[#161B22]/60 px-4 py-4 backdrop-blur-xl md:px-8 shadow-md shadow-black/30">
-        <header className="mx-auto flex max-w-7xl items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <button onClick={handleBack} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-400 transition-all hover:bg-slate-800/70 hover:text-white">← Back</button>
+      {/* ── Sticky Header Bar ── */}
+      <div className="sticky top-0 z-50 mb-6 border-b border-white/10 bg-[#161B22]/95 backdrop-blur-xl shadow-lg shadow-black/40">
+        <header className="mx-auto flex w-full items-center justify-between gap-3 px-4 py-2.5 md:px-8">
+          <button
+            onClick={handleBack}
+            className="inline-flex items-center gap-1.5 rounded-2xl border border-slate-700/70 bg-[#1C2128] px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-slate-100 transition hover:border-violet-300/45 hover:bg-[#22272E]"
+          >
+            ← Leave Lobby
+          </button>
+          <div className="flex items-center gap-1.5 md:gap-2">
+            <div className="flex items-center gap-1 scale-75 md:scale-100">
+              <VolumeKnob />
+              <PingIndicator socket={hostSocket} />
+            </div>
+            <div className="rounded-2xl border border-emerald-500/30 bg-linear-to-br from-emerald-500/15 to-emerald-500/5 px-3 py-1.5 backdrop-blur-sm shadow-lg shadow-emerald-500/10">
+              <span className="text-[11px] font-bold text-emerald-300 font-outfit tracking-wide">Live Lobby</span>
+            </div>
+            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold text-cyan-200">
+              Capacity {players.length}/{effectiveMaxPlayers}
+            </div>
             <button
-              onClick={onEndGameRequest}
-              className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-4 py-2.5 text-sm font-black tracking-wide text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
+              onClick={handleOpenRoomSettings}
+              className="inline-flex items-center gap-1.5 rounded-2xl border border-violet-400/35 bg-violet-500/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-violet-100 transition hover:border-violet-300/60 hover:bg-violet-500/20"
             >
-              END GAME
+              <Settings size={14} />
+              Settings
             </button>
-            <div className="flex items-center gap-2.5">
-              <div className="h-7 w-7 rounded-lg bg-gradient-to-br from-violet-500 to-emerald-400 shadow-md shadow-violet-500/20" />
-              <div className="text-xl font-black tracking-tight text-gradient-brand font-outfit">LocalFlux</div>
-            </div>
-            <div className="ml-4 font-outfit text-xs font-semibold tracking-wide text-slate-500">Host Dashboard</div>
-          </div>
-          <div className="flex items-center gap-3">
-            <BgmControl />
-            <PingIndicator socket={hostSocket} />
-            <div className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/8 px-3.5 py-2">
-              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-bold text-emerald-300 font-outfit">Session Active</span>
-            </div>
           </div>
         </header>
       </div>
 
-      {/* ── Main Grid ── */}
-      <div className="relative z-10 mx-auto grid max-w-7xl gap-5 lg:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
-        <div className="flex flex-col gap-5">
+      <div className="p-4 md:p-8">
+        <div className="panel-elevated relative z-10 mx-auto max-w-420 rounded-4xl border border-slate-700/65 bg-[#11161D]/88 p-4 shadow-2xl shadow-black/40 md:p-5 xl:p-6">
+          <div className="grid gap-5 xl:grid-cols-[minmax(360px,1.05fr)_minmax(460px,1.25fr)_minmax(400px,1.1fr)]">
+          {/* Left Column: Gateway */}
+          <section className="flex flex-col rounded-3xl border border-slate-700/35 bg-transparent p-5 shadow-[0_0_45px_rgba(45,212,191,0.07)]">
+            <div className="mb-4 section-header">The Gateway</div>
+            <p className="mb-4 text-xs text-slate-400">Scan to join instantly</p>
 
-          {/* ── Row 1: Join Link + Choose Deck ── */}
-          <section className="grid gap-5 md:grid-cols-2">
-
-            {/* Join Link Panel */}
-            <div className="panel-elevated p-6">
-              <div className="section-header mb-4">Join Link</div>
-
-              {/* QR Code with animated gradient border */}
-              <div className="mb-5 rounded-2xl border border-slate-700/40 bg-[#0D1117] p-4">
-                <p className="mb-3 text-xs font-medium text-slate-500">Scan to Join</p>
-                <div className="mx-auto w-full max-w-xs">
-                  <div className="qr-gradient-border mx-auto">
-                    <div className="flex items-center justify-center rounded-2xl bg-white p-3">
-                      <QRCodeSVG value={joinUrl} size={256} level="H" includeMargin className="h-56 w-56 md:h-64 md:w-64" />
-                    </div>
-                  </div>
+            <div className="relative mb-5 rounded-3xl border border-cyan-400/35 bg-[#0D1117] p-4 shadow-[0_0_45px_rgba(34,211,238,0.22)]">
+              <button
+                onClick={() => setIsQrFullscreenOpen(true)}
+                aria-label="Open fullscreen QR"
+                title="Fullscreen QR"
+                className="absolute right-4 top-4 z-10 inline-flex items-center justify-center rounded-xl border border-slate-700/70 bg-[#1C2128]/90 p-2 text-slate-100 transition hover:border-violet-500/50 hover:bg-[#22272E]"
+              >
+                <Expand size={16} />
+              </button>
+              <div className="qr-gradient-border mx-auto w-full max-w-sm">
+                <div className="flex items-center justify-center rounded-2xl bg-white p-3">
+                  <QRCodeSVG value={joinUrl} size={320} level="H" includeMargin className="h-auto w-full max-w-[320px]" />
                 </div>
-              </div>
-
-              {/* Join URL displayed prominently */}
-              <div className="mb-4 rounded-xl border border-slate-700/30 bg-[#0D1117] px-4 py-3 text-center">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-slate-500 mb-1">Join URL</p>
-                <p className="text-lg font-black text-cyan-300 font-outfit tracking-tight break-all">{joinUrl}</p>
-              </div>
-
-              <p className="mb-4 text-center text-xs text-slate-500">
-                Players join directly from the link or QR
-              </p>
-
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <button onClick={copyLink} className="w-full rounded-xl bg-emerald-400 px-5 py-3.5 text-sm font-black text-black transition-all duration-150 hover:-translate-y-0.5 hover:bg-emerald-300 hover:shadow-lg hover:shadow-emerald-500/20 active:translate-y-0 active:scale-95">
-                  {copied ? '✓ Copied!' : 'Copy Join Link'}
-                </button>
-                <button
-                  onClick={() => setIsQrFullscreenOpen(true)}
-                  className="w-full rounded-xl border border-slate-700/50 bg-[#1C2128] px-5 py-3.5 text-sm font-black text-slate-100 transition-all duration-150 hover:-translate-y-0.5 hover:border-violet-500/50 hover:bg-[#22272E] hover:shadow-lg hover:shadow-violet-500/10 active:translate-y-0 active:scale-95"
-                >
-                  Fullscreen QR
-                </button>
               </div>
             </div>
 
-            {/* Choose Deck Panel */}
             <div
-              className={`relative panel-elevated p-6 transition-all ${isDragging
-                  ? 'ring-2 ring-violet-500/40 shadow-[0_0_30px_rgba(139,92,246,0.2)]'
-                  : ''
-                }`}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleFileDrop}
+              role="button"
+              tabIndex={0}
+              onClick={copyLink}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  copyLink();
+                }
+              }}
+              className="mb-2 flex cursor-pointer items-center justify-between gap-3 rounded-xl border border-slate-700/40 bg-[#0D1117] px-4 py-3 transition hover:border-emerald-400/60"
             >
-              {isDragging && (
-                <div className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-violet-300/70 bg-violet-500/10 px-4 text-center">
-                  <p className="text-sm font-black tracking-wide text-violet-200">Drop .json, .flux, or .csv to load instantly</p>
-                </div>
-              )}
-              <div className="section-header mb-4">Choose Deck</div>
-              <div className="mb-4 flex items-center gap-2.5">
-                <div className="h-3 w-3 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/40" />
-                <div className="text-sm font-bold text-emerald-300 font-outfit">{deckLabel}</div>
+              <div className="min-w-0">
+                <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-slate-500">Join URL</p>
+                <p className="break-all text-base font-black tracking-tight text-cyan-300 font-outfit">{joinUrl}</p>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <div className="mb-2.5 flex items-center gap-2">
-                    <input
-                      value={studioDeckQuery}
-                      onChange={(e) => setStudioDeckQuery(e.target.value)}
-                      placeholder="Search studio drafts"
-                      className="w-full rounded-xl border border-slate-700/50 bg-[#0D1117] px-3.5 py-2.5 text-xs text-slate-200 placeholder:text-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
-                    />
-                    <button
-                      onClick={() => {
-                        setShowDraftManager(true);
-                        setManageNotice('');
-                      }}
-                      className="rounded-xl border border-slate-700/50 bg-[#1C2128] px-4 py-2.5 text-[11px] font-bold text-slate-200 transition hover:bg-[#22272E]"
-                    >
-                      Manage
-                    </button>
-                  </div>
-                  <label className="mb-2 block text-xs text-slate-500 font-medium">Select Deck</label>
-                  <select
-                    value={selectedDeckKey}
-                    onChange={handleDeckSelection}
-                    className="w-full rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-3.5 text-sm text-emerald-300 focus:border-violet-500 focus:outline-none transition-colors"
-                  >
-                    <option value="">Choose a deck...</option>
-                    <optgroup label={`Bundled Decks (${availableDecks.length})`}>
-                      {availableDecks.length === 0 && (
-                        <option value="" disabled>
-                          {isLoadingBundledDecks ? 'Loading bundled decks...' : 'No bundled decks found'}
-                        </option>
-                      )}
-                      {availableDecks.map((deck) => (
-                        <option key={deck.file} value={`server:${deck.file}`}>
-                          {deck.name} ({deck.count} questions)
-                        </option>
-                      ))}
-                    </optgroup>
-                    {Array.isArray(studioQuestions) && studioQuestions.length > 0 && (
-                      <optgroup label="Current Studio Launch">
-                        <option value="studio:session">Studio Session ({studioQuestions.length} questions)</option>
-                      </optgroup>
-                    )}
-                    <optgroup label={`Studio Drafts (${filteredStudioDecks.length})`}>
-                      {studioDecks.length === 0 && <option value="studio:none" disabled>No local studio drafts found</option>}
-                      {studioDecks.length > 0 && filteredStudioDecks.length === 0 && <option value="studio:none_query" disabled>No drafts match search</option>}
-                      {filteredStudioDecks.map((draft) => (
-                        <option key={draft.id} value={`studio:${draft.id}`}>
-                          {(draft.title || 'Untitled')} ({Array.isArray(draft.slides) ? draft.slides.length : 0} questions)
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                  <div className="mt-3 space-y-1 text-xs text-slate-500">
-                    <p>Active source: <span className="text-slate-300 font-medium">{selectedDeckSource}</span></p>
-                    <p>Question count: <span className="text-slate-300 font-medium">{selectedDeckCount ?? '--'}</span></p>
-                    {bundledDecksError && <p className="text-amber-300">{bundledDecksError}</p>}
-                    {dropNotice && <p className="text-emerald-300">{dropNotice}</p>}
-                    <button
-                      onClick={loadBundledDecks}
-                      disabled={isLoadingBundledDecks}
-                      className="mt-1.5 rounded-xl border border-slate-700/50 bg-[#1C2128] px-4 py-2 text-[11px] font-bold text-slate-200 transition hover:bg-[#22272E] disabled:cursor-not-allowed disabled:opacity-50"
-                    >
-                      {isLoadingBundledDecks ? 'Refreshing decks...' : 'Refresh Bundled Decks'}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Cloud Decks */}
-                <div className="border-t border-slate-800/60 pt-4">
-                  <p className="section-header">Explore Cloud Decks</p>
-                  {!hasFetchedCloudCatalog && isOnline && (
-                    <button
-                      onClick={handleLoadMoreCloudDecks}
-                      disabled={cloudStatus === 'loading'}
-                      className="mt-3 w-full rounded-xl border border-sky-400/30 bg-sky-400/8 px-4 py-3 text-xs font-bold text-sky-200 transition hover:bg-sky-400/15 disabled:cursor-not-allowed disabled:opacity-60"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        {cloudStatus === 'loading' && <span className="h-3 w-3 animate-spin rounded-full border-2 border-sky-200/40 border-t-sky-100" />}
-                        {cloudStatus === 'loading' ? 'Loading Cloud Decks...' : '☁️ Load More from Cloud'}
-                      </span>
-                    </button>
-                  )}
-                  {!isOnline && (
-                    <button
-                      disabled
-                      className="mt-3 w-full cursor-not-allowed rounded-xl border border-slate-700/40 bg-[#1C2128]/60 px-4 py-3 text-xs font-bold text-slate-400"
-                    >
-                      ☁️ Cloud Decks (No Internet Connection)
-                    </button>
-                  )}
-                  {cloudStatus === 'loading' && <p className="mt-2 text-xs text-slate-500">Loading cloud catalog...</p>}
-                  {cloudStatus === 'offline' && <p className="mt-2 text-xs text-amber-300">Offline mode: cloud decks unavailable.</p>}
-                  {cloudStatus === 'error' && <p className="mt-2 text-xs text-rose-300">{cloudError}</p>}
-                  {cloudStatus === 'ready' && cloudDecks.length === 0 && <p className="mt-2 text-xs text-slate-500">No cloud decks available.</p>}
-
-                  {cloudStatus === 'ready' && cloudDecks.length > 0 && (
-                    <div className="mt-3 max-h-48 space-y-2 overflow-y-auto pr-1">
-                      {cloudDecks.map((deck) => (
-                        <div key={deck.id} className="rounded-xl border border-slate-700/40 bg-[#0D1117] p-3">
-                          <div className="flex items-center justify-between gap-2">
-                            <p className="truncate text-xs font-bold text-slate-200">{deck.title}</p>
-                            {typeof deck.questionCount === 'number' && (
-                              <span className="rounded-full border border-emerald-400/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
-                                {deck.questionCount}
-                              </span>
-                            )}
-                          </div>
-                          <p className="mt-1 line-clamp-2 text-[11px] text-slate-500">{deck.description || 'Official cloud deck'}</p>
-                          <button
-                            onClick={() => handleDownloadCloudDeck(deck)}
-                            disabled={downloadingCloudDeckId === deck.id}
-                            className="mt-2 w-full rounded-xl border border-amber-400/30 bg-amber-400/8 px-4 py-2.5 text-[11px] font-bold text-amber-200 transition hover:bg-amber-400/15 disabled:cursor-not-allowed disabled:opacity-50"
-                          >
-                            {downloadingCloudDeckId === deck.id ? 'Downloading...' : 'Download'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <button
-                    onClick={() => { window.location.href = hostToken ? `/studio?token=${encodeURIComponent(hostToken)}` : '/studio'; }}
-                    className="mt-3 rounded-xl border border-amber-400/30 bg-amber-400/8 px-4 py-2.5 text-[11px] font-bold text-amber-200 transition hover:bg-amber-400/15"
-                  >
-                    Open Studio (Build + Cloud)
-                  </button>
-                </div>
-              </div>
+              <span className={`inline-flex shrink-0 items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-bold ${copied ? 'border-emerald-400/60 bg-emerald-500/15 text-emerald-200' : 'border-slate-600/70 bg-slate-900/60 text-slate-200'}`}>
+                {copied ? <Check size={14} /> : <Copy size={14} />}
+                {copied ? 'Copied!' : 'Copy'}
+              </span>
             </div>
           </section>
 
-          {/* ── Players Section ── */}
-          <section className="panel-elevated p-6">
-            <div className="mb-4 flex items-center gap-3">
-              <span className="section-header">Players</span>
-              <div className="rounded-full bg-gradient-to-r from-violet-500 to-fuchsia-500 px-2.5 py-1 text-xs font-black text-white tabular-nums shadow-md shadow-violet-500/20">{players.length}</div>
+          {/* Center Column: Hype Zone */}
+          <section className="flex min-h-170 flex-col rounded-3xl border border-slate-700/35 bg-transparent p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <p className="section-header">Players Joined: {players.length}</p>
+              <span className="rounded-full border border-violet-400/30 bg-violet-500/10 px-3 py-1 text-xs font-bold text-violet-200">Hype Zone</span>
             </div>
 
-            {players.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-700/60 bg-[#0D1117]/60 px-4 py-12 text-center">
-                <p className="text-base font-bold text-slate-400 font-outfit">No players yet</p>
-                <div className="mt-4 flex items-center justify-center gap-2">
-                  <span className="status-dot" />
-                  <span className="status-dot" />
-                  <span className="status-dot" />
+            <div className="min-h-0 flex-1 rounded-2xl border border-slate-800/70 bg-[#0D1117]/80 p-4">
+              {players.length === 0 ? (
+                <div className="flex h-full flex-col items-center justify-center text-center">
+                  <p className="text-base font-bold text-slate-300 font-outfit">No players yet</p>
+                  <p className="mt-2 text-sm text-slate-500">Share the QR and watch the roster light up.</p>
                 </div>
-                <p className="mt-4 text-sm text-violet-300 animate-pulse-glow font-outfit font-semibold">Waiting for joins…</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {players.map((p, i) => (
-                  <div key={p.id} className="group relative animate-player-enter" style={{ animationDelay: `${i * 60}ms` }}>
-                    <div className={`rounded-2xl border bg-[#0D1117]/80 p-3.5 text-center transition-all duration-500 ease-out hover:-translate-y-1 hover:shadow-lg ${recentlyUpdatedPlayerIds.has(p.id)
-                        ? 'border-violet-400 ring-2 ring-violet-500/30 shadow-[0_0_28px_rgba(139,92,246,0.2)] animate-pulse'
-                        : 'border-slate-700/50 hover:border-violet-500/40 hover:shadow-violet-500/10'
-                      }`}>
-                      {renderLobbyAvatar(p)}
-                      <p className={`truncate text-sm font-bold font-outfit ${recentlyUpdatedPlayerIds.has(p.id) ? 'text-violet-200' : 'text-slate-200'}`}>{p.name}</p>
-                      <p className="mt-1 text-xs text-slate-500">#{i + 1}</p>
-                      <div className="mt-3 flex items-center justify-center gap-2">
-                        {mutedSet.has(p.id) ? (
-                          <button onClick={() => handleUnmute(p.id)} className="rounded-xl border border-emerald-500/30 bg-emerald-500/15 px-3.5 py-1.5 text-[11px] font-bold text-emerald-200 transition hover:bg-emerald-500/25">
-                            Unmute
-                          </button>
-                        ) : (
-                          <button onClick={() => handleMute(p.id)} className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3.5 py-1.5 text-[11px] font-bold text-amber-200 transition hover:bg-amber-500/20">
-                            Mute
-                          </button>
-                        )}
-                        <button onClick={() => handleKick(p.id)} className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3.5 py-1.5 text-[11px] font-bold text-rose-200 transition hover:bg-rose-500/20">
-                          Kick
+              ) : (
+                <div className="grid max-h-full grid-cols-1 gap-3 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {players.map((player) => (
+                    <div
+                      key={player.id}
+                      className={`flex items-center justify-between rounded-2xl border px-4 py-3 transition-all ${recentlyUpdatedPlayerIds.has(player.id)
+                        ? 'border-violet-400/70 bg-violet-500/20 shadow-[0_0_18px_rgba(139,92,246,0.24)]'
+                        : 'border-slate-700/70 bg-slate-800/55'
+                      }`}
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        {renderLobbyAvatar(player)}
+                        <p className="truncate text-sm font-bold text-slate-100">{player.name}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => handleKick(player.id)}
+                          className="inline-flex items-center justify-center rounded-xl border border-rose-500/40 bg-rose-500/10 p-2 transition hover:bg-rose-500/20"
+                          title="Kick"
+                          aria-label="Kick player"
+                        >
+                          <UserX size={16} />
+                        </button>
+                        <button
+                          onClick={() => (mutedSet.has(player.id) ? handleUnmute(player.id) : handleMute(player.id))}
+                          className={`inline-flex items-center justify-center rounded-xl border p-2 transition ${mutedSet.has(player.id)
+                            ? 'border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20'
+                            : 'border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20'
+                          }`}
+                          title={mutedSet.has(player.id) ? 'Unmute' : 'Mute'}
+                          aria-label={mutedSet.has(player.id) ? 'Unmute player' : 'Mute player'}
+                        >
+                          {mutedSet.has(player.id) ? <Mic size={16} /> : <MicOff size={16} />}
                         </button>
                       </div>
                     </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                  <div ref={playerListEndRef} />
+                </div>
+              )}
+            </div>
+
+            <div className="mt-auto pt-5">
+              <button
+                onClick={handleStart}
+                disabled={players.length === 0 || isStartingGame || isCountdownActive}
+                className={`w-full rounded-2xl px-6 py-5 text-lg font-black tracking-wide transition-all duration-200 ${players.length === 0 || isStartingGame || isCountdownActive
+                  ? 'cursor-not-allowed border border-slate-700 bg-slate-800 text-slate-400'
+                  : 'border border-emerald-300/40 bg-linear-to-r from-emerald-400 to-teal-300 text-slate-950 shadow-[0_0_55px_rgba(16,185,129,0.35)] hover:-translate-y-0.5 hover:shadow-[0_0_70px_rgba(16,185,129,0.42)]'
+                }`}
+              >
+                {isStartingGame && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
+                {isCountdownActive ? `Starting in ${countdownSeconds}s` : 'START GAME'}
+              </button>
+              <p className="mt-2 text-center text-xs text-slate-500">
+                {players.length === 0 ? 'At least one player must join before starting.' : startStatusText}
+              </p>
+            </div>
           </section>
 
-          {/* ── Footer: Start Game + Answer Mode ── */}
-          <footer className="panel-elevated p-5">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          {/* Right Column: Social Hub */}
+          <section className="flex min-h-170 flex-col rounded-3xl border border-slate-700/35 bg-transparent p-4">
+            <div className="mb-3 flex items-center justify-between gap-2 px-1">
               <div>
-                <button
-                  onClick={handleStart}
-                  disabled={!startReady || isStartingGame}
-                  className={`rounded-2xl px-10 py-5 text-lg font-black transition-all duration-200 font-outfit ${!startReady
-                      ? 'cursor-not-allowed bg-slate-700/60 text-slate-500'
-                      : isStartConfirmArmed
-                        ? 'bg-amber-300 text-black shadow-[0_0_30px_rgba(252,211,77,0.35)] hover:-translate-y-0.5 hover:bg-amber-200 active:translate-y-0 active:scale-95'
-                        : 'bg-gradient-to-r from-violet-500 via-fuchsia-500 to-violet-500 text-white shadow-[0_0_30px_rgba(139,92,246,0.35)] hover:-translate-y-1 hover:shadow-[0_0_40px_rgba(139,92,246,0.5)] active:translate-y-0 active:scale-95 animate-shimmer'
-                    }`}
-                >
-                  <span className="inline-flex items-center gap-2.5">
-                    {isStartingGame && <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />}
-                    {startButtonLabel}
-                  </span>
-                </button>
-                <p className={`mt-2.5 text-xs font-semibold font-outfit ${startReady ? 'text-violet-300' : 'text-amber-300'}`}>{startStatusText}</p>
+                <p className="section-header">Room Chat</p>
+                <p className="text-xs text-slate-400">Unified social hub</p>
               </div>
-              <div>
-                <p className="section-header mb-2.5">Answer Mode</p>
-                <div className="grid grid-cols-2 gap-2">
-                  {answerModeOptions.map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => syncAnswerMode(mode)}
-                      className={`rounded-xl px-4 py-2.5 text-[11px] font-black tracking-wide transition-all duration-150 ${answerMode === mode
-                          ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
-                          : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
-                        }`}
-                    >
-                      {answerModeLabels[mode] || mode}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="section-header mb-2.5">Scoring Mode</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {gameModeOptions.map((mode) => (
-                    <button
-                      key={mode}
-                      onClick={() => syncGameMode(mode)}
-                      className={`rounded-xl px-3 py-2.5 text-[10px] font-black tracking-wide transition-all duration-150 ${gameMode === mode
-                          ? mode === 'casual'
-                            ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
-                            : mode === 'moderate'
-                            ? 'bg-amber-400 text-black shadow-md shadow-amber-500/20'
-                            : 'bg-rose-400 text-black shadow-md shadow-rose-500/20'
-                          : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
-                        }`}
-                    >
-                      {gameModeLabels[mode]?.split(' ')[0] || mode}
-                    </button>
-                  ))}
-                </div>
-              </div>
+              <button
+                onClick={() => setIsChatSettingsOpen(true)}
+                className="inline-flex items-center justify-center rounded-xl border border-slate-700/60 bg-[#1C2128] p-2 text-sm font-bold text-slate-200 transition hover:border-violet-500/40 hover:bg-[#22272E]"
+                aria-label="Open chat settings"
+                title="Chat settings"
+              >
+                <Settings size={16} />
+              </button>
             </div>
-          </footer>
-        </div>
 
-        {/* ── Sidebar: Chat Control + Chat Monitor ── */}
-        <aside className="flex flex-col gap-5">
-          <section className="panel-elevated p-5">
-            <div className="mb-3.5 flex items-center justify-between gap-3">
-              <div>
-                <p className="section-header">Chat Control</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {roomGameMode === 'guided' ? 'Guided Mode' : 'Open Mode'}
-                </p>
-              </div>
-              <span className="text-[11px] font-bold tracking-wide text-emerald-300 font-outfit">LIVE</span>
+            <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-white/10 bg-black/25 p-2">
+              <Chat
+                socket={socket}
+                roomPin={roomId}
+                readOnly
+                title="Room Chat"
+                lobbyPillFeed
+                initialMode={chatMode}
+                initialAllowed={allowedList}
+                allowHostActions
+                onHostMute={handleMute}
+                mutedSet={mutedSet}
+                showMeta={false}
+                showModeBadge={false}
+              />
             </div>
+
+            <div className="mt-3 border-t border-slate-800/80 pt-3">
+              <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-violet-300">Host Message</p>
+              <div className="flex gap-2">
+                <input
+                  value={announcementText}
+                  onChange={(event) => setAnnouncementText(event.target.value)}
+                  onKeyDown={(event) => event.key === 'Enter' && handleSendAnnouncement()}
+                  placeholder="Send a room announcement..."
+                  className="flex-1 rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
+                  maxLength={280}
+                />
+                <button
+                  onClick={handleSendAnnouncement}
+                  disabled={!announcementText.trim()}
+                  className="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                >
+                  Send
+                </button>
+              </div>
+              {announcementFeedback && <p className="mt-2 text-xs text-emerald-300">{announcementFeedback}</p>}
+            </div>
+          </section>
+          </div>
+        </div>
+      </div>
+
+      {/* Chat Settings Modal */}
+      {isChatSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <button
+            aria-label="Close chat settings"
+            onClick={() => setIsChatSettingsOpen(false)}
+            className="absolute inset-0"
+          />
+          <div className="relative z-10 w-full max-w-lg rounded-3xl border border-slate-700/60 bg-[#11161D] p-5 shadow-2xl shadow-black/60">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="section-header">Chat Settings</p>
+                <p className="mt-1 text-xs text-slate-400">{roomGameMode === 'guided' ? 'Guided Mode' : 'Open Mode'}</p>
+              </div>
+              <button
+                onClick={() => setIsChatSettingsOpen(false)}
+                className="rounded-xl border border-slate-700/60 bg-[#1C2128] px-3 py-2 text-xs font-bold text-slate-200 transition hover:bg-[#22272E]"
+              >
+                Close
+              </button>
+            </div>
+
             <div className="grid grid-cols-3 gap-2">
               {modeOptions.map((mode) => (
                 <button
                   key={mode}
                   onClick={() => syncChatMode(mode)}
                   className={`rounded-xl px-4 py-2.5 text-[11px] font-black tracking-wide transition-all duration-150 ${chatMode === mode
-                      ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
-                      : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
-                    }`}
+                    ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
+                    : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
+                  }`}
                 >
                   {modeLabels[mode]}
                 </button>
               ))}
             </div>
-            {chatMode === 'RESTRICTED' && (
-              <details className="mt-4 rounded-2xl border border-slate-800/60 bg-[#0D1117]/60 p-3.5" open>
-                <summary className="cursor-pointer text-xs font-bold uppercase tracking-wide text-slate-400 font-outfit">More Options</summary>
-                <div className="mt-3">
-                  <p className="mb-2 text-xs text-slate-500">Restricted presets</p>
-                  <div className="mb-2 flex gap-2">
-                    <input
-                      value={newAllowedText}
-                      onChange={(e) => setNewAllowedText(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && addAllowedMessage()}
-                      placeholder="Add preset"
-                      className="flex-1 rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
-                    />
-                    <button onClick={addAllowedMessage} className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-emerald-300">Add</button>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {allowedList.map((entry) => (
-                      <div key={entry.id} className="flex items-center gap-2 rounded-full border border-slate-700/50 bg-[#0D1117] px-3.5 py-2 text-xs text-slate-200">
-                        <span>{entry.text}</span>
-                        <button onClick={() => removeAllowedMessage(entry.id)} className="text-slate-500 transition hover:text-red-400">Remove</button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </details>
-            )}
-          </section>
 
-          <section className="panel-elevated p-4">
-            <p className="section-header">Host Announcement</p>
-            <p className="mt-1 text-xs text-slate-400">Send a broadcast message to all players.</p>
-            <div className="mt-3 flex gap-2">
-              <input
-                value={announcementText}
-                onChange={(event) => setAnnouncementText(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && handleSendAnnouncement()}
-                placeholder="Type an announcement..."
-                className="flex-1 rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-2.5 text-sm text-white placeholder:text-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
-                maxLength={280}
-              />
+            <div className="mt-4 rounded-2xl border border-slate-800/60 bg-[#0D1117]/60 p-3.5">
+              <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400 font-outfit">Answer Mode</p>
+              <div className="grid grid-cols-2 gap-2">
+                {answerModeSettingOptions.map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => syncAnswerMode(mode)}
+                    className={`rounded-xl px-4 py-2.5 text-[11px] font-black tracking-wide transition-all duration-150 ${answerMode === mode
+                      ? 'bg-violet-500 text-white shadow-md shadow-violet-500/20'
+                      : 'bg-[#0D1117] text-slate-400 hover:bg-[#1C2128] hover:text-white'
+                    }`}
+                  >
+                    {answerModeLabels[mode]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {chatMode === 'RESTRICTED' && (
+              <div className="mt-4 rounded-2xl border border-slate-800/60 bg-[#0D1117]/60 p-3.5">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400 font-outfit">Restricted Presets</p>
+                <div className="mb-2 flex gap-2">
+                  <input
+                    value={newAllowedText}
+                    onChange={(e) => setNewAllowedText(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addAllowedMessage()}
+                    placeholder="Add preset"
+                    className="flex-1 rounded-xl border border-slate-700/50 bg-[#0D1117] px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:border-violet-500 focus:outline-none transition-colors"
+                  />
+                  <button onClick={addAllowedMessage} className="rounded-xl bg-emerald-400 px-5 py-2.5 text-sm font-black text-black transition hover:bg-emerald-300">Add</button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {allowedList.map((entry) => (
+                    <div key={entry.id} className="flex items-center gap-2 rounded-full border border-slate-700/50 bg-[#0D1117] px-3.5 py-2 text-xs text-slate-200">
+                      <span>{entry.text}</span>
+                      <button onClick={() => removeAllowedMessage(entry.id)} className="text-slate-500 transition hover:text-red-400">Remove</button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Room Settings Modal */}
+      {isRoomSettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <button
+            aria-label="Close room settings"
+            onClick={() => setIsRoomSettingsOpen(false)}
+            className="absolute inset-0"
+          />
+          <div className="relative z-10 w-full max-w-xl rounded-3xl border border-slate-700/60 bg-[#11161D] p-6 shadow-2xl shadow-black/60">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="section-header">Room Settings</p>
+                <p className="mt-1 text-xs text-slate-400">Change deck, timer, and difficulty.</p>
+              </div>
               <button
-                onClick={handleSendAnnouncement}
-                disabled={!announcementText.trim()}
-                className="rounded-xl bg-emerald-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                onClick={() => setIsRoomSettingsOpen(false)}
+                className="rounded-xl border border-slate-700/60 bg-[#1C2128] px-3 py-2 text-xs font-bold text-slate-200 transition hover:bg-[#22272E]"
               >
-                Send
+                Close
               </button>
             </div>
-            {announcementFeedback && <p className="mt-2 text-xs text-emerald-300">{announcementFeedback}</p>}
-          </section>
 
-          <section className="min-h-72 panel-elevated p-3 overflow-hidden">
-            <div className="h-full rounded-2xl border border-white/10 bg-black/25 p-2 overflow-hidden">
-              <Chat
-                socket={socket}
-                roomPin={roomId}
-                readOnly
-                title="Room Chat"
-                initialMode={chatMode}
-                initialAllowed={allowedList}
-                allowHostActions
-                onHostMute={handleMute}
-                mutedSet={mutedSet}
-              />
+            <div className="space-y-4">
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Deck</p>
+                <select
+                  value={pendingDeckKey}
+                  onChange={(event) => setPendingDeckKey(event.target.value)}
+                  className="w-full rounded-xl border border-slate-700/50 bg-[#0D1117] px-3.5 py-2.5 text-xs text-slate-200 focus:border-violet-500 focus:outline-none"
+                >
+                  {deckOptions.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Question Timer</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[15, 30, 60].map((time) => (
+                    <button
+                      key={time}
+                      onClick={() => setPendingTimer(time)}
+                      className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${pendingTimer === time
+                        ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30 border border-emerald-400'
+                        : 'border border-slate-700/50 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:border-emerald-500/50'
+                      }`}
+                    >
+                      {time}s
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <p className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-400">Difficulty</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {['Easy', 'Normal', 'Hard'].map((level) => (
+                    <button
+                      key={level}
+                      onClick={() => setPendingDifficulty(level)}
+                      className={`rounded-xl px-3 py-2.5 text-xs font-bold transition-all ${pendingDifficulty === level
+                        ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30 border border-amber-400'
+                        : 'border border-slate-700/50 bg-slate-800/50 text-slate-300 hover:bg-slate-800 hover:border-amber-500/50'
+                      }`}
+                    >
+                      {level}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Max Players</p>
+                  <span className="text-xs font-bold text-cyan-300">{pendingMaxPlayers}</span>
+                </div>
+                <input
+                  type="range"
+                  min={10}
+                  max={250}
+                  step={5}
+                  value={pendingMaxPlayers}
+                  onChange={(event) => setPendingMaxPlayers(Number(event.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+                <p className="mt-2 text-xs text-slate-400">
+                  Effective on this network now: <span className="font-semibold text-slate-200">{effectiveMaxPlayers}</span>
+                </p>
+              </div>
             </div>
-          </section>
-        </aside>
-      </div>
+
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                onClick={() => setIsRoomSettingsOpen(false)}
+                className="rounded-xl border border-slate-700/60 bg-[#1C2128] px-4 py-2.5 text-xs font-bold text-slate-200 transition hover:bg-[#22272E]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveRoomSettings}
+                className="rounded-xl bg-emerald-400 px-5 py-2.5 text-xs font-black text-black transition hover:bg-emerald-300"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Fullscreen QR Modal ── */}
       {isQrFullscreenOpen && (

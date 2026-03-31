@@ -21,6 +21,7 @@ const os = require('os');
 const crypto = require('crypto');
 
 const { loadDeck, DEFAULT_DECK_PATH } = require('./core/deckLoader');
+const { fetchOpenTDBDeck, fetchTMDBMovieDeck } = require('./core/apiAdapters');
 const { registerHandlers } = require('./network/handlers');
 const { HostTokenManager } = require('./core/hostTokenManager');
 
@@ -175,6 +176,47 @@ app.get('/api/network-info', (_req, res) => {
     backendPort: PORT,
     clientPort: CLIENT_PORT,
   });
+});
+
+app.get('/api/magic/open-trivia', async (req, res) => {
+  const amount = Number(req.query.amount || 10);
+  const categoryId = req.query.categoryId ? Number(req.query.categoryId) : null;
+
+  try {
+    const slides = await fetchOpenTDBDeck(amount, categoryId);
+    return res.json({
+      ok: true,
+      source: 'open_tdb',
+      title: `Open Trivia (${slides.length} Questions)`,
+      slides,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || 'Failed to generate Open Trivia deck.',
+    });
+  }
+});
+
+app.post('/api/magic/tmdb', async (req, res) => {
+  const amount = Number(req.body?.amount || 10);
+  const apiKey = String(req.body?.apiKey || '').trim();
+  const genreId = req.body?.genreId == null ? null : Number(req.body.genreId);
+
+  try {
+    const slides = await fetchTMDBMovieDeck(amount, apiKey, genreId);
+    return res.json({
+      ok: true,
+      source: 'tmdb_movies',
+      title: `TMDB Movies (${slides.length} Questions)`,
+      slides,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      error: error?.message || 'Failed to generate TMDB movie deck.',
+    });
+  }
 });
 
 //  Start 

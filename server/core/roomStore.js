@@ -24,6 +24,7 @@
 'use strict';
 
 const LAN_ROOM_ID = 'local_flux_main';
+const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: 'avatar01.jpg' };
 
 /** @type {Record<string, object>} */
 const rooms = {};
@@ -33,22 +34,46 @@ const rooms = {};
  * @param {string} roomName - Display name for the room
  * @param {string} hostId - socket.id of the host
  * @param {string|null} [hostSessionId] - stable browser session id for host recovery
+ * @param {number} [maxPlayers=20] - requested room capacity for this lobby
  * @returns {string} The room id (always LAN_ROOM_ID)
  */
-function initLanRoom(roomName, hostId, hostSessionId = null) {
+function initLanRoom(roomName, hostId, hostSessionId = null, maxPlayers = 20) {
+  const normalizedMaxPlayers = Number.isInteger(Number(maxPlayers)) && Number(maxPlayers) > 0
+    ? Number(maxPlayers)
+    : 20;
+
   rooms[LAN_ROOM_ID] = {
     roomName: roomName || 'LocalFlux Game',
     hostId,
     hostSessionId,
+    maxPlayers: normalizedMaxPlayers,
     players: [],
     status: 'lobby',
     currentQ: -1,
-    answersIn: {},
+    answersIn: Object.create(null),
     answerMode: 'auto',
+    questionTimerSeconds: 15,
+    gameDifficulty: 'Normal',
     activeSlide: null,
     chatHistory: [],
   };
   return LAN_ROOM_ID;
+}
+
+function normalizePlayerRecord(player = {}) {
+  const id = String(player.id || '').trim();
+  const name = String(player.name || 'Guest').trim() || 'Guest';
+  const avatarObject = player.avatarObject && typeof player.avatarObject === 'object'
+    ? player.avatarObject
+    : DEFAULT_AVATAR_OBJECT;
+
+  return {
+    id,
+    name,
+    avatarObject,
+    score: Number(player.score || 0),
+    streak: Number(player.streak || 0),
+  };
 }
 
 /**
@@ -74,16 +99,12 @@ function deleteRoom() {
 function addPlayer(player) {
   const room = rooms[LAN_ROOM_ID];
   if (!room) return false;
+  if (!player || !player.id) return false;
 
   const exists = room.players.some((p) => p.id === player.id);
   if (exists) return false;
 
-  room.players.push({
-    id: player.id,
-    name: player.name,
-    avatarObject: player.avatarObject || { type: 'gradient', value: 'emerald' },
-    score: 0,
-  });
+  room.players.push(normalizePlayerRecord(player));
   return true;
 }
 

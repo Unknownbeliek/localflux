@@ -20,14 +20,14 @@ function mergeMessages(existing, incoming) {
   return merged.slice(-300);
 }
 
-export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat', allowHostActions = false, onHostMute, mutedSet = new Set(), initialMode = 'FREE', initialAllowed = [], initialMessages = [], suppressFreeComposer = false, showMeta = true, showModeBadge = true }) {
+export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat', allowHostActions = false, onHostMute, mutedSet = new Set(), initialMode = 'FREE', initialAllowed = [], initialMessages = [], suppressFreeComposer = false, showMeta = true, showModeBadge = true, lobbyPillFeed = false }) {
   const [mode, setMode] = useState(initialMode || 'FREE');
   const [allowed, setAllowed] = useState(Array.isArray(initialAllowed) ? initialAllowed : []);
   const [messages, setMessages] = useState(Array.isArray(initialMessages) ? initialMessages.slice(-300) : []);
   const [input, setInput] = useState('');
   const [muted, setMuted] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const messagesViewportRef = useRef(null);
+  const chatEndRef = useRef(null);
   const modeLabels = {
     FREE: 'OPEN',
     RESTRICTED: 'GUIDED',
@@ -81,9 +81,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
   }, [feedback]);
 
   useEffect(() => {
-    const viewport = messagesViewportRef.current;
-    if (!viewport) return;
-    viewport.scrollTo({ top: viewport.scrollHeight, behavior: 'smooth' });
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [messages]);
 
   const placeholder = useMemo(() => {
@@ -174,11 +172,10 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-800/90 bg-slate-950/70">
+      <div className={`min-h-0 flex-1 overflow-hidden rounded-2xl border ${lobbyPillFeed ? 'border-sky-500/20 bg-[#040c1f]/90' : 'border-slate-800/90 bg-slate-950/70'}`}>
         <div className="flex h-full flex-col">
           <div
-            ref={messagesViewportRef}
-            className="min-h-24 flex-1 space-y-1.5 overflow-y-auto px-2.5 py-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']"
+            className={`min-h-24 flex-1 overflow-y-auto px-2.5 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${lobbyPillFeed ? 'space-y-2.5' : 'space-y-1.5'}`}
           >
             {messages.length === 0 ? (
               <div className="flex min-h-16 items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-950/70 px-3 py-3 text-center text-xs text-slate-500">
@@ -194,16 +191,20 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                       : 'mt-0.5'
                   }`}
                 >
-                  {message._showSender ? (
+                  {lobbyPillFeed ? (
+                    <p className="inline-block max-w-full rounded-full border border-slate-600/40 bg-slate-900/70 px-2.5 py-1 text-[11px] leading-4 text-slate-100 wrap-break-word shadow-[0_2px_10px_rgba(0,0,0,0.22)]">
+                      <span className={message.isCorrectGuess ? 'text-green-400 font-semibold' : ''}>{message.text}</span>
+                    </p>
+                  ) : message._showSender ? (
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className={`inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 break-words ${
+                        <p className={`inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 wrap-break-word ${
                           message._isHost
                             ? 'border-violet-400/45 bg-violet-500/12 text-violet-100'
                             : 'border-slate-600/40 bg-transparent text-slate-100'
                         }`}>
                           {!message._isSystem && (
-                            <span className={`mr-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] ${message._isHost ? 'text-violet-300' : 'text-emerald-300/90'}`}>
+                            <span className={`mr-1.5 text-[10px] font-semibold uppercase tracking-widest ${message._isHost ? 'text-violet-300' : 'text-emerald-300/90'}`}>
                               {message.name}
                             </span>
                           )}
@@ -225,7 +226,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                       </div>
                     </div>
                   ) : (
-                    <p className={`ml-0.5 inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 break-words ${
+                    <p className={`ml-0.5 inline-block max-w-full rounded-2xl border px-2.5 py-1.5 text-xs leading-4 wrap-break-word ${
                       message._isHost
                         ? 'border-violet-400/45 bg-violet-500/12 text-violet-100'
                         : message.isCorrectGuess
@@ -236,6 +237,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                 </div>
               ))
             )}
+            <div ref={chatEndRef} />
           </div>
 
           {!readOnly && (
@@ -272,7 +274,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
                         key={entry.id}
                         onClick={() => sendMessage(entry.text, { cannedId: entry.id })}
                         title={entry.text}
-                        className="shrink-0 whitespace-nowrap rounded-xl border border-amber-500/35 bg-gradient-to-b from-amber-400/12 to-amber-500/5 px-3 py-2 text-xs font-semibold text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-150 hover:-translate-y-0.5 hover:border-amber-300/60 hover:from-amber-400/20 hover:to-amber-500/10 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+                        className="shrink-0 whitespace-nowrap rounded-xl border border-amber-500/35 bg-linear-to-b from-amber-400/12 to-amber-500/5 px-3 py-2 text-xs font-semibold text-amber-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.05)] transition-all duration-150 hover:-translate-y-0.5 hover:border-amber-300/60 hover:from-amber-400/20 hover:to-amber-500/10 active:translate-y-0 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                         disabled={muted || mode === 'OFF' || !isSocketReady}
                       >
                         <span className="block max-w-36 truncate text-center">{entry.text}</span>

@@ -36,7 +36,7 @@ const resolveAvatarPath = (player) => {
   if (preset) return preset.includes('.') ? `/avatars/${preset}` : `/avatars/${preset}.jpg`;
 
   const value = String(player?.avatar || '').trim();
-  if (!value) return '/avatars/1.jpg';
+  if (!value) return '/avatars/avatar01.jpg';
   if (value.startsWith('http://') || value.startsWith('https://')) return value;
   if (value.startsWith('/')) return value;
   if (value.includes('/')) return `/${value}`;

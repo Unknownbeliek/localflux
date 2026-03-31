@@ -18,8 +18,8 @@ function makeRoom(overrides = {}) {
     roomName: 'Test Room',
     hostId: 'host-1',
     players: [
-      { id: 'p1', name: 'Alice', score: 0 },
-      { id: 'p2', name: 'Bob', score: 0 },
+      { id: 'p1', name: 'Alice', score: 0, streak: 0 },
+      { id: 'p2', name: 'Bob', score: 0, streak: 0 },
     ],
     status: 'lobby',
     currentQ: -1,
@@ -104,17 +104,53 @@ describe('submitAnswer()', () => {
     return room;
   }
 
-  test('awards 1500 points for a default-difficulty exact answer at full remaining time', () => {
+  test('awards base points for a correct answer in arcade mode at full time', () => {
     const room = startedRoom();
     submitAnswer(room, SLIDES, 'p1', 'Nolan');
     const p1 = room.players.find((p) => p.id === 'p1');
-    expect(p1.score).toBe(1500);
+    expect(p1.score).toBe(100);
+    expect(p1.streak).toBe(1);
   });
 
   test('does not award points for a wrong answer', () => {
     const room = startedRoom();
     submitAnswer(room, SLIDES, 'p1', 'Spielberg');
     expect(room.players.find((p) => p.id === 'p1').score).toBe(0);
+  });
+
+  test('applies time decay when little time is left', () => {
+    const room = startedRoom();
+    room.currentQEndsAt = Date.now() + 1000;
+
+    submitAnswer(room, SLIDES, 'p1', 'Nolan');
+    const p1 = room.players.find((p) => p.id === 'p1');
+
+    expect(p1.score).toBeGreaterThanOrEqual(50);
+    expect(p1.score).toBeLessThan(100);
+  });
+
+  test('applies streak bonuses through scoring engine', () => {
+    const room = startedRoom();
+    room.players[0].streak = 2;
+
+    submitAnswer(room, SLIDES, 'p1', 'Nolan');
+    const p1 = room.players.find((p) => p.id === 'p1');
+
+    expect(p1.streak).toBe(3);
+    expect(p1.score).toBe(120);
+  });
+
+  test('applies pro-mode penalty for wrong answers and resets streak', () => {
+    const room = startedRoom();
+    room.gameMode = 'pro';
+    room.players[0].score = 100;
+    room.players[0].streak = 3;
+
+    submitAnswer(room, SLIDES, 'p1', 'Spielberg');
+    const p1 = room.players.find((p) => p.id === 'p1');
+
+    expect(p1.score).toBe(50);
+    expect(p1.streak).toBe(0);
   });
 
   test('returns correct: true for the right answer', () => {
@@ -134,8 +170,8 @@ describe('submitAnswer()', () => {
     submitAnswer(room, SLIDES, 'p1', 'Nolan');
     const res = submitAnswer(room, SLIDES, 'p1', 'Nolan');
     expect(res.alreadyAnswered).toBe(true);
-    // Score should not be doubled
-    expect(room.players.find((p) => p.id === 'p1').score).toBe(1500);
+    // Score should not be doubled.
+    expect(room.players.find((p) => p.id === 'p1').score).toBe(100);
   });
 
   test('tracks answer count correctly', () => {

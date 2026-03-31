@@ -27,25 +27,26 @@ const { startGame, submitAnswer, advanceQuestion } = require('../core/gameEngine
 const { ChatManager } = require('../core/chatManager');
 const { sanitizeQuestion } = require('../core/deckLoader');
 const { registerTypeGuessHandlers } = require('./typeGuessHandlers');
+const { normalizeAvatarObject } = require('./handlerUtils');
 
 let chatInstance = null;
 const MAX_CHAT_HISTORY = 300;
-const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: '1.jpg' };
+const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: 'avatar01.jpg' };
 const PRESET_AVATAR_POOL = [
-  '1.jpg',
-  '2.jpg',
-  '4.jpg',
-  '5.jpg',
-  '11.jpg',
-  '15.jpg',
-  '16.jpg',
-  '18.jpg',
-  '19.jpg',
-  '21.jpg',
-  '22.jpg',
-  '23.jpg',
-  '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
-  'e55afb4aea57bced165fb55ad92addf5.jpg',
+  'avatar01.jpg',
+  'avatar02.jpg',
+  'avatar03.jpg',
+  'avatar04.jpg',
+  'avatar05.jpg',
+  'avatar06.jpg',
+  'avatar07.jpg',
+  'avatar08.jpg',
+  'avatar09.jpg',
+  'avatar10.jpg',
+  'avatar11.jpg',
+  'avatar12.jpg',
+  'avatar13.avf',
+  'avatar14.jpg',
 ];
 const NAME_PREFIXES = ['Neo', 'Turbo', 'Solar', 'Nova', 'Glitch', 'Echo', 'Pixel', 'Drift', 'Axel', 'Flux'];
 const NAME_SUFFIXES = ['Rider', 'Nomad', 'Spark', 'Cipher', 'Pilot', 'Comet', 'Vector', 'Pulse', 'Ghost', 'Runner'];
@@ -62,8 +63,53 @@ const ROUND_LOCK_DELAY_MS = 700;
 const ROUND_TRANSITION_DELAY_MS = 3000;
 const HOST_REJECTED_MESSAGE = 'A game is already being hosted on this network.';
 const ENFORCE_HOST_SESSION = false;
+const DEFAULT_ROOM_MAX_PLAYERS = toPositiveInt(process.env.DEFAULT_ROOM_MAX_PLAYERS, 20);
+const HARD_MAX_PLAYERS = toPositiveInt(process.env.HARD_MAX_PLAYERS, 250);
+const HOTSPOT_MAX_PLAYERS = 10;
 let lastRoomClosedReason = null;
 let lastRoomClosedAt = 0;
+
+function toPositiveInt(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  const rounded = Math.floor(parsed);
+  if (rounded <= 0) return fallback;
+  return rounded;
+}
+
+function resolveRequestedMaxPlayers(value) {
+  return Math.min(toPositiveInt(value, DEFAULT_ROOM_MAX_PLAYERS), HARD_MAX_PLAYERS);
+}
+
+function getEffectiveMaxPlayers(room) {
+  const roomLimit = Math.min(toPositiveInt(room?.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS), HARD_MAX_PLAYERS);
+  if (isHotspotNetwork()) {
+    return Math.min(roomLimit, HOTSPOT_MAX_PLAYERS);
+  }
+  return roomLimit;
+}
+
+function getRoomCapacitySnapshot(room) {
+  const effectiveMaxPlayers = getEffectiveMaxPlayers(room);
+  const currentPlayers = Array.isArray(room?.players) ? room.players.length : 0;
+  return {
+    maxPlayers: toPositiveInt(room?.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
+    effectiveMaxPlayers,
+    currentPlayers,
+  };
+}
+
+function getRoomFullResponse(room) {
+  const snap = getRoomCapacitySnapshot(room);
+  return {
+    success: false,
+    reason: 'room_full',
+    error: `Room is full (${snap.effectiveMaxPlayers} max).`,
+    maxPlayers: snap.maxPlayers,
+    effectiveMaxPlayers: snap.effectiveMaxPlayers,
+    currentPlayers: snap.currentPlayers,
+  };
+}
 
 function markRoomClosed(reason) {
   lastRoomClosedReason = reason;
@@ -214,9 +260,16 @@ function withQuestionTiming(payload, timing = null) {
   };
 }
 
+function normalizeDifficultyLevel(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['easy', 'hard', 'standard'].includes(normalized)) return normalized;
+  if (normalized === 'normal' || normalized === 'medium') return 'standard';
+  return 'standard';
+}
+
 function withAnswerMode(payload, answerMode = 'multiple_choice') {
   if (!payload || !payload.question) return payload;
-  let nextMode = payload.question.answer_mode || answerMode || 'multiple_choice';
+  let nextMode = answerMode || payload.question.answer_mode || 'multiple_choice';
   
   if (nextMode === 'auto') {
     nextMode = payload.question.type === 'typing' ? 'type_guess' : 'multiple_choice';
@@ -231,26 +284,19 @@ function withAnswerMode(payload, answerMode = 'multiple_choice') {
   };
 }
 
-function normalizeAvatarObject(input) {
-  if (!input || typeof input !== 'object') {
-    return { ...DEFAULT_AVATAR_OBJECT };
-  }
+function applyRoomSettingsToSlides(slides, room) {
+  if (!Array.isArray(slides)) return [];
 
-  const rawType = String(input.type || '').trim();
-  const rawValue = String(input.value || '').trim();
+  const timerRaw = Number(room?.questionTimerSeconds);
+  const forcedTimeLimit = Number.isFinite(timerRaw) && timerRaw > 0 ? timerRaw * 1000 : null;
+  const forcedDifficulty = normalizeDifficultyLevel(room?.gameDifficulty);
 
-  if (!rawType || !rawValue) {
-    return { ...DEFAULT_AVATAR_OBJECT };
-  }
-
-  if (!['gradient', 'icon', 'preset'].includes(rawType)) {
-    return { ...DEFAULT_AVATAR_OBJECT };
-  }
-
-  return {
-    type: rawType,
-    value: rawValue.slice(0, 48),
-  };
+  return slides.map((slide) => {
+    const next = { ...slide };
+    if (forcedTimeLimit) next.timeLimit = forcedTimeLimit;
+    next.difficulty = forcedDifficulty;
+    return next;
+  });
 }
 
 function loadDeckSlidesFromFile(deckFile) {
@@ -517,7 +563,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
   });
 
   // G��G�� create_room G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
-  socket.on('create_room', ({ roomName, hostSessionId, hostToken }, callback) => {
+  socket.on('create_room', ({ roomName, hostSessionId, hostToken, maxPlayers }, callback) => {
     // Validate host token with detailed reason so client can recover/retry intelligently.
     const tokenCheck = tokenManager.validateTokenDetailed(hostToken, socket.id);
     if (!tokenCheck.valid) {
@@ -545,6 +591,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
         io.to(previousHostId).emit('host:rejected', { message: 'Host control transferred to a new host session.' });
       }
 
+      currentRoom.maxPlayers = resolveRequestedMaxPlayers(maxPlayers);
       currentRoom.hostSessionId = incomingSession || currentRoom.hostSessionId || `legacy_${socket.id}`;
 
       const existingTimer = hostDisconnectTimers.get(LAN_ROOM_ID);
@@ -567,18 +614,23 @@ function registerHandlers(socket, io, questions, tokenManager) {
         status: currentRoom.status,
         deckSelected: Array.isArray(currentRoom.questions) && currentRoom.questions.length > 0,
         answerMode: currentRoom.answerMode || 'auto',
+        maxPlayers: toPositiveInt(currentRoom.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
+        effectiveMaxPlayers: getEffectiveMaxPlayers(currentRoom),
         chatHistory: getChatHistorySnapshot(currentRoom),
       });
     }
 
     const resolvedHostSessionId = String(hostSessionId || '').trim() || `legacy_${socket.id}`;
-    const lanRoomId = initLanRoom(roomName.trim(), socket.id, resolvedHostSessionId);
+    const resolvedMaxPlayers = resolveRequestedMaxPlayers(maxPlayers);
+    const lanRoomId = initLanRoom(roomName.trim(), socket.id, resolvedHostSessionId, resolvedMaxPlayers);
     clearRoundTimers(lanRoomId);
     const room = getRoom();
     if (room) {
       room.questions = [];
       room.deckMeta = null;
       room.answerMode = room.answerMode || 'auto';
+      room.questionTimerSeconds = Number(room.questionTimerSeconds) > 0 ? Number(room.questionTimerSeconds) : 15;
+      room.gameDifficulty = room.gameDifficulty || 'Normal';
     }
     lastRoomClosedReason = null;
     lastRoomClosedAt = 0;
@@ -586,7 +638,14 @@ function registerHandlers(socket, io, questions, tokenManager) {
     socket.playerName = 'Host';
     console.log(`[Host] "${roomName}" initialized room G�� LAN_ROOM: ${lanRoomId}`);
     socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
-    callback({ success: true, roomId: lanRoomId, deckSource: 'none', answerMode: room?.answerMode || 'auto' });
+    callback({
+      success: true,
+      roomId: lanRoomId,
+      deckSource: 'none',
+      answerMode: room?.answerMode || 'auto',
+      maxPlayers: toPositiveInt(room?.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
+      effectiveMaxPlayers: room ? getEffectiveMaxPlayers(room) : resolvedMaxPlayers,
+    });
   });
 
   // G��G�� host:set_deck G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
@@ -614,11 +673,11 @@ function registerHandlers(socket, io, questions, tokenManager) {
       return callback?.({ ok: false, reason: 'invalid_deck_payload' });
     }
 
-    room.questions = normalizedSlides;
+    room.questions = applyRoomSettingsToSlides(normalizedSlides, room);
     room.deckMeta = {
       name: String(deckName || 'Imported Deck').trim(),
       source: String(deckSource || 'host').trim(),
-      count: normalizedSlides.length,
+      count: room.questions.length,
       updatedAt: Date.now(),
     };
 
@@ -629,7 +688,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       questionCount: room.deckMeta.count,
     });
 
-    callback?.({ ok: true, questionCount: normalizedSlides.length });
+    callback?.({ ok: true, questionCount: room.questions.length });
   });
 
   // G��G�� host:resume G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
@@ -670,6 +729,8 @@ function registerHandlers(socket, io, questions, tokenManager) {
       deckMeta: room.deckMeta || null,
       answerMode: room.answerMode || 'auto',
       players: room.players,
+      maxPlayers: toPositiveInt(room.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
+      effectiveMaxPlayers: getEffectiveMaxPlayers(room),
       currentQ: room.currentQ,
       totalQ: roomQuestions.length,
       chatHistory: getChatHistorySnapshot(room),
@@ -699,8 +760,8 @@ function registerHandlers(socket, io, questions, tokenManager) {
       return callback({ success: false, error: 'Game already in progress.' });
     }
     
-    if (isHotspotNetwork() && room.players.length >= 10) {
-      return callback({ success: false, error: 'Hardware capacity limit reached. Hotspots support max 10 players.' });
+    if (room.players.length >= getEffectiveMaxPlayers(room)) {
+      return callback(getRoomFullResponse(room));
     }
 
     const assigned = generateJoinProfile(room);
@@ -720,6 +781,8 @@ function registerHandlers(socket, io, questions, tokenManager) {
       deckSelected: Array.isArray(room.questions) && room.questions.length > 0,
       deckMeta: room.deckMeta || null,
       answerMode: room.answerMode || 'multiple_choice',
+      maxPlayers: toPositiveInt(room.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
+      effectiveMaxPlayers: getEffectiveMaxPlayers(room),
       playerName: assigned.name,
       avatarObject: assigned.avatarObject,
       chatHistory: getChatHistorySnapshot(room),
@@ -741,8 +804,8 @@ function registerHandlers(socket, io, questions, tokenManager) {
       return callback({ success: false, error: 'Game already in progress.' });
     }
     
-    if (isHotspotNetwork() && room.players.length >= 10) {
-      return callback({ success: false, error: 'Hardware capacity limit reached. Hotspots support max 10 players.' });
+    if (room.players.length >= getEffectiveMaxPlayers(room)) {
+      return callback(getRoomFullResponse(room));
     }
 
     const assigned = generateJoinProfile(room);
@@ -766,10 +829,38 @@ function registerHandlers(socket, io, questions, tokenManager) {
       deckSelected: Array.isArray(room.questions) && room.questions.length > 0,
       deckMeta: room.deckMeta || null,
       answerMode: room.answerMode || 'multiple_choice',
+      maxPlayers: toPositiveInt(room.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
+      effectiveMaxPlayers: getEffectiveMaxPlayers(room),
       playerName: assigned.name,
       avatarObject: assigned.avatarObject,
       chatHistory: getChatHistorySnapshot(room),
     });
+  });
+
+  socket.on('host:set_max_players', ({ maxPlayers, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (!hasValidHostSession(room, hostSessionId)) {
+      rejectHost(socket, null);
+      return callback?.({ ok: false, reason: 'host_locked' });
+    }
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
+
+    const nextMax = resolveRequestedMaxPlayers(maxPlayers);
+    room.maxPlayers = nextMax;
+
+    const payload = {
+      maxPlayers: toPositiveInt(room.maxPlayers, DEFAULT_ROOM_MAX_PLAYERS),
+      effectiveMaxPlayers: getEffectiveMaxPlayers(room),
+      currentPlayers: Array.isArray(room.players) ? room.players.length : 0,
+    };
+
+    io.to(LAN_ROOM_ID).emit('room:max_players', payload);
+    callback?.({ ok: true, ...payload });
   });
 
   // G��G�� player:resume G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
@@ -880,6 +971,58 @@ function registerHandlers(socket, io, questions, tokenManager) {
     room.answerMode = nextMode;
     io.to(LAN_ROOM_ID).emit('room:answer_mode', { mode: nextMode });
     callback?.({ ok: true, mode: nextMode });
+  });
+
+  socket.on('host:set_question_timer', ({ seconds, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (!hasValidHostSession(room, hostSessionId)) {
+      rejectHost(socket, null);
+      return callback?.({ ok: false, reason: 'host_locked' });
+    }
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
+
+    const nextSeconds = Number(seconds);
+    if (![5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].includes(nextSeconds)) {
+      return callback?.({ ok: false, reason: 'invalid_timer' });
+    }
+
+    room.questionTimerSeconds = nextSeconds;
+    if (Array.isArray(room.questions) && room.questions.length > 0) {
+      room.questions = applyRoomSettingsToSlides(room.questions, room);
+    }
+
+    callback?.({ ok: true, seconds: nextSeconds });
+  });
+
+  socket.on('host:set_game_difficulty', ({ difficulty, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (!hasValidHostSession(room, hostSessionId)) {
+      rejectHost(socket, null);
+      return callback?.({ ok: false, reason: 'host_locked' });
+    }
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
+
+    const nextDifficulty = String(difficulty || '').trim();
+    if (!['Easy', 'Normal', 'Hard'].includes(nextDifficulty)) {
+      return callback?.({ ok: false, reason: 'invalid_difficulty' });
+    }
+
+    room.gameDifficulty = nextDifficulty;
+    if (Array.isArray(room.questions) && room.questions.length > 0) {
+      room.questions = applyRoomSettingsToSlides(room.questions, room);
+    }
+
+    callback?.({ ok: true, difficulty: nextDifficulty });
   });
 
   // G��G�� player:updateProfile G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
