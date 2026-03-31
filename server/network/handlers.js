@@ -384,6 +384,9 @@ function registerHandlers(socket, io, questions, tokenManager) {
   // create ChatManager singleton when first socket connects
   if (!chatInstance) {
     chatInstance = new ChatManager(io, {
+      defaultRoomPin: LAN_ROOM_ID,
+      tokenRefillMs: 1200,
+      tokenCap: 3,
       onMessage: (roomPin, message) => {
         if (roomPin !== LAN_ROOM_ID) return;
         const room = getRoom();

@@ -20,6 +20,19 @@ function mergeMessages(existing, incoming) {
   return merged.slice(-300);
 }
 
+const CHAT_REASON_MESSAGES = {
+  rate_limited: 'You are sending messages too fast. Please wait a moment.',
+  ratelimited: 'You are sending messages too fast. Please wait a moment.',
+  ip_throttled: 'Too many messages from this network. Please wait a bit.',
+  muted: 'You are muted by the Host.',
+  chat_off: 'Chat is in silent mode.',
+  profanity: 'Message blocked by chat moderation.',
+  wrong_mode: 'This message is not allowed in the current chat mode.',
+  not_allowed: 'That quick reply is not allowed right now.',
+  invalid_payload: 'Message could not be sent. Please try again.',
+  invalid: 'Message could not be sent. Please try again.',
+};
+
 export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat', allowHostActions = false, onHostMute, mutedSet = new Set(), initialMode = 'FREE', initialAllowed = [], initialMessages = [], suppressFreeComposer = false, showMeta = true, showModeBadge = true, lobbyPillFeed = false }) {
   const [mode, setMode] = useState(initialMode || 'FREE');
   const [allowed, setAllowed] = useState(Array.isArray(initialAllowed) ? initialAllowed : []);
@@ -138,7 +151,7 @@ export default function Chat({ socket, roomPin, readOnly = false, title = 'Chat'
 
     socket.emit(eventName, payload, (ack) => {
       if (!ack?.ok) {
-        setFeedback(ack.reason || 'Message blocked');
+        setFeedback(CHAT_REASON_MESSAGES[ack.reason] || 'Message blocked');
         return;
       }
       if (!sendAsCanned) setInput('');

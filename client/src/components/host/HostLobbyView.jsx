@@ -487,9 +487,23 @@ export default function HostLobbyView({
           {/* Right Column: Social Hub */}
           <section className="flex min-h-170 flex-col rounded-3xl border border-slate-700/35 bg-transparent p-4">
             <div className="mb-3 flex items-center justify-between gap-2 px-1">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="section-header">Room Chat</p>
                 <p className="text-xs text-slate-400">Unified social hub</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {modeOptions.map((mode) => (
+                    <button
+                      key={`chat-quick-${mode}`}
+                      onClick={() => syncChatMode(mode)}
+                      className={`rounded-lg px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.12em] transition-all duration-150 ${chatMode === mode
+                        ? 'bg-emerald-400 text-black shadow-md shadow-emerald-500/20'
+                        : 'border border-slate-700/70 bg-[#0D1117] text-slate-400 hover:border-slate-500 hover:text-slate-200'
+                      }`}
+                    >
+                      {modeLabels[mode]}
+                    </button>
+                  ))}
+                </div>
               </div>
               <button
                 onClick={() => setIsChatSettingsOpen(true)}

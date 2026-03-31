@@ -990,9 +990,10 @@ export default function Player({ onBack }) {
           {connected ? 'connected' : 'reconnecting...'}
         </p>
 
-        <section className="w-full max-w-md rounded-3xl border border-white/10 bg-black/30 backdrop-blur-2xl p-5 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-          <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Player Profile</p>
-          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-5">
+        <div className="relative z-10 w-full max-w-5xl grid grid-cols-1 gap-4 lg:grid-cols-[minmax(320px,380px)_minmax(0,1fr)] lg:items-stretch">
+          <section className="rounded-3xl border border-white/10 bg-black/30 backdrop-blur-2xl p-4 shadow-[0_0_40px_rgba(0,0,0,0.5)] lg:p-5">
+            <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Player Profile</p>
+            <div className="mt-3 rounded-2xl border border-white/10 bg-white/5 p-4 lg:p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Display Name</p>
@@ -1067,11 +1068,21 @@ export default function Player({ onBack }) {
             {profileSaved && (
               <p className="mt-3 text-center text-xs font-bold text-emerald-300">Profile saved.</p>
             )}
-          </div>
-        </section>
+            </div>
+          </section>
 
-        <div className="w-full max-w-md mt-4 h-[320px] sm:h-[360px] min-h-0 overflow-hidden rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-4 shadow-xl shadow-black/40">
-          <Chat socket={chatSocket} roomPin={LAN_ROOM} title="Lobby Chat" initialMode={chatMode} initialAllowed={chatAllowed} initialMessages={chatHistory} />
+          <section className="min-h-0 overflow-hidden rounded-3xl border border-white/10 bg-black/30 backdrop-blur-xl p-3 shadow-xl shadow-black/40 lg:p-4">
+            <div className="h-[46dvh] min-h-[340px] sm:h-[50dvh] lg:h-full lg:min-h-[520px]">
+              <Chat
+                socket={chatSocket}
+                roomPin={LAN_ROOM}
+                title="Lobby Chat"
+                initialMode={chatMode}
+                initialAllowed={chatAllowed}
+                initialMessages={chatHistory}
+              />
+            </div>
+          </section>
         </div>
 
         <ConfirmActionModal
