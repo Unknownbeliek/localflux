@@ -7,6 +7,7 @@ import Footer from "./components/Footer";
 import { DynamicBackground } from "./components/DynamicBackground";
 import { LightBackground } from "./components/LightBackground";
 import Contributors from "./components/Contributors";
+import { useTheme } from "./hooks/useTheme";
 
 /* ─────────────────────────────────────────
    GLOBAL KEYFRAME STYLES (injected once)
@@ -19,10 +20,30 @@ const GlobalStyles = () => (
       --emerald: #10b981;
       --cyan: #06b6d4;
       --slate-950: #030712;
+      --page-bg: #f8fafc;
+      --card-bg: rgba(255, 255, 255, 0.84);
+      --card-border: rgba(148, 163, 184, 0.32);
+      --muted-text: #475569;
+      --terminal-bg: rgba(255, 255, 255, 0.9);
+      --terminal-border: rgba(148, 163, 184, 0.35);
+      --terminal-shadow: 0 0 34px -12px rgba(16,185,129,0.22), 0 0 60px -18px rgba(6,182,212,0.14), inset 0 1px 0 rgba(255,255,255,0.2);
+    }
+
+    html.dark {
+      --page-bg: #030712;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --muted-text: #94a3b8;
+      --terminal-bg: rgba(3, 7, 18, 0.8);
+      --terminal-border: rgba(255, 255, 255, 0.1);
+      --terminal-shadow: 0 0 40px -8px rgba(16,185,129,0.3), 0 0 80px -12px rgba(6,182,212,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
     }
 
     * { box-sizing: border-box; }
-    body { background: #030712; }
+    body {
+      background: var(--page-bg);
+      transition: background-color 300ms ease, color 300ms ease;
+    }
 
     @keyframes ping-pulse {
       0%, 100% { transform: scale(1); opacity: 1; }
@@ -125,8 +146,8 @@ const GlobalStyles = () => (
 
     .bento-card {
       animation: card-glow-in 0.6s ease both;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
       border-radius: 16px;
       backdrop-filter: blur(20px);
       transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
@@ -206,11 +227,12 @@ const GlobalStyles = () => (
     }
 
     .terminal-window {
-      background: rgba(3, 7, 18, 0.8);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--terminal-bg);
+      border: 1px solid var(--terminal-border);
       border-radius: 16px;
-      box-shadow: 0 0 40px -8px rgba(16,185,129,0.3), 0 0 80px -12px rgba(6,182,212,0.15), inset 0 1px 0 rgba(255,255,255,0.05);
+      box-shadow: var(--terminal-shadow);
       overflow: hidden;
+      transition: background-color 300ms ease, border-color 300ms ease, box-shadow 300ms ease;
     }
     .terminal-scanline {
       position: absolute;
@@ -287,7 +309,7 @@ const PingVisual = () => (
    CARD 2 — God-Mode Host
 ───────────────────────────────────────── */
 const TOGGLE_LABELS = ["FREE", "GUIDED", "SILENT"];
-const TOGGLE_COLORS = ["text-slate-400", "text-amber-400", "text-emerald-400"];
+const TOGGLE_COLORS = ["text-slate-500 dark:text-slate-400", "text-amber-500 dark:text-amber-400", "text-emerald-500 dark:text-emerald-400"];
 
 const ToggleVisual = () => {
   const [phase, setPhase] = useState(0);
@@ -296,7 +318,7 @@ const ToggleVisual = () => {
     return () => clearInterval(id);
   }, []);
 
-  const trackColors = ["bg-slate-600", "bg-amber-500", "bg-emerald-500"];
+  const trackColors = ["bg-slate-500 dark:bg-slate-600", "bg-amber-500", "bg-emerald-500"];
   const thumbPositions = ["translate-x-0", "translate-x-7", "translate-x-14"];
 
   return (
@@ -319,7 +341,7 @@ const ToggleVisual = () => {
         {TOGGLE_LABELS.map((label, i) => (
           <div key={label} className={`px-2 py-0.5 rounded font-mono text-[10px] tracking-widest border transition-all duration-300 ${phase === i
               ? `border-current ${TOGGLE_COLORS[i]} bg-current/10`
-              : "border-slate-700 text-slate-600"
+              : "border-slate-300 text-slate-500 dark:border-slate-700 dark:text-slate-600"
             }`}>
             {label}
           </div>
@@ -342,7 +364,7 @@ const PipelineVisual = () => (
         <div className="w-6 h-0.5 bg-slate-500 rounded" />
         <div className="w-6 h-0.5 bg-slate-500 rounded" />
       </div>
-      <span className="font-mono text-[10px] text-slate-400">.csv</span>
+      <span className="font-mono text-[10px] text-slate-500 dark:text-slate-400 transition-colors duration-300">.csv</span>
     </div>
 
     {/* Arrow */}
@@ -399,15 +421,15 @@ const ReconnectVisual = () => {
   return (
     <div className="relative w-28 mx-auto">
       {/* Phone frame */}
-      <div className="w-28 h-48 rounded-2xl border-2 border-slate-600 bg-slate-900 flex flex-col overflow-hidden shadow-xl">
+      <div className="w-28 h-48 rounded-2xl border-2 border-slate-300 bg-white dark:border-slate-600 dark:bg-slate-900 flex flex-col overflow-hidden shadow-xl transition-colors duration-300">
         {/* Status bar */}
-        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-800/80">
+        <div className="flex items-center justify-between px-3 py-1.5 bg-slate-200 dark:bg-slate-800/80 transition-colors duration-300">
           <div className="flex gap-0.5">
             {[1, 2, 3].map(b => (
-              <div key={b} className={`w-1 rounded-sm transition-all duration-500 ${phase === 2 ? "bg-emerald-400" : "bg-slate-600"}`} style={{ height: `${b * 3 + 3}px` }} />
+              <div key={b} className={`w-1 rounded-sm transition-all duration-500 ${phase === 2 ? "bg-emerald-400" : "bg-slate-500 dark:bg-slate-600"}`} style={{ height: `${b * 3 + 3}px` }} />
             ))}
           </div>
-          <div className="w-6 h-1.5 rounded-full bg-slate-600" />
+          <div className="w-6 h-1.5 rounded-full bg-slate-500 dark:bg-slate-600 transition-colors duration-300" />
         </div>
 
         {/* Screen content */}
@@ -421,7 +443,7 @@ const ReconnectVisual = () => {
                 <circle cx="14" cy="16.5" r="1.5" fill="#ef4444" />
               </svg>
               <span className="font-mono text-[8px] text-red-400 reconnect-blink">Wi-Fi Lost</span>
-              <div className="text-[8px] font-mono text-slate-500 text-center">Grace: 45s</div>
+              <div className="text-[8px] font-mono text-slate-600 dark:text-slate-500 text-center transition-colors duration-300">Grace: 45s</div>
             </div>
           )}
           {phase === 1 && (
@@ -447,15 +469,15 @@ const ReconnectVisual = () => {
         </div>
 
         {/* Bottom bar */}
-        <div className="h-4 bg-slate-800/50 flex items-center justify-center">
-          <div className="w-8 h-1 rounded-full bg-slate-600" />
+        <div className="h-4 bg-slate-200/80 dark:bg-slate-800/50 flex items-center justify-center transition-colors duration-300">
+          <div className="w-8 h-1 rounded-full bg-slate-500 dark:bg-slate-600 transition-colors duration-300" />
         </div>
       </div>
 
       {/* Phase indicator */}
       <div className="flex justify-center gap-1 mt-2">
         {[0, 1, 2].map(i => (
-          <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${phase === i ? "bg-emerald-400" : "bg-slate-700"}`} />
+          <div key={i} className={`w-1.5 h-1.5 rounded-full transition-all duration-300 ${phase === i ? "bg-emerald-400" : "bg-slate-400 dark:bg-slate-700"}`} />
         ))}
       </div>
     </div>
@@ -510,9 +532,9 @@ const BentoGrid = () => {
   ];
 
   const accentMap = {
-    emerald: { tag: "text-emerald-400 bg-emerald-400/10 border-emerald-400/20", title: "text-white" },
-    amber: { tag: "text-amber-400 bg-amber-400/10 border-amber-400/20", title: "text-white" },
-    cyan: { tag: "text-cyan-400 bg-cyan-400/10 border-cyan-400/20", title: "text-white" },
+    emerald: { tag: "text-emerald-600 dark:text-emerald-400 bg-emerald-400/10 border-emerald-400/30", title: "text-slate-900 dark:text-white" },
+    amber: { tag: "text-amber-600 dark:text-amber-400 bg-amber-400/10 border-amber-400/30", title: "text-slate-900 dark:text-white" },
+    cyan: { tag: "text-cyan-600 dark:text-cyan-400 bg-cyan-400/10 border-cyan-400/30", title: "text-slate-900 dark:text-white" },
   };
 
   return (
@@ -520,15 +542,15 @@ const BentoGrid = () => {
       {/* Section header */}
       <div className="mb-12 flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-700 to-transparent max-w-16" />
-          <span className="font-mono text-xs tracking-[0.25em] text-slate-500 uppercase">Engine Architecture</span>
-          <div className="h-px flex-1 bg-gradient-to-r from-slate-700 via-transparent to-transparent max-w-16" />
+          <div className="h-px flex-1 bg-gradient-to-r from-transparent via-slate-300 dark:via-slate-700 to-transparent max-w-16 transition-colors duration-300" />
+          <span className="font-mono text-xs tracking-[0.25em] text-slate-600 dark:text-slate-500 uppercase transition-colors duration-300">Engine Architecture</span>
+          <div className="h-px flex-1 bg-gradient-to-r from-slate-300 dark:from-slate-700 via-transparent to-transparent max-w-16 transition-colors duration-300" />
         </div>
-        <h2 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">
+        <h2 className="text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white tracking-tight transition-colors duration-300">
           Built different.{" "}
           <span className="shimmer-text">From the ground up.</span>
         </h2>
-        <p className="text-slate-400 text-sm max-w-xl leading-relaxed">
+        <p className="text-slate-600 dark:text-slate-400 text-sm max-w-xl leading-relaxed transition-colors duration-300">
           LocalFlux isn't a thin wrapper. Every primitive is engineered for the LAN-first reality of live classroom and event environments.
         </p>
       </div>
@@ -553,8 +575,8 @@ const BentoGrid = () => {
             <PingVisual />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white mb-1.5">{cards[0].title}</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">{cards[0].body}</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1.5 transition-colors duration-300">{cards[0].title}</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed transition-colors duration-300">{cards[0].body}</p>
           </div>
         </div>
 
@@ -572,8 +594,8 @@ const BentoGrid = () => {
             <ToggleVisual />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white mb-1.5">{cards[1].title}</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">{cards[1].body}</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1.5 transition-colors duration-300">{cards[1].title}</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed transition-colors duration-300">{cards[1].body}</p>
           </div>
         </div>
 
@@ -591,8 +613,8 @@ const BentoGrid = () => {
             <PipelineVisual />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-white mb-1.5">{cards[2].title}</h3>
-            <p className="text-slate-400 text-sm leading-relaxed">{cards[2].body}</p>
+            <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1.5 transition-colors duration-300">{cards[2].title}</h3>
+            <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed transition-colors duration-300">{cards[2].body}</p>
           </div>
         </div>
 
@@ -609,12 +631,12 @@ const BentoGrid = () => {
               {cards[3].tag}
             </span>
             <div>
-              <h3 className="text-lg font-semibold text-white mb-1.5">{cards[3].title}</h3>
-              <p className="text-slate-400 text-sm leading-relaxed">{cards[3].body}</p>
+              <h3 className="text-lg font-semibold text-slate-900 dark:text-white mb-1.5 transition-colors duration-300">{cards[3].title}</h3>
+              <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed transition-colors duration-300">{cards[3].body}</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {["45s Grace Window", "sessionStorage Hot-swap", "Score Preservation"].map(tag => (
-                <span key={tag} className="font-mono text-[10px] text-slate-400 bg-slate-800/80 border border-slate-700 px-2 py-0.5 rounded">
+                <span key={tag} className="font-mono text-[10px] text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded transition-colors duration-300">
                   {tag}
                 </span>
               ))}
@@ -700,6 +722,7 @@ const ArrowConnector = () => (
    ROOT EXPORT
 ───────────────────────────────────────── */
 export default function LocalFluxSections() {
+  const { isDark } = useTheme();
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -720,8 +743,8 @@ export default function LocalFluxSections() {
   }, []);
 
   return (
-    <div className="min-h-screen relative font-geist">
-      {isMobile ? <LightBackground /> : <DynamicBackground />}
+    <div className="min-h-screen relative font-geist transition-colors duration-300 text-slate-900 dark:text-white">
+      {isDark && !isMobile ? <DynamicBackground /> : <LightBackground darkMode={isDark} />}
 
       <div style={{ position: "relative", zIndex: 1 }}>
         <GlobalStyles />

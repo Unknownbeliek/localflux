@@ -53,7 +53,7 @@ export default function Contributors() {
     <section className="relative py-24 px-6 overflow-hidden">
       {/* glow */}
       <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute left-1/2 top-1/2 w-[500px] h-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/5 blur-3xl" />
+        <div className="absolute left-1/2 top-1/2 w-[500px] h-[500px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-500/8 dark:bg-emerald-500/5 blur-3xl" />
       </div>
 
       <div className="relative z-10 max-w-5xl mx-auto text-center">
@@ -64,19 +64,19 @@ export default function Contributors() {
           animate={{ rotate: 360 }}
           transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
         >
-          <div className="w-8 h-8 rounded-full border border-emerald-400 flex items-center justify-center text-emerald-400 text-sm">
+          <div className="w-8 h-8 rounded-full border border-emerald-500 dark:border-emerald-400 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-sm transition-colors duration-300">
             GH
           </div>
         </motion.div>
 
         {/* heading */}
-        <h2 className="text-4xl font-bold text-white mb-3">
+        <h2 className="text-4xl font-bold text-slate-900 dark:text-white mb-3 transition-colors duration-300">
           Built by the{" "}
-          <span className="text-emerald-400">Community</span>
+          <span className="text-emerald-600 dark:text-emerald-400 transition-colors duration-300">Community</span>
         </h2>
 
         {/* subtext */}
-        <p className="text-gray-400 mb-12">
+        <p className="text-slate-600 dark:text-gray-400 mb-12 transition-colors duration-300">
           Powered by amazing contributors on GitHub
         </p>
 
@@ -84,11 +84,11 @@ export default function Contributors() {
         <div className="flex justify-center">
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-3 gap-6 mb-12">
             {loading ? (
-              <div className="col-span-full text-gray-500">
+              <div className="col-span-full text-slate-500 dark:text-gray-500 transition-colors duration-300">
                 Loading contributors...
               </div>
             ) : contributors.length === 0 ? (
-              <div className="col-span-full text-gray-500">
+              <div className="col-span-full text-slate-500 dark:text-gray-500 transition-colors duration-300">
                 No contributors found
               </div>
             ) : (
@@ -105,10 +105,10 @@ export default function Contributors() {
             href="https://github.com/Unknownbeliek/localflux"
             target="_blank"
             rel="noopener noreferrer"
-            className="group relative px-6 py-3 rounded-lg border border-emerald-400/30 hover:border-emerald-400/60 text-emerald-400 overflow-hidden transition-[transform,border-color,background-color,opacity] duration-300 ease-out hover:-translate-y-1"
+            className="group relative px-6 py-3 rounded-lg border border-emerald-500/30 hover:border-emerald-500/60 dark:border-emerald-400/30 dark:hover:border-emerald-400/60 text-emerald-600 dark:text-emerald-400 overflow-hidden transition-[transform,border-color,background-color,opacity,color] duration-300 ease-out hover:-translate-y-1"
           >
             <span className="relative z-10">View All on GitHub</span>
-            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition bg-emerald-400/10" />
+            <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition bg-emerald-500/10 dark:bg-emerald-400/10" />
           </a>
         </div>
 

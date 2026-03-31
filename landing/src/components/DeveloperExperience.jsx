@@ -15,13 +15,13 @@ export function DeveloperExperience() {
           {/* Heading */}
           <motion.div className="text-center mb-16">
             <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 drop-shadow-[0_0_20px_rgba(16,185,129,0.2)]">
-              <span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+              <span className="bg-gradient-to-r from-emerald-500 via-cyan-500 to-emerald-500 dark:from-emerald-400 dark:via-cyan-400 dark:to-emerald-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
                 Developer-First
               </span>{" "}
               Experience
             </h2>
 
-            <p className="text-xl md:text-2xl text-gray-300 max-w-3xl mx-auto">
+            <p className="text-xl md:text-2xl text-slate-600 dark:text-gray-300 max-w-3xl mx-auto transition-colors duration-300">
               Get started in seconds. No configuration, no cloud setup, no hassle.
             </p>
           </motion.div>
@@ -53,7 +53,7 @@ export function DeveloperExperience() {
                   className="group relative"
                 >
                   {/* Card */}
-                  <div className="relative bg-white/[0.03] border border-white/10 rounded-2xl p-6 text-center backdrop-blur-xl transition-all duration-300" style={{
+                  <div className="relative bg-white/80 dark:bg-white/[0.03] border border-slate-300 dark:border-white/10 rounded-2xl p-6 text-center backdrop-blur-xl transition-all duration-300" style={{
                     boxShadow: '0 10px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)'
                   }}>
                     {/* Cursor-following light */}
@@ -73,10 +73,10 @@ export function DeveloperExperience() {
                       {stat.icon}
                     </motion.div>
 
-                    <div className="relative text-3xl font-bold bg-gradient-to-r from-emerald-400 to-cyan-400 bg-clip-text text-transparent mb-2 z-10">
+                    <div className="relative text-3xl font-bold bg-gradient-to-r from-emerald-500 to-cyan-500 dark:from-emerald-400 dark:to-cyan-400 bg-clip-text text-transparent mb-2 z-10">
                       {stat.value}
                     </div>
-                    <div className="relative text-gray-400 group-hover:text-gray-300/80 transition-colors duration-300 z-10">{stat.label}</div>
+                    <div className="relative text-slate-600 dark:text-gray-400 group-hover:text-slate-700 dark:group-hover:text-gray-300/80 transition-colors duration-300 z-10">{stat.label}</div>
                   </div>
                 </motion.div>
               );
