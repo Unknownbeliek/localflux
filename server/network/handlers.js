@@ -51,16 +51,16 @@ const PRESET_AVATAR_POOL = [
 const NAME_PREFIXES = ['Neo', 'Turbo', 'Solar', 'Nova', 'Glitch', 'Echo', 'Pixel', 'Drift', 'Axel', 'Flux'];
 const NAME_SUFFIXES = ['Rider', 'Nomad', 'Spark', 'Cipher', 'Pilot', 'Comet', 'Vector', 'Pulse', 'Ghost', 'Runner'];
 const LAN_ROOM = 'local_flux_main';
-const HOST_RECONNECT_GRACE_MS = 45000;
+const HOST_RECONNECT_GRACE_MS = 45000; // TODO: Move to config
 const hostDisconnectTimers = new Map();
-const PLAYER_RECONNECT_GRACE_MS = 45000;
+const PLAYER_RECONNECT_GRACE_MS = 45000; // TODO: Move to config
 const pendingPlayerReconnect = new Map();
 const playerDisconnectTimers = new Map();
 const questionTimeoutTimers = new Map();
 const roundLockTimers = new Map();
 const roundTransitionTimers = new Map();
-const ROUND_LOCK_DELAY_MS = 700;
-const ROUND_TRANSITION_DELAY_MS = 3000;
+const ROUND_LOCK_DELAY_MS = 700; // TODO: Move to config
+const ROUND_TRANSITION_DELAY_MS = 3000; // TODO: Move to config
 const HOST_REJECTED_MESSAGE = 'A game is already being hosted on this network.';
 const ENFORCE_HOST_SESSION = false;
 const DEFAULT_ROOM_MAX_PLAYERS = toPositiveInt(process.env.DEFAULT_ROOM_MAX_PLAYERS, 20);
@@ -542,7 +542,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       const clientIp = socket.handshake.address;
       if (clientIp !== '127.0.0.1' && clientIp !== '::1' && clientIp !== '::ffff:127.0.0.1') {
         console.warn(`[Admin] Rejected token generation from non-localhost IP: ${clientIp}`);
-        return callback({ success: false, error: 'Unauthorized: Admin actions must be performed on the host machine.' });
+        return callback?.({ success: false, error: 'Unauthorized: Admin actions must be performed on the host machine.' });
       }
 
       const token = tokenManager.generateToken();
@@ -550,7 +550,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       
       console.log(`[Admin] Generated host token from ${socket.id} (TTL: ${ttlMs}ms)`);
       
-      callback({
+      callback?.({
         success: true,
         token,
         ttlMs,
@@ -558,7 +558,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       });
     } catch (err) {
       console.error('[Admin] Token generation failed:', err.message);
-      callback({
+      callback?.({
         success: false,
         error: 'Failed to generate host token.'
       });
@@ -577,11 +577,11 @@ function registerHandlers(socket, io, questions, tokenManager) {
       } else if (tokenCheck.reason === 'socket_mismatch') {
         error = 'Unauthorized: host token is bound to a previous session. Generate a new token.';
       }
-      return callback({ success: false, error, reason: tokenCheck.reason });
+      return callback?.({ success: false, error, reason: tokenCheck.reason });
     }
 
     if (!roomName || !roomName.trim()) {
-      return callback({ success: false, error: 'Room name is required.' });
+      return callback?.({ success: false, error: 'Room name is required.' });
     }
 
     const currentRoom = getRoom();
@@ -609,7 +609,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       socket.emit('chat:mode', { mode: chatInstance.mode, allowed: chatInstance.allowed });
       io.to(LAN_ROOM_ID).emit('player_joined', { players: currentRoom.players });
 
-      return callback({
+      return callback?.({
         success: true,
         roomId: LAN_ROOM_ID,
         deckSource: currentRoom.deckMeta?.source || 'none',
@@ -754,17 +754,17 @@ function registerHandlers(socket, io, questions, tokenManager) {
   socket.on('join_room', ({ playerName, playerSessionId }, callback) => {
     const room = getRoom();
     if (!room) {
-      return callback({ success: false, error: getJoinUnavailableMessage() });
+      return callback?.({ success: false, error: getJoinUnavailableMessage() });
     }
     if (room.status === 'finished') {
-      return callback({ success: false, error: 'Room has ended. Wait for the host to create a new room.' });
+      return callback?.({ success: false, error: 'Room has ended. Wait for the host to create a new room.' });
     }
     if (room.status !== 'lobby') {
-      return callback({ success: false, error: 'Game already in progress.' });
+      return callback?.({ success: false, error: 'Game already in progress.' });
     }
     
     if (room.players.length >= getEffectiveMaxPlayers(room)) {
-      return callback(getRoomFullResponse(room));
+      return callback?.(getRoomFullResponse(room));
     }
 
     const assigned = generateJoinProfile(room);
@@ -797,18 +797,18 @@ function registerHandlers(socket, io, questions, tokenManager) {
     const room = getRoom();
 
     if (!room) {
-      return callback({ success: false, error: getJoinUnavailableMessage() });
+      return callback?.({ success: false, error: getJoinUnavailableMessage() });
     }
     if (room.status === 'finished') {
-      return callback({ success: false, error: 'Room has ended. Wait for the host to create a new room.' });
+      return callback?.({ success: false, error: 'Room has ended. Wait for the host to create a new room.' });
     }
 
     if (room.status !== 'lobby') {
-      return callback({ success: false, error: 'Game already in progress.' });
+      return callback?.({ success: false, error: 'Game already in progress.' });
     }
     
     if (room.players.length >= getEffectiveMaxPlayers(room)) {
-      return callback(getRoomFullResponse(room));
+      return callback?.(getRoomFullResponse(room));
     }
 
     const assigned = generateJoinProfile(room);
@@ -1063,16 +1063,16 @@ function registerHandlers(socket, io, questions, tokenManager) {
   // G��G�� start_game G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
   socket.on('start_game', ({ hostSessionId } = {}, callback) => {
     const room = getRoom();
-    if (!room) return callback({ success: false, error: 'Room not found.' });
+    if (!room) return callback?.({ success: false, error: 'Room not found.' });
     if (!hasValidHostSession(room, hostSessionId)) {
       rejectHost(socket, null);
-      return callback({ success: false, error: HOST_REJECTED_MESSAGE, reason: 'host_locked' });
+      return callback?.({ success: false, error: HOST_REJECTED_MESSAGE, reason: 'host_locked' });
     }
-    if (room.hostId !== socket.id) return callback({ success: false, error: 'Only the host can start.' });
+    if (room.hostId !== socket.id) return callback?.({ success: false, error: 'Only the host can start.' });
 
     const roomQuestions = Array.isArray(room.questions) ? room.questions : [];
     if (roomQuestions.length === 0) {
-      return callback({ success: false, error: 'Select a deck before starting the game.' });
+      return callback?.({ success: false, error: 'Select a deck before starting the game.' });
     }
 
     try {
@@ -1083,9 +1083,9 @@ function registerHandlers(socket, io, questions, tokenManager) {
       console.log(`[Game] LAN_ROOM started with ${room.players.length} player(s).`);
       io.to(LAN_ROOM_ID).emit('game_started', { roomName: room.roomName });
       emitNextQuestionForRound(room, firstQ);
-      callback({ success: true });
+      callback?.({ success: true });
     } catch (err) {
-      callback({ success: false, error: err.message });
+      callback?.({ success: false, error: err.message });
     }
   });
 
@@ -1101,6 +1101,10 @@ function registerHandlers(socket, io, questions, tokenManager) {
 
     if (result.alreadyAnswered) {
       return callback?.({ success: false, error: 'Already answered.' });
+    }
+
+    if (result.notPlayer) {
+      return callback?.({ success: false, error: 'Only joined players can answer.' });
     }
 
     callback?.({ success: true, correct: result.correct });

@@ -6,6 +6,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
 
+const nodeProcess = globalThis.process;
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.join(__dirname, '..', 'dist');
@@ -14,11 +16,11 @@ const indexPath = path.join(distDir, 'index.html');
 if (!existsSync(indexPath)) {
 	console.error('[localflux] Missing build output at dist/index.html');
 	console.error('[localflux] Run "npm run build" in the package before running the CLI.');
-	process.exit(1);
+	nodeProcess.exit(1);
 }
 
-const portArg = process.argv.find((arg) => arg.startsWith('--port='));
-const parsedPort = portArg ? Number(portArg.split('=')[1]) : Number(process.env.PORT);
+const portArg = nodeProcess.argv.find((arg) => arg.startsWith('--port='));
+const parsedPort = portArg ? Number(portArg.split('=')[1]) : Number(nodeProcess.env.PORT);
 const port = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 4173;
 
 const app = express();
@@ -33,7 +35,7 @@ const server = app.listen(port, async () => {
 	const url = `http://localhost:${port}`;
 	console.log(`[localflux] Serving dist at ${url}`);
 
-	if (!process.argv.includes('--no-open')) {
+	if (!nodeProcess.argv.includes('--no-open')) {
 		try {
 			await open(url);
 		} catch (error) {
@@ -44,9 +46,9 @@ const server = app.listen(port, async () => {
 
 const shutdown = () => {
 	server.close(() => {
-		process.exit(0);
+		nodeProcess.exit(0);
 	});
 };
 
-process.on('SIGINT', shutdown);
-process.on('SIGTERM', shutdown);
+nodeProcess.on('SIGINT', shutdown);
+nodeProcess.on('SIGTERM', shutdown);

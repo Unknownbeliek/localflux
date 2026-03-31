@@ -119,7 +119,7 @@ export default function Player({ onBack }) {
     }, 1200);
   };
 
-  const applyNextQuestion = ({ question: nextQuestion, durationMs, endsAt, serverNow }) => {
+  const applyNextQuestion = useCallback(({ question: nextQuestion, durationMs, endsAt, serverNow }) => {
     setQuestion(nextQuestion);
     setSelected(null);
     setGuessText('');
@@ -142,7 +142,7 @@ export default function Player({ onBack }) {
     setTimeLeft(Math.max(0, Math.ceil(remainingMs / 1000)));
     prevTimeLeftRef.current = Math.max(0, Math.ceil(remainingMs / 1000));
     setPhase('question');
-  };
+  }, []);
 
   const applyResumePayload = (res) => {
     setError('');

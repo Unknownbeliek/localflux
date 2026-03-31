@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHostToken } from '../context/HostTokenProvider'
 import { createGameSocket, getBackendUrl } from '../backendUrl'
 import { deckStudioDB } from '../deckStudio/db'
-import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog'
+import { downloadDeckToLocal } from '../deckStudio/cloudCatalog'
 import ConfirmActionModal from '../components/ConfirmActionModal'
 import MagicGenerateModal from '../components/host/MagicGenerateModal'
 import OpeningSequence from '../components/OpeningSequence'
@@ -74,9 +74,9 @@ export default function AdminDashboard() {
   const [publishedDecks, setPublishedDecks] = useState([])
   const [isLoadingPublished, setIsLoadingPublished] = useState(false)
   const [publishedError, setPublishedError] = useState('')
-  const [cloudDecks, setCloudDecks] = useState([])
+  const [cloudDecks] = useState([])
   const [isOnline, setIsOnline] = useState(() => (typeof navigator === 'undefined' ? true : navigator.onLine))
-  const [isLoadingCloud, setIsLoadingCloud] = useState(false)
+  const [isLoadingCloud] = useState(false)
   const [cloudError, setCloudError] = useState('')
   const [hasFetchedCloud, setHasFetchedCloud] = useState(false)
   const [downloadingCloudDeckId, setDownloadingCloudDeckId] = useState('')

@@ -88,6 +88,17 @@ function submitAnswer(room, slides, socketId, answer) {
     return { correct: false, alreadyAnswered: false, answerCount: 0, totalPlayers: room.players.length };
   }
 
+  const player = room.players.find((p) => p.id === socketId);
+  if (!player) {
+    return {
+      correct: false,
+      alreadyAnswered: false,
+      notPlayer: true,
+      answerCount: Object.keys(room.answersIn || {}).length,
+      totalPlayers: room.players.length,
+    };
+  }
+
   if (room.answersIn[socketId] !== undefined) {
     return {
       correct: false,
@@ -114,22 +125,19 @@ function submitAnswer(room, slides, socketId, answer) {
     correct = isMcqCorrect(slide, answer);
   }
 
-  const player = room.players.find((p) => p.id === socketId);
-  if (player) {
-    const currentStreak = Number(player.streak || 0);
-    const scoreResult = calculateScore(
-      correct,
-      slide?.difficulty,
-      gameMode,
-      timeRemainingMs,
-      totalTimeMs,
-      currentStreak,
-    );
+  const currentStreak = Number(player.streak || 0);
+  const scoreResult = calculateScore(
+    correct,
+    slide?.difficulty,
+    gameMode,
+    timeRemainingMs,
+    totalTimeMs,
+    currentStreak,
+  );
 
-    player.streak = scoreResult.newStreak;
-    if (scoreResult.points !== 0) {
-      player.score = Math.max(0, Number(player.score || 0) + Number(scoreResult.points || 0));
-    }
+  player.streak = scoreResult.newStreak;
+  if (scoreResult.points !== 0) {
+    player.score = Math.max(0, Number(player.score || 0) + Number(scoreResult.points || 0));
   }
 
   room.answersIn[socketId] = answer;

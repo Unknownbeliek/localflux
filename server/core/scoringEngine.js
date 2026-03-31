@@ -56,6 +56,44 @@ function getAccuracyMultiplier(hostMode, isExactMatch, isFuzzyMatch) {
   return 0;
 }
 
+function clampRatio(value) {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function calculateLegacyScore(correct, hostMode, timeRemainingMs, totalTimeMs, currentStreak) {
+  const mode = normalizeHostMode(hostMode);
+  const safeTotal = Number.isFinite(Number(totalTimeMs)) ? Number(totalTimeMs) : 0;
+  const safeRemaining = Math.max(0, Number.isFinite(Number(timeRemainingMs)) ? Number(timeRemainingMs) : 0);
+  const ratio = safeTotal > 0 ? clampRatio(safeRemaining / safeTotal) : 1;
+  const streak = Math.max(0, Number(currentStreak) || 0);
+
+  if (!correct) {
+    return {
+      points: mode === 'pro' ? -50 : 0,
+      newStreak: 0,
+      baseScore: 0,
+      timeBonus: 0,
+      multiplier: 0,
+      finalScore: mode === 'pro' ? -50 : 0,
+    };
+  }
+
+  const basePoints = 50 + Math.round(50 * ratio);
+  const newStreak = streak + 1;
+  const streakBonus = Math.max(0, (newStreak - 1) * 10);
+  const points = basePoints + streakBonus;
+
+  return {
+    points,
+    newStreak,
+    baseScore: basePoints,
+    timeBonus: streakBonus,
+    multiplier: 1,
+    finalScore: points,
+  };
+}
+
 /**
  * Calculates LocalFlux score using base difficulty, time bonus, and host-mode multiplier.
  *
@@ -65,6 +103,13 @@ function getAccuracyMultiplier(hostMode, isExactMatch, isFuzzyMatch) {
  * @returns {ScoreBreakdown}
  */
 function calculateScore(params) {
+  // Backward compatibility for legacy positional signature:
+  // calculateScore(correct, difficulty, hostMode, timeRemainingMs, totalTimeMs, currentStreak)
+  if (arguments.length > 1 || (params !== undefined && (typeof params !== 'object' || params === null))) {
+    const [correct, _difficulty, hostMode, timeRemainingMs, totalTimeMs, currentStreak] = arguments;
+    return calculateLegacyScore(Boolean(correct), hostMode, timeRemainingMs, totalTimeMs, currentStreak);
+  }
+
   const {
     difficulty,
     hostMode,
