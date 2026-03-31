@@ -1,3 +1,7 @@
+import { Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import MagicGenerateModal from './MagicGenerateModal';
+
 export default function CreateRoom({
   onBack,
   connected,
@@ -15,7 +19,12 @@ export default function CreateRoom({
   answerMode,
   setAnswerMode,
   onLaunchLobby,
+  onGenerateOpenTrivia,
+  onGenerateTMDB,
+  isMagicGenerating,
+  magicGenerateError,
 }) {
+  const [isMagicModalOpen, setIsMagicModalOpen] = useState(false);
   const launchDisabled = !connected || !String(roomName || '').trim() || !selectedDeckKey;
 
   return (
@@ -26,6 +35,14 @@ export default function CreateRoom({
       <div className="z-10 w-full max-w-3xl rounded-3xl border border-slate-800 bg-slate-900/85 p-6 md:p-8 shadow-xl shadow-black/30 animate-phase-in">
         <h1 className="mb-2 text-4xl md:text-5xl font-black tracking-tight">Create Room</h1>
         <p className="mb-6 text-sm text-slate-400">Step 1: Configure your session before launching the live lobby.</p>
+
+        <button
+          onClick={() => setIsMagicModalOpen(true)}
+          className="mb-5 inline-flex items-center gap-2 rounded-2xl border border-violet-400/45 bg-violet-500/12 px-4 py-2.5 text-sm font-black text-violet-100 transition hover:bg-violet-500/20"
+        >
+          <Sparkles size={16} />
+          Magic Generate
+        </button>
 
         <div className="grid gap-5 md:grid-cols-2">
           <section className="rounded-2xl border border-slate-800 bg-[#0D1117] p-4">
@@ -132,6 +149,15 @@ export default function CreateRoom({
           {connected ? <span>connected</span> : <span>connecting</span>}
         </div>
       </div>
+
+      <MagicGenerateModal
+        open={isMagicModalOpen}
+        onClose={() => setIsMagicModalOpen(false)}
+        onGenerateOpenTrivia={onGenerateOpenTrivia}
+        onGenerateTMDB={onGenerateTMDB}
+        isGenerating={isMagicGenerating}
+        errorMessage={magicGenerateError}
+      />
     </div>
   );
 }

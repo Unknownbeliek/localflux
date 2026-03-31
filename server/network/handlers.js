@@ -214,9 +214,16 @@ function withQuestionTiming(payload, timing = null) {
   };
 }
 
+function normalizeDifficultyLevel(value) {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (['easy', 'hard', 'standard'].includes(normalized)) return normalized;
+  if (normalized === 'normal' || normalized === 'medium') return 'standard';
+  return 'standard';
+}
+
 function withAnswerMode(payload, answerMode = 'multiple_choice') {
   if (!payload || !payload.question) return payload;
-  let nextMode = payload.question.answer_mode || answerMode || 'multiple_choice';
+  let nextMode = answerMode || payload.question.answer_mode || 'multiple_choice';
   
   if (nextMode === 'auto') {
     nextMode = payload.question.type === 'typing' ? 'type_guess' : 'multiple_choice';
@@ -229,6 +236,21 @@ function withAnswerMode(payload, answerMode = 'multiple_choice') {
       answer_mode: nextMode,
     },
   };
+}
+
+function applyRoomSettingsToSlides(slides, room) {
+  if (!Array.isArray(slides)) return [];
+
+  const timerRaw = Number(room?.questionTimerSeconds);
+  const forcedTimeLimit = Number.isFinite(timerRaw) && timerRaw > 0 ? timerRaw * 1000 : null;
+  const forcedDifficulty = normalizeDifficultyLevel(room?.gameDifficulty);
+
+  return slides.map((slide) => {
+    const next = { ...slide };
+    if (forcedTimeLimit) next.timeLimit = forcedTimeLimit;
+    next.difficulty = forcedDifficulty;
+    return next;
+  });
 }
 
 function normalizeAvatarObject(input) {
@@ -579,6 +601,8 @@ function registerHandlers(socket, io, questions, tokenManager) {
       room.questions = [];
       room.deckMeta = null;
       room.answerMode = room.answerMode || 'auto';
+      room.questionTimerSeconds = Number(room.questionTimerSeconds) > 0 ? Number(room.questionTimerSeconds) : 15;
+      room.gameDifficulty = room.gameDifficulty || 'Normal';
     }
     lastRoomClosedReason = null;
     lastRoomClosedAt = 0;
@@ -614,11 +638,11 @@ function registerHandlers(socket, io, questions, tokenManager) {
       return callback?.({ ok: false, reason: 'invalid_deck_payload' });
     }
 
-    room.questions = normalizedSlides;
+    room.questions = applyRoomSettingsToSlides(normalizedSlides, room);
     room.deckMeta = {
       name: String(deckName || 'Imported Deck').trim(),
       source: String(deckSource || 'host').trim(),
-      count: normalizedSlides.length,
+      count: room.questions.length,
       updatedAt: Date.now(),
     };
 
@@ -629,7 +653,7 @@ function registerHandlers(socket, io, questions, tokenManager) {
       questionCount: room.deckMeta.count,
     });
 
-    callback?.({ ok: true, questionCount: normalizedSlides.length });
+    callback?.({ ok: true, questionCount: room.questions.length });
   });
 
   // G��G�� host:resume G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��
@@ -880,6 +904,58 @@ function registerHandlers(socket, io, questions, tokenManager) {
     room.answerMode = nextMode;
     io.to(LAN_ROOM_ID).emit('room:answer_mode', { mode: nextMode });
     callback?.({ ok: true, mode: nextMode });
+  });
+
+  socket.on('host:set_question_timer', ({ seconds, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (!hasValidHostSession(room, hostSessionId)) {
+      rejectHost(socket, null);
+      return callback?.({ ok: false, reason: 'host_locked' });
+    }
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
+
+    const nextSeconds = Number(seconds);
+    if (![5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60].includes(nextSeconds)) {
+      return callback?.({ ok: false, reason: 'invalid_timer' });
+    }
+
+    room.questionTimerSeconds = nextSeconds;
+    if (Array.isArray(room.questions) && room.questions.length > 0) {
+      room.questions = applyRoomSettingsToSlides(room.questions, room);
+    }
+
+    callback?.({ ok: true, seconds: nextSeconds });
+  });
+
+  socket.on('host:set_game_difficulty', ({ difficulty, hostToken, hostSessionId }, callback) => {
+    const room = getRoom();
+    if (!isHostAuthorized(room, hostToken, hostSessionId)) {
+      return callback?.({ ok: false, reason: 'unauthorized' });
+    }
+    if (!room) return callback?.({ ok: false, reason: 'room_not_found' });
+    if (!hasValidHostSession(room, hostSessionId)) {
+      rejectHost(socket, null);
+      return callback?.({ ok: false, reason: 'host_locked' });
+    }
+    if (room.hostId !== socket.id) return callback?.({ ok: false, reason: 'not_host' });
+    if (room.status !== 'lobby') return callback?.({ ok: false, reason: 'room_not_lobby' });
+
+    const nextDifficulty = String(difficulty || '').trim();
+    if (!['Easy', 'Normal', 'Hard'].includes(nextDifficulty)) {
+      return callback?.({ ok: false, reason: 'invalid_difficulty' });
+    }
+
+    room.gameDifficulty = nextDifficulty;
+    if (Array.isArray(room.questions) && room.questions.length > 0) {
+      room.questions = applyRoomSettingsToSlides(room.questions, room);
+    }
+
+    callback?.({ ok: true, difficulty: nextDifficulty });
   });
 
   // G��G�� player:updateProfile G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��G��

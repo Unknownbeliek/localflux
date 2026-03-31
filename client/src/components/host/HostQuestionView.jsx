@@ -3,12 +3,14 @@ import Chat from '../Chat';
 import AnimatedBackground from '../AnimatedBackground';
 import ConfirmActionModal from '../ConfirmActionModal';
 import BgmControl from '../BgmControl';
+import { getBackendUrl } from '../../backendUrl';
 
 function resolveImageUrl(image) {
   if (!image) return null;
   const trimmed = String(image).trim();
   if (!trimmed) return null;
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.startsWith('/uploads/')) return `${getBackendUrl()}${trimmed}`;
   if (trimmed.includes('/')) return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
   return `/deck-images/${trimmed}`;
 }

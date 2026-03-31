@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useLocation } from 'react-router-dom';
 import Papa from 'papaparse';
 import { createGameSocket, getBackendUrl } from '../backendUrl';
 import { useHostToken } from '../context/HostTokenProvider';
@@ -143,6 +144,7 @@ function csvRowsToDeck(rows, fallbackTitle = 'CSV Import') {
 }
 
 export default function Host({ onBack, studioQuestions = null }) {
+  const location = useLocation();
   const { setMusicPhase } = useBgm();
   const { token: hostToken, setHostToken, clearToken, getTokenTtl } = useHostToken();
   const savedHostState = readHostState();
@@ -197,6 +199,9 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [cloudError, setCloudError] = useState('');
   const [hasFetchedCloudCatalog, setHasFetchedCloudCatalog] = useState(false);
   const [downloadingCloudDeckId, setDownloadingCloudDeckId] = useState('');
+  const [magicGeneratedDeck, setMagicGeneratedDeck] = useState(null);
+  const [isMagicGenerating, setIsMagicGenerating] = useState(false);
+  const [magicGenerateError, setMagicGenerateError] = useState('');
   const [shareHost, setShareHost] = useState(() => {
     if (typeof window === 'undefined') return '';
     const initialHost = String(window.location.hostname || '').trim();
@@ -219,6 +224,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [draftDeleteTargetId, setDraftDeleteTargetId] = useState('');
   const [isDeleteDraftModalOpen, setIsDeleteDraftModalOpen] = useState(false);
   const [deleteDraftConfirmChecked, setDeleteDraftConfirmChecked] = useState(false);
+  const preselectedDeckAppliedRef = useRef(false);
   const startConfirmTimerRef = useRef(null);
   const countdownIntervalRef = useRef(null);
   const tokenRefreshInFlightRef = useRef(false);
@@ -231,7 +237,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const answerModeOptions = ['auto', 'multiple_choice', 'type_guess'];
   const answerModeLabels = {
     auto: 'AUTO DECK',
-    multiple_choice: '4 OPTIONS',
+    multiple_choice: '4 OPTIONS', 
     type_guess: 'TYPE GUESS',
   };
 
@@ -741,6 +747,9 @@ export default function Host({ onBack, studioQuestions = null }) {
   }, [studioDecks, studioDeckQuery]);
 
   const createRoomDeckOptions = useMemo(() => {
+    const magicDeckOption = magicGeneratedDeck
+      ? [{ value: magicGeneratedDeck.key, label: `Magic: ${magicGeneratedDeck.title} (${magicGeneratedDeck.slides.length} questions)` }]
+      : [];
     const serverDeckOptions = availableDecks.map((deck) => ({
       value: `server:${deck.file}`,
       label: `Bundled: ${deck.name} (${deck.count} questions)`,
@@ -752,11 +761,130 @@ export default function Host({ onBack, studioQuestions = null }) {
     const sessionOption = Array.isArray(studioQuestions) && studioQuestions.length > 0
       ? [{ value: 'studio:session', label: `Studio Session (${studioQuestions.length} questions)` }]
       : [];
-    return [...sessionOption, ...serverDeckOptions, ...studioDeckOptions];
-  }, [availableDecks, studioDecks, studioQuestions]);
+    return [...magicDeckOption, ...sessionOption, ...serverDeckOptions, ...studioDeckOptions];
+  }, [magicGeneratedDeck, availableDecks, studioDecks, studioQuestions]);
+
+  const routeRequestedDeckKey = useMemo(() => {
+    const params = new URLSearchParams(location.search || '');
+    const explicitKey = String(params.get('deckKey') || '').trim();
+    if (explicitKey) return explicitKey;
+
+    const legacyDeckId = String(params.get('deckId') || '').trim();
+    if (!legacyDeckId) return '';
+
+    if (availableDecks.some((deck) => String(deck?.file || '').trim() === legacyDeckId)) {
+      return `server:${legacyDeckId}`;
+    }
+
+    if (studioDecks.some((deck) => String(deck?.id || '').trim() === legacyDeckId)) {
+      return `studio:${legacyDeckId}`;
+    }
+
+    return '';
+  }, [location.search, availableDecks, studioDecks]);
+
+  const handleGenerateOpenTrivia = async ({ amount, categoryId }) => {
+    setIsMagicGenerating(true);
+    setMagicGenerateError('');
+    setError('');
+
+    try {
+      const params = new URLSearchParams({ amount: String(amount || 10) });
+      if (categoryId) params.set('categoryId', String(categoryId));
+
+      const response = await fetch(`${getBackendUrl()}/api/magic/open-trivia?${params.toString()}`);
+      const payload = await response.json();
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.slides)) {
+        throw new Error(payload?.error || 'Magic generation failed.');
+      }
+
+      const key = `magic:open_tdb:${Date.now().toString(36)}`;
+      const nextDeck = {
+        key,
+        source: 'magic_open_tdb',
+        title: payload.title || `Open Trivia (${payload.slides.length} Questions)`,
+        slides: payload.slides,
+      };
+
+      setMagicGeneratedDeck(nextDeck);
+      setSelectedDeckKey(key);
+      setSelectedDeckSource('magic');
+      setSelectedDeckCount(payload.slides.length);
+      setDeckLabel(nextDeck.title);
+      setIsDeckReady(false);
+      setDropNotice(`Generated ${payload.slides.length} questions with Magic Generate.`);
+    } catch (err) {
+      const message = err?.message || 'Could not generate Open Trivia deck.';
+      setMagicGenerateError(message);
+      setError(message);
+    } finally {
+      setIsMagicGenerating(false);
+    }
+  };
+
+  const handleGenerateTMDB = async ({ amount, apiKey, genreId = null }) => {
+    setIsMagicGenerating(true);
+    setMagicGenerateError('');
+    setError('');
+
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/magic/tmdb`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: Number(amount || 10),
+          apiKey: String(apiKey || '').trim(),
+          genreId: genreId == null || genreId === '' ? null : Number(genreId),
+        }),
+      });
+      const payload = await response.json();
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.slides)) {
+        throw new Error(payload?.error || 'TMDB generation failed.');
+      }
+
+      const key = `magic:tmdb:${Date.now().toString(36)}`;
+      const nextDeck = {
+        key,
+        source: 'magic_tmdb',
+        title: payload.title || `TMDB Movies (${payload.slides.length} Questions)`,
+        slides: payload.slides,
+      };
+
+      setMagicGeneratedDeck(nextDeck);
+      setSelectedDeckKey(key);
+      setSelectedDeckSource('magic');
+      setSelectedDeckCount(payload.slides.length);
+      setDeckLabel(nextDeck.title);
+      setIsDeckReady(false);
+      setDropNotice(`Generated ${payload.slides.length} movie questions with Magic Generate.`);
+    } catch (err) {
+      const message = err?.message || 'Could not generate TMDB movie deck.';
+      setMagicGenerateError(message);
+      setError(message);
+    } finally {
+      setIsMagicGenerating(false);
+    }
+  };
 
   const handleSetupDeckSelect = (value) => {
     setSelectedDeckKey(value);
+
+    if (String(value).startsWith('magic:')) {
+      if (!magicGeneratedDeck || magicGeneratedDeck.key !== value) {
+        setSelectedDeckSource('none');
+        setSelectedDeckCount(null);
+        setDeckLabel('No deck selected');
+        return;
+      }
+      setSelectedDeckSource('magic');
+      setSelectedDeckCount(magicGeneratedDeck.slides.length);
+      setDeckLabel(magicGeneratedDeck.title);
+      return;
+    }
 
     if (value === 'studio:session') {
       const count = Array.isArray(studioQuestions) ? studioQuestions.length : 0;
@@ -788,6 +916,20 @@ export default function Host({ onBack, studioQuestions = null }) {
     setSelectedDeckCount(null);
     setDeckLabel('No deck selected');
   };
+
+  useEffect(() => {
+    if (phase !== 'setup') return;
+    if (preselectedDeckAppliedRef.current) return;
+    if (!routeRequestedDeckKey) return;
+
+    const optionExists = createRoomDeckOptions.some((option) => option.value === routeRequestedDeckKey);
+    if (!optionExists) return;
+
+    preselectedDeckAppliedRef.current = true;
+    setSelectedDeckKey(routeRequestedDeckKey);
+    handleSetupDeckSelect(routeRequestedDeckKey);
+    setDropNotice('Deck pre-selected from library. Launch Lobby to host it.');
+  }, [phase, routeRequestedDeckKey, createRoomDeckOptions]);
 
   const handleLoadMoreCloudDecks = async () => {
     if (cloudStatus === 'loading' || !isOnline) return;
@@ -844,6 +986,19 @@ export default function Host({ onBack, studioQuestions = null }) {
     const value = event.target.value;
     setSelectedDeckKey(value);
 
+    if (value.startsWith('magic:')) {
+      if (!magicGeneratedDeck || magicGeneratedDeck.key !== value) {
+        setError('Magic deck not found. Generate again.');
+        setIsDeckReady(false);
+        return;
+      }
+      setSelectedDeckSource('magic');
+      setSelectedDeckCount(magicGeneratedDeck.slides.length);
+      setDeckLabel(magicGeneratedDeck.title);
+      emitSelectedDeck(magicGeneratedDeck.title, magicGeneratedDeck.source || 'magic_open_tdb', magicGeneratedDeck.slides || []);
+      return;
+    }
+
     if (value === 'studio:session') {
       setSelectedDeckSource('studio');
       const count = Array.isArray(studioQuestions) ? studioQuestions.length : 0;
@@ -888,9 +1043,9 @@ export default function Host({ onBack, studioQuestions = null }) {
         setAnswerMode((current) => current || String(res.answerMode || 'auto'));
 
         handleDeckSelection({ target: { value: selectedDeckKey } });
-        syncAnswerMode(answerMode, { requireLobby: false });
-        syncTimer(questionTimer);
-        syncDifficulty(gameDifficulty);
+        syncAnswerMode(answerMode, { requireLobby: false, forceEmit: true });
+        syncTimer(questionTimer, { forceEmit: true });
+        syncDifficulty(gameDifficulty, { forceEmit: true });
 
         if (chatMode) {
           const modePayload = { mode: chatMode, hostToken };
@@ -1293,7 +1448,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   };
 
   const syncAnswerMode = (mode, options = {}) => {
-    const { requireLobby = true } = options;
+    const { requireLobby = true, forceEmit = false } = options;
     const normalizedMode = String(mode || '').trim();
     if (!['auto', 'multiple_choice', 'type_guess'].includes(normalizedMode)) return;
     if (requireLobby && phase !== 'lobby') {
@@ -1302,7 +1457,8 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
 
     setAnswerMode(normalizedMode);
-    if (!roomId || !socketRef.current?.connected) return;
+    if (!socketRef.current?.connected) return;
+    if (!forceEmit && !roomId) return;
 
     socketRef.current.emit(
       'host:set_answer_mode',
@@ -1317,10 +1473,13 @@ export default function Host({ onBack, studioQuestions = null }) {
     );
   };
 
-  const syncTimer = (seconds) => {
-    const validSeconds = [15, 30, 60].includes(seconds) ? seconds : 30;
+  const syncTimer = (seconds, options = {}) => {
+    const { forceEmit = false } = options;
+    const numeric = Number(seconds);
+    const validSeconds = Number.isFinite(numeric) && numeric >= 5 && numeric <= 60 ? Math.round(numeric / 5) * 5 : 15;
     setQuestionTimer(validSeconds);
-    if (!roomId || !socketRef.current?.connected) return;
+    if (!socketRef.current?.connected) return;
+    if (!forceEmit && !roomId) return;
 
     socketRef.current.emit(
       'host:set_question_timer',
@@ -1335,11 +1494,13 @@ export default function Host({ onBack, studioQuestions = null }) {
     );
   };
 
-  const syncDifficulty = (level) => {
+  const syncDifficulty = (level, options = {}) => {
+    const { forceEmit = false } = options;
     const validLevels = ['Easy', 'Normal', 'Hard'];
     const normalizedLevel = validLevels.includes(level) ? level : 'Normal';
     setGameDifficulty(normalizedLevel);
-    if (!roomId || !socketRef.current?.connected) return;
+    if (!socketRef.current?.connected) return;
+    if (!forceEmit && !roomId) return;
 
     socketRef.current.emit(
       'host:set_game_difficulty',
@@ -1503,7 +1664,9 @@ export default function Host({ onBack, studioQuestions = null }) {
       setIsDeckReady(false);
       setError('');
 
-      syncAnswerMode(answerMode, { requireLobby: false });
+      syncAnswerMode(answerMode, { requireLobby: false, forceEmit: true });
+      syncTimer(questionTimer, { forceEmit: true });
+      syncDifficulty(gameDifficulty, { forceEmit: true });
 
       if (chatMode) {
         const modePayload = { mode: chatMode, hostToken };
@@ -1776,6 +1939,10 @@ export default function Host({ onBack, studioQuestions = null }) {
       answerMode={answerMode}
       setAnswerMode={setAnswerMode}
       onLaunchLobby={handleCreate}
+      onGenerateOpenTrivia={handleGenerateOpenTrivia}
+      onGenerateTMDB={handleGenerateTMDB}
+      isMagicGenerating={isMagicGenerating}
+      magicGenerateError={magicGenerateError}
     />
   );
 }

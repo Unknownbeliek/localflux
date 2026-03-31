@@ -45,6 +45,8 @@ function initLanRoom(roomName, hostId, hostSessionId = null) {
     currentQ: -1,
     answersIn: {},
     answerMode: 'auto',
+    questionTimerSeconds: 15,
+    gameDifficulty: 'Normal',
     activeSlide: null,
     chatHistory: [],
   };

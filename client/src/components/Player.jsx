@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import Chat from './Chat';
 import AnimatedBackground from './AnimatedBackground';
-import { createGameSocket } from '../backendUrl';
+import { createGameSocket, getBackendUrl } from '../backendUrl';
 import PingIndicator from './PingIndicator';
 import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
 import { resolveQuestionTiming } from '../utils/questionTiming';
@@ -80,6 +80,7 @@ function resolveImageUrl(image) {
   const trimmed = String(image).trim();
   if (!trimmed) return null;
   if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
+  if (trimmed.startsWith('/uploads/')) return `${getBackendUrl()}${trimmed}`;
   if (trimmed.includes('/')) return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
   return `/deck-images/${trimmed}`;
 }
@@ -1190,7 +1191,7 @@ export default function Player({ onBack }) {
 
   if (phase === 'answered') {
     return (
-      <div className="relative z-0 flex min-h-[100dvh] w-screen overflow-y-auto bg-slate-950 text-white animate-phase-in lg:h-screen lg:overflow-hidden">
+      <div className="relative z-0 flex min-h-[100dvh] w-screen overflow-y-auto scroll-smooth bg-slate-950 text-white animate-phase-in [scrollbar-width:none] [&::-webkit-scrollbar]:hidden lg:h-screen lg:overflow-hidden">
         <AnimatedBackground />
 
         <div className="relative z-10 flex w-full flex-1 flex-col p-4 md:p-8">

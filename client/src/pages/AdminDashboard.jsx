@@ -1,11 +1,13 @@
 import { useNavigate } from 'react-router-dom'
-import { BookOpen, ChevronLeft, ChevronRight, Gamepad2, Loader, Pencil, Trash2 } from 'lucide-react'
+import { BookOpen, ChevronLeft, ChevronRight, Gamepad2, Loader, Pencil, Sparkles, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useHostToken } from '../context/HostTokenProvider'
 import { createGameSocket, getBackendUrl } from '../backendUrl'
 import { deckStudioDB } from '../deckStudio/db'
 import { fetchCloudDecks, downloadDeckToLocal } from '../deckStudio/cloudCatalog'
 import ConfirmActionModal from '../components/ConfirmActionModal'
+import MagicGenerateModal from '../components/host/MagicGenerateModal'
+import OpeningSequence from '../components/OpeningSequence'
 
 const LIBRARY_GRADIENTS = [
   'from-emerald-400 to-blue-500',
@@ -16,8 +18,10 @@ const LIBRARY_GRADIENTS = [
 ]
 
 
-function DeckCard({ deck, index, buttonLabel, onAction }) {
+function DeckCard({ deck, index, buttonLabel, onAction, isHighlighted = false }) {
   const gradient = LIBRARY_GRADIENTS[index % LIBRARY_GRADIENTS.length]
+  const title = String(deck?.title || deck?.name || '').trim() || 'Untitled Deck'
+  const thumbnailImage = String(deck?.thumbnailImage || '').trim()
   const questionCount =
     typeof deck?.questionCount === 'number'
       ? deck.questionCount
@@ -28,13 +32,27 @@ function DeckCard({ deck, index, buttonLabel, onAction }) {
           : 0
 
   return (
-    <article className="group snap-start min-w-[260px] max-w-[260px] rounded-2xl border border-slate-700 bg-slate-900/70 p-3 transition-all duration-200 hover:-translate-y-1 hover:border-slate-500 hover:shadow-xl hover:shadow-black/35">
-      <div className={`h-28 rounded-xl bg-gradient-to-br ${gradient} p-3`}> 
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80">Deck</p>
-        <p className="mt-3 line-clamp-2 text-lg font-black tracking-tight text-white">{deck?.title || 'Untitled Deck'}</p>
-      </div>
+    <article
+      className={`group snap-start min-w-[260px] max-w-[260px] rounded-2xl border bg-slate-900/70 p-3 transition-all duration-200 hover:-translate-y-1 hover:shadow-xl hover:shadow-black/35 ${
+        isHighlighted
+          ? 'border-emerald-300 shadow-[0_0_0_2px_rgba(110,231,183,0.45)]'
+          : 'border-slate-700 hover:border-slate-500'
+      }`}
+    >
+      {thumbnailImage ? (
+        <div className="relative h-28 overflow-hidden rounded-xl border border-white/10 bg-slate-900/70">
+          <img src={thumbnailImage} alt={`${title} thumbnail`} className="h-full w-full object-cover" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
+          <p className="absolute left-2 top-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/85">Deck</p>
+        </div>
+      ) : (
+        <div className={`h-28 rounded-xl bg-gradient-to-br ${gradient} p-3`}>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/80">Deck</p>
+          <p className="mt-3 line-clamp-2 text-lg font-black tracking-tight text-white">{title}</p>
+        </div>
+      )}
       <div className="mt-3">
-        <p className="truncate text-sm font-semibold text-slate-100">{deck?.title || 'Untitled Deck'}</p>
+        <p className="truncate text-sm font-semibold text-slate-100">{title}</p>
         <p className="mt-1 text-xs text-slate-400">{questionCount} questions</p>
       </div>
       <button
@@ -65,6 +83,21 @@ export default function AdminDashboard() {
   const [isDeleteDraftModalOpen, setIsDeleteDraftModalOpen] = useState(false)
   const [deleteDraftConfirmChecked, setDeleteDraftConfirmChecked] = useState(false)
   const [deleteDraftTargetId, setDeleteDraftTargetId] = useState('')
+  const [isMagicModalOpen, setIsMagicModalOpen] = useState(false)
+  const [isMagicGenerating, setIsMagicGenerating] = useState(false)
+  const [magicGenerateError, setMagicGenerateError] = useState('')
+  const [magicProgress, setMagicProgress] = useState(0)
+  const [magicProgressText, setMagicProgressText] = useState('')
+  const [magicProgressSource, setMagicProgressSource] = useState('')
+  const [statusMessage, setStatusMessage] = useState('')
+  const [showAllDrafts, setShowAllDrafts] = useState(false)
+  const [cloudComingSoon, setCloudComingSoon] = useState(false)
+  const [recentLibraryDeckKey, setRecentLibraryDeckKey] = useState('')
+  const [isLaunchGeneratedModalOpen, setIsLaunchGeneratedModalOpen] = useState(false)
+  const [launchGeneratedConfirmChecked, setLaunchGeneratedConfirmChecked] = useState(false)
+  const [pendingLaunchDeckKey, setPendingLaunchDeckKey] = useState('')
+  const [pendingLaunchDeckTitle, setPendingLaunchDeckTitle] = useState('')
+  const [pendingLaunchDeckQuestionCount, setPendingLaunchDeckQuestionCount] = useState(0)
   const libraryScrollRef = useRef(null)
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
@@ -147,17 +180,75 @@ export default function AdminDashboard() {
     const hasCorrectAnswer =
       String(question?.correctAnswer || '').trim().length > 0 ||
       String(question?.correct_answer || '').trim().length > 0 ||
-      String(question?.correct || '').trim().length > 0
+      String(question?.correct || '').trim().length > 0 ||
+      Number.isInteger(Number(question?.correctIndex))
 
     return options.length === 4 && hasCorrectAnswer
   }
 
-  const validatedLibraryDecks = useMemo(() => {
+  const isStudioSlideValid = (slide) => {
+    const options = Array.isArray(slide?.options) ? slide.options : []
+    const index = Number(slide?.correctIndex)
+    return options.length === 4 && Number.isInteger(index) && index >= 0 && index < 4
+  }
+
+  const validatedPublishedDecks = useMemo(() => {
     return publishedDecks.filter((deck) => {
       const questions = Array.isArray(deck?.questions) ? deck.questions : []
       return questions.length > 0 && questions.every((q) => isQuestionValid(q))
     })
   }, [publishedDecks])
+
+  const localPlayableDecks = useMemo(() => {
+    const resolveThumbnail = (raw) => {
+      const value = String(raw || '').trim()
+      if (!value) return ''
+      if (value.startsWith('http://') || value.startsWith('https://')) return value
+      if (value.startsWith('/uploads/')) return `${getBackendUrl()}${value}`
+      if (value.includes('/')) return value.startsWith('/') ? value : `/${value}`
+      return ''
+    }
+
+    return localDrafts
+      .filter((deck) => {
+        const slides = Array.isArray(deck?.slides) ? deck.slides : []
+        return slides.length > 0 && slides.every((slide) => isStudioSlideValid(slide))
+      })
+      .map((deck) => ({
+        ...deck,
+        questionCount: Array.isArray(deck?.slides) ? deck.slides.length : 0,
+        deckKey: `studio:${deck.id}`,
+        thumbnailImage: resolveThumbnail((deck?.slides || []).find((slide) => String(slide?.image || '').trim())?.image),
+      }))
+  }, [localDrafts])
+
+  const validatedLibraryDecks = useMemo(() => {
+    const resolveThumbnail = (raw) => {
+      const value = String(raw || '').trim()
+      if (!value) return ''
+      if (value.startsWith('http://') || value.startsWith('https://')) return value
+      if (value.startsWith('/uploads/')) return `${getBackendUrl()}${value}`
+      if (value.includes('/')) return value.startsWith('/') ? value : `/${value}`
+      return ''
+    }
+
+    const published = validatedPublishedDecks.map((deck) => ({
+      ...deck,
+      title: String(deck?.name || deck?.title || '').trim() || 'Untitled Deck',
+      questionCount: Number(deck?.count || 0),
+      deckKey: `server:${deck.file}`,
+      thumbnailImage: resolveThumbnail(
+        (deck?.questions || []).find((q) => String(q?.image || q?.asset_ref || '').trim())?.image ||
+          (deck?.questions || []).find((q) => String(q?.image || q?.asset_ref || '').trim())?.asset_ref
+      ),
+    }))
+    return [...localPlayableDecks, ...published]
+  }, [localPlayableDecks, validatedPublishedDecks])
+
+  const visibleDrafts = useMemo(() => {
+    if (showAllDrafts) return localDrafts
+    return localDrafts.slice(0, 6)
+  }, [localDrafts, showAllDrafts])
 
   const scrollLibraryLeft = () => {
     if (!libraryScrollRef.current) return
@@ -208,6 +299,48 @@ export default function AdminDashboard() {
       window.removeEventListener('offline', handleOffline)
     }
   }, [])
+
+  useEffect(() => {
+    if (!isMagicGenerating) {
+      setMagicProgress(0)
+      setMagicProgressText('')
+      setMagicProgressSource('')
+      return
+    }
+
+    const isTmdb = magicProgressSource === 'tmdb'
+    const cap = isTmdb ? 94 : 92
+    const tickMs = isTmdb ? 700 : 500
+
+    setMagicProgress(6)
+    setMagicProgressText('Connecting to provider...')
+
+    const timer = window.setInterval(() => {
+      setMagicProgress((prev) => {
+        if (prev >= cap) return prev
+
+        const remaining = cap - prev
+        const step = remaining > 30 ? 5 : remaining > 14 ? 3 : 1
+        const next = Math.min(cap, prev + step)
+
+        if (next < 35) {
+          setMagicProgressText('Fetching fresh questions...')
+        } else if (next < 70) {
+          setMagicProgressText('Building deck slides...')
+        } else if (next < 90) {
+          setMagicProgressText('Saving images and metadata...')
+        } else {
+          setMagicProgressText('Finalizing your deck...')
+        }
+
+        return next
+      })
+    }, tickMs)
+
+    return () => {
+      window.clearInterval(timer)
+    }
+  }, [isMagicGenerating, magicProgressSource])
 
   const requestHostToken = async () => {
     const socket = createGameSocket()
@@ -328,8 +461,8 @@ export default function AdminDashboard() {
     }
   }
 
-  const handleHostDeck = async (deckId) => {
-    if (!deckId) return
+  const handleHostDeck = async (deckKey) => {
+    if (!deckKey) return
 
     setIsGeneratingToken(true)
     setTokenError('')
@@ -337,7 +470,7 @@ export default function AdminDashboard() {
     try {
       const tokenRes = await requestHostToken()
       setHostToken(tokenRes.token, tokenRes.ttlMs)
-      navigate(`/host?token=${encodeURIComponent(tokenRes.token)}&deckId=${encodeURIComponent(deckId)}`)
+      navigate(`/host?token=${encodeURIComponent(tokenRes.token)}&deckKey=${encodeURIComponent(deckKey)}`)
     } catch (err) {
       console.error('[AdminDashboard] Host deck token error:', err)
       setTokenError(err.message || 'Failed to host selected deck. Try again.')
@@ -345,26 +478,45 @@ export default function AdminDashboard() {
     }
   }
 
+  const focusRecentLibraryDeck = useCallback((deckKey) => {
+    if (!deckKey) return
+    setRecentLibraryDeckKey(deckKey)
+    window.requestAnimationFrame(() => {
+      if (!libraryScrollRef.current) return
+      libraryScrollRef.current.scrollTo({ left: 0, behavior: 'smooth' })
+      checkForScrollPosition()
+    })
+  }, [checkForScrollPosition])
+
+  const queueLaunchPromptForDeck = (deckKey, deckTitle, questionCount = 0) => {
+    if (!deckKey) return
+    setPendingLaunchDeckKey(deckKey)
+    setPendingLaunchDeckTitle(deckTitle)
+    setPendingLaunchDeckQuestionCount(Number(questionCount) || 0)
+    setLaunchGeneratedConfirmChecked(false)
+    setIsLaunchGeneratedModalOpen(true)
+  }
+
+  const closeLaunchGeneratedModal = () => {
+    setIsLaunchGeneratedModalOpen(false)
+    setLaunchGeneratedConfirmChecked(false)
+    setPendingLaunchDeckKey('')
+    setPendingLaunchDeckTitle('')
+    setPendingLaunchDeckQuestionCount(0)
+  }
+
+  const confirmLaunchGeneratedDeck = async () => {
+    if (!launchGeneratedConfirmChecked || !pendingLaunchDeckKey) return
+    const deckKey = pendingLaunchDeckKey
+    closeLaunchGeneratedModal()
+    await handleHostDeck(deckKey)
+  }
+
   const handleLoadCloudDecks = async () => {
     if (!isOnline || isLoadingCloud) return
-
-    setIsLoadingCloud(true)
-    setCloudError('')
-
-    try {
-      const fetchedDecks = await fetchCloudDecks()
-      setCloudDecks((prev) => {
-        const byId = new Map(prev.map((deck) => [deck.id, deck]))
-        fetchedDecks.forEach((deck) => byId.set(deck.id, deck))
-        return Array.from(byId.values())
-      })
-      setHasFetchedCloud(true)
-    } catch {
-      setCloudError('Failed to reach cloud catalog.')
-      setHasFetchedCloud(true)
-    } finally {
-      setIsLoadingCloud(false)
-    }
+    setCloudComingSoon(true)
+    setCloudError('Cloud catalog is coming soon.')
+    setHasFetchedCloud(true)
   }
 
   const handleDownloadAndHost = async (cloudDeck) => {
@@ -383,7 +535,7 @@ export default function AdminDashboard() {
 
       const tokenRes = await requestHostToken()
       setHostToken(tokenRes.token, tokenRes.ttlMs)
-      navigate(`/host?token=${encodeURIComponent(tokenRes.token)}&deckId=${encodeURIComponent(savedDeck.id)}`)
+      navigate(`/host?token=${encodeURIComponent(tokenRes.token)}&deckKey=${encodeURIComponent(`studio:${savedDeck.id}`)}`)
     } catch (err) {
       console.error('[AdminDashboard] Download and host error:', err)
       setTokenError(err.message || 'Failed to download and host cloud deck. Try again.')
@@ -393,8 +545,134 @@ export default function AdminDashboard() {
     }
   }
 
+  const createMagicDeckId = () => {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) return `magic_${crypto.randomUUID()}`
+    return `magic_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  }
+
+  const handleGenerateOpenTrivia = async ({ amount, categoryId }) => {
+    if (!isOnline) {
+      const message = 'No internet connection. Connect to internet before generating a deck.'
+      setMagicGenerateError(message)
+      setTokenError(message)
+      return
+    }
+
+    setIsMagicGenerating(true)
+    setMagicProgressSource('open_trivia')
+    setMagicProgress(8)
+    setMagicProgressText('Connecting to Open Trivia...')
+    setMagicGenerateError('')
+    setTokenError('')
+    setStatusMessage('')
+
+    try {
+      const params = new URLSearchParams({ amount: String(amount || 10) })
+      if (categoryId) params.set('categoryId', String(categoryId))
+
+      const response = await fetch(`${getBackendUrl()}/api/magic/open-trivia?${params.toString()}`)
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.slides)) {
+        throw new Error(payload?.error || 'Magic generation failed.')
+      }
+
+      const magicDraft = {
+        id: createMagicDeckId(),
+        title: payload.title || `Open Trivia (${payload.slides.length} Questions)`,
+        version: '1.0.0',
+        slides: payload.slides,
+        updatedAt: Date.now(),
+      }
+
+      await deckStudioDB.drafts.put(magicDraft)
+      setMagicProgress(100)
+      setMagicProgressText('Deck ready!')
+      setLocalDrafts((prev) => {
+        const remaining = prev.filter((deck) => deck.id !== magicDraft.id)
+        return [magicDraft, ...remaining]
+      })
+
+      setIsMagicModalOpen(false)
+      const deckKey = `studio:${magicDraft.id}`
+      focusRecentLibraryDeck(deckKey)
+      setStatusMessage(`Deck created: ${magicDraft.title}. You can see it in Library. Scrolled to the most recent deck.`)
+      queueLaunchPromptForDeck(deckKey, magicDraft.title, magicDraft.slides.length)
+    } catch (err) {
+      const message = err?.message || 'Failed to generate deck from Open Trivia.'
+      setMagicGenerateError(message)
+      setTokenError(message)
+    } finally {
+      setIsMagicGenerating(false)
+    }
+  }
+
+  const handleGenerateTMDB = async ({ amount, apiKey, genreId = null }) => {
+    if (!isOnline) {
+      const message = 'No internet connection. Connect to internet before generating a deck.'
+      setMagicGenerateError(message)
+      setTokenError(message)
+      return
+    }
+
+    setIsMagicGenerating(true)
+    setMagicProgressSource('tmdb')
+    setMagicProgress(8)
+    setMagicProgressText('Connecting to TMDB...')
+    setMagicGenerateError('')
+    setTokenError('')
+    setStatusMessage('')
+
+    try {
+      const response = await fetch(`${getBackendUrl()}/api/magic/tmdb`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          amount: Number(amount || 10),
+          apiKey: String(apiKey || '').trim(),
+          genreId: genreId == null || genreId === '' ? null : Number(genreId),
+        }),
+      })
+      const payload = await response.json()
+
+      if (!response.ok || !payload?.ok || !Array.isArray(payload?.slides)) {
+        throw new Error(payload?.error || 'TMDB generation failed.')
+      }
+
+      const magicDraft = {
+        id: createMagicDeckId(),
+        title: payload.title || `TMDB Movies (${payload.slides.length} Questions)`,
+        version: '1.0.0',
+        slides: payload.slides,
+        updatedAt: Date.now(),
+      }
+
+      await deckStudioDB.drafts.put(magicDraft)
+      setMagicProgress(100)
+      setMagicProgressText('Deck ready!')
+      setLocalDrafts((prev) => {
+        const remaining = prev.filter((deck) => deck.id !== magicDraft.id)
+        return [magicDraft, ...remaining]
+      })
+
+      setIsMagicModalOpen(false)
+      const deckKey = `studio:${magicDraft.id}`
+      focusRecentLibraryDeck(deckKey)
+      setStatusMessage(`Deck created: ${magicDraft.title}. You can see it in Library. Scrolled to the most recent deck.`)
+      queueLaunchPromptForDeck(deckKey, magicDraft.title, magicDraft.slides.length)
+    } catch (err) {
+      const message = err?.message || 'Failed to generate TMDB movie deck.'
+      setMagicGenerateError(message)
+      setTokenError(message)
+    } finally {
+      setIsMagicGenerating(false)
+    }
+  }
+
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-center p-6 select-none">
+    <div className="relative h-screen w-full overflow-y-auto overflow-x-hidden scroll-smooth scrollbar-hide bg-slate-950 text-white flex flex-col items-center justify-start box-border p-6 select-none">
       {/* ── Animated Background ── */}
       <div className="animated-bg">
         {/* Floating gradient orbs */}
@@ -427,7 +705,10 @@ export default function AdminDashboard() {
         {/* Header */}
         <div className="mb-8">
           <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.5em] text-emerald-400">Local Multiplayer Quiz</p>
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight title-glow">LocalFlux</h1>
+          <OpeningSequence
+            className="text-5xl md:text-7xl"
+            baseClassName="font-black tracking-tight title-glow"
+          />
           <p className="mt-3 max-w-2xl text-slate-300 text-sm md:text-base">
             Start a room in seconds, pick a deck from your library, and run a polished couch-multiplayer quiz night.
           </p>
@@ -462,8 +743,15 @@ export default function AdminDashboard() {
             <div className="mb-4 inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 p-2.5 text-amber-300">
               <BookOpen className="h-5 w-5" strokeWidth={2} />
             </div>
-            <h3 className="text-2xl font-black tracking-tight text-amber-100">Creation Hub</h3>
-            <p className="mt-2 text-sm text-slate-300">Build and iterate on decks before publishing them for game night.</p>
+            <h3 className="text-2xl font-black tracking-tight text-amber-100">Creation + Dynamic Hub</h3>
+            <p className="mt-2 text-sm text-slate-300">Build decks manually or generate instantly from APIs in one place.</p>
+            <button
+              onClick={() => setIsMagicModalOpen(true)}
+              disabled={isGeneratingToken || isMagicGenerating}
+              className="mt-4 w-full rounded-xl border border-violet-300/40 bg-violet-400/15 px-4 py-3 text-sm font-black text-violet-100 transition hover:bg-violet-400/25 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isMagicGenerating ? 'Generating...' : 'Magic Generate'}
+            </button>
             <button
               onClick={handleCreateNewDeck}
               disabled={isGeneratingToken}
@@ -486,7 +774,7 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {localDrafts.map((draft, index) => (
+              {visibleDrafts.map((draft, index) => (
                 <article
                   key={draft.id || `draft_${index}`}
                   className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 transition-all hover:border-slate-500 hover:shadow-lg hover:shadow-black/30"
@@ -515,6 +803,17 @@ export default function AdminDashboard() {
                   </div>
                 </article>
               ))}
+            </div>
+          )}
+
+          {localDrafts.length > 6 && (
+            <div className="mt-4">
+              <button
+                onClick={() => setShowAllDrafts((prev) => !prev)}
+                className="rounded-xl border border-slate-600 bg-slate-900/70 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-800"
+              >
+                {showAllDrafts ? 'Show Less Drafts' : `See More Drafts (${localDrafts.length - 6} more)`}
+              </button>
             </div>
           )}
         </section>
@@ -575,8 +874,9 @@ export default function AdminDashboard() {
                     key={deck.file || deck.id || `${deck.title}_${index}`}
                     deck={deck}
                     index={index}
+                    isHighlighted={deck.deckKey === recentLibraryDeckKey}
                     buttonLabel="Host This"
-                    onAction={() => handleHostDeck(deck.file || deck.id)}
+                    onAction={() => handleHostDeck(deck.deckKey)}
                   />
                 ))}
               </div>
@@ -599,6 +899,12 @@ export default function AdminDashboard() {
               {isLoadingCloud && <Loader className="h-4 w-4 animate-spin" strokeWidth={2} />}
               {isLoadingCloud ? 'Loading Cloud Decks...' : '☁️ Load More from Cloud'}
             </button>
+          )}
+
+          {cloudComingSoon && (
+            <div className="mb-4 rounded-xl border border-amber-400/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+              Cloud catalog expansion is coming soon.
+            </div>
           )}
 
           {!isOnline && (
@@ -641,12 +947,12 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Optional: Info section */}
-        <div className="mt-12 rounded-2xl border border-slate-700/50 bg-slate-900/30 p-6 backdrop-blur-sm">
-          <p className="text-center text-sm text-slate-400">
-            Players can join via <span className="font-semibold text-slate-300">/play</span> once a game is hosting.
-          </p>
-        </div>
+        {statusMessage && (
+          <div className="mt-6 rounded-lg border border-emerald-400/45 bg-emerald-900/20 p-4 backdrop-blur-sm">
+            <p className="text-center text-sm text-emerald-200">{statusMessage}</p>
+          </div>
+        )}
+
       </div>
 
       <ConfirmActionModal
@@ -663,6 +969,31 @@ export default function AdminDashboard() {
         }}
         onConfirm={confirmDeleteDraft}
         confirmLabel="Delete Draft"
+      />
+
+      <MagicGenerateModal
+        open={isMagicModalOpen}
+        onClose={() => setIsMagicModalOpen(false)}
+        onGenerateOpenTrivia={handleGenerateOpenTrivia}
+        onGenerateTMDB={handleGenerateTMDB}
+        isGenerating={isMagicGenerating}
+        errorMessage={magicGenerateError}
+        isOnline={isOnline}
+        generationProgress={magicProgress}
+        generationStatusText={magicProgressText}
+      />
+
+      <ConfirmActionModal
+        open={isLaunchGeneratedModalOpen}
+        title="Deck Created Successfully"
+        message={`"${pendingLaunchDeckTitle || 'This deck'}" has been created with ${pendingLaunchDeckQuestionCount || 0} question${pendingLaunchDeckQuestionCount === 1 ? '' : 's'}. It is now available in your Library.`}
+        checkboxLabel="Launch this new deck now and open the host screen."
+        checked={launchGeneratedConfirmChecked}
+        onCheckedChange={setLaunchGeneratedConfirmChecked}
+        onCancel={closeLaunchGeneratedModal}
+        onConfirm={confirmLaunchGeneratedDeck}
+        confirmLabel="Launch Deck"
+        variant="success"
       />
     </div>
   )
