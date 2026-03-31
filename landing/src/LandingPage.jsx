@@ -6,6 +6,7 @@ import HowItWorks from "./components/HowItWorks";
 import Footer from "./components/Footer";
 import { DynamicBackground } from "./components/DynamicBackground";
 import { LightBackground } from "./components/LightBackground";
+import LightModeBackground from "./components/ui/LightModeBackground";
 import Contributors from "./components/Contributors";
 import { useTheme } from "./hooks/useTheme";
 
@@ -744,9 +745,16 @@ export default function LocalFluxSections() {
 
   return (
     <div className="min-h-screen relative font-geist transition-colors duration-300 text-slate-900 dark:text-white">
-      {isDark && !isMobile ? <DynamicBackground /> : <LightBackground darkMode={isDark} />}
+      {isDark ? (
+        isMobile ? <LightBackground darkMode={isDark} /> : <DynamicBackground />
+      ) : (
+        <>
+          <div className="absolute inset-0 z-0 bg-gradient-to-b from-white via-slate-50 to-slate-100" />
+          <LightModeBackground />
+        </>
+      )}
 
-      <div style={{ position: "relative", zIndex: 1 }}>
+      <div className="relative z-10">
         <GlobalStyles />
 
         <Navigation />

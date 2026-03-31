@@ -10,7 +10,7 @@ export default function ContributorCard({ contributor, index }) {
       whileInView={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.4 }}
       whileHover={{ y: -4 }}
-      className="group relative rounded-lg border border-slate-300 dark:border-white/10 bg-white/80 dark:bg-white/[0.03] p-4 backdrop-blur-sm transition-[background-color,border-color,transform,color] duration-300 hover:border-emerald-500/40 dark:hover:border-emerald-400/30 hover:bg-white"
+      className="group relative rounded-lg border border-slate-300 dark:border-white/10 bg-white/80 dark:bg-white/[0.03] p-4 backdrop-blur-sm transition-[background-color,border-color,transform,color] duration-300 hover:border-emerald-500/40 dark:hover:border-emerald-400/30 hover:bg-slate-100 dark:hover:bg-white/[0.06]"
     >
       {/* avatar */}
       <div className="relative w-12 h-12 rounded-full overflow-hidden mb-3 mx-auto border border-slate-300 dark:border-white/20 transition-colors duration-300">
