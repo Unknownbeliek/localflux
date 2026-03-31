@@ -30,6 +30,9 @@ const DEFAULT_ALLOWED = [
 class ChatManager {
   constructor(io, opts = {}) {
     this.io = io;
+    this.defaultRoomPin = typeof opts.defaultRoomPin === 'string' && opts.defaultRoomPin.trim()
+      ? opts.defaultRoomPin.trim()
+      : null;
     this.mode = opts.mode || 'RESTRICTED'; // FREE | RESTRICTED | OFF
     this.allowed = opts.allowedMessages || DEFAULT_ALLOWED;
     this.rateMap = new Map(); // socketId -> { tokens, last }
@@ -43,8 +46,8 @@ class ChatManager {
     this.GC_INTERVAL_MS = 60_000;
     this.STALE_MS = 10 * 60_000; // 10 minutes
 
-    this.freeSchema = z.object({ roomPin: z.string(), text: z.string().min(1).max(300) });
-    this.preSchema = z.object({ roomPin: z.string(), id: z.string() });
+    this.freeSchema = z.object({ roomPin: z.string().optional(), text: z.string().min(1).max(300) });
+    this.preSchema = z.object({ roomPin: z.string().optional(), id: z.string() });
 
     // per-IP throttling
     this.ipMap = new Map(); // ip -> { count, windowStart }
@@ -130,6 +133,12 @@ class ChatManager {
     }
   }
 
+  resolveRoomPin(roomPin) {
+    const value = String(roomPin || '').trim();
+    if (value) return value;
+    return this.defaultRoomPin;
+  }
+
   handleFreeMessage(socket, payload, ack) {
     // check global mute
     if (this.isMuted(socket.id)) return ack?.({ ok: false, reason: 'muted' });
@@ -139,6 +148,8 @@ class ChatManager {
 
     const valid = this.freeSchema.safeParse(payload);
     if (!valid.success) return ack?.({ ok: false, reason: 'invalid_payload' });
+    const roomPin = this.resolveRoomPin(valid.data.roomPin);
+    if (!roomPin) return ack?.({ ok: false, reason: 'invalid_payload' });
     if (!this.allowSend(socket.id)) return ack?.({ ok: false, reason: 'rate_limited' });
     const clean = this.sanitizeText(valid.data.text);
     if (!clean) {
@@ -153,8 +164,8 @@ class ChatManager {
     }
     const msg = { from: socket.id, name: socket.playerName || 'Player', text: clean, ts: Date.now() };
     this.writeLog({ action: 'message', socket: socket.id, ip: socket?.handshake?.address || 'unknown', text: clean, ts: Date.now() });
-    if (this.onMessage) this.onMessage(valid.data.roomPin, msg);
-    this.io.to(valid.data.roomPin).emit('chat:message', msg);
+    if (this.onMessage) this.onMessage(roomPin, msg);
+    this.io.to(roomPin).emit('chat:message', msg);
     ack?.({ ok: true });
   }
 
@@ -164,13 +175,15 @@ class ChatManager {
 
     const valid = this.preSchema.safeParse(payload);
     if (!valid.success) return ack?.({ ok: false, reason: 'invalid' });
+    const roomPin = this.resolveRoomPin(valid.data.roomPin);
+    if (!roomPin) return ack?.({ ok: false, reason: 'invalid' });
     if (this.mode !== 'RESTRICTED') return ack?.({ ok: false, reason: 'wrong_mode' });
     const allowed = this.allowed.find((a) => a.id === valid.data.id);
     if (!allowed) return ack?.({ ok: false, reason: 'not_allowed' });
     const msg = { from: socket.id, name: socket.playerName || 'Player', text: allowed.text, cannedId: allowed.id, ts: Date.now() };
     this.writeLog({ action: 'canned_message', socket: socket.id, id: allowed.id, ts: Date.now() });
-    if (this.onMessage) this.onMessage(valid.data.roomPin, msg);
-    this.io.to(valid.data.roomPin).emit('chat:message', msg);
+    if (this.onMessage) this.onMessage(roomPin, msg);
+    this.io.to(roomPin).emit('chat:message', msg);
     ack?.({ ok: true });
   }
 

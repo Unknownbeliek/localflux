@@ -51,6 +51,7 @@ export default function HostQuestionView({
   gameModeLabels,
   syncGameMode,
 }) {
+  void gameModeLabels;
   const roomGameMode = chatMode === 'RESTRICTED' ? 'guided' : 'open';
   const timerProgress = timeTotal > 0 ? Math.max(0, Math.round((timeLeft / timeTotal) * 100)) : 0;
   const [announcementText, setAnnouncementText] = useState('');

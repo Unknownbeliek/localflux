@@ -187,6 +187,14 @@ describe('submitAnswer()', () => {
     const res = submitAnswer(room, SLIDES, 'p1', 'Nolan');
     expect(res.answerCount).toBe(0);
   });
+
+  test('ignores answers from sockets that are not room players', () => {
+    const room = startedRoom();
+    const res = submitAnswer(room, SLIDES, 'unknown-socket', 'Nolan');
+    expect(res.notPlayer).toBe(true);
+    expect(res.answerCount).toBe(0);
+    expect(room.answersIn).toEqual({});
+  });
 });
 
 // ── advanceQuestion ───────────────────────────────────────────────────────────

@@ -22,8 +22,10 @@ const crypto = require('crypto');
 
 const { loadDeck, DEFAULT_DECK_PATH } = require('./core/deckLoader');
 const { fetchOpenTDBDeck, fetchTMDBMovieDeck } = require('./core/apiAdapters');
+const { buildDeckSummary, buildDeckDetail } = require('./core/deckApiShape');
 const { registerHandlers } = require('./network/handlers');
 const { HostTokenManager } = require('./core/hostTokenManager');
+const { getRoom } = require('./core/roomStore');
 
 const PORT = Number(process.env.PORT || 3000);
 const CLIENT_PORT = Number(process.env.CLIENT_PORT || 5173);
@@ -71,6 +73,41 @@ const tokenManager = new HostTokenManager({
   cleanupInterval: 60 * 1000, // cleanup every minute
 });
 
+function isLoopbackAddress(value) {
+  const ip = String(value || '').trim();
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+function getRequestIp(req) {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+  return req.ip || req.socket?.remoteAddress || '';
+}
+
+function readHostAuth(req) {
+  const hostSocketId = String(req.headers['x-host-socket-id'] || req.query.hostId || '').trim();
+  const hostToken = String(req.headers['x-host-token'] || req.query.hostToken || '').trim();
+  return { hostSocketId, hostToken };
+}
+
+function isAuthorizedHostHttpRequest(req, { allowLoopback = false } = {}) {
+  const { hostSocketId, hostToken } = readHostAuth(req);
+  const room = getRoom();
+
+  if (room && hostSocketId && hostToken && hostSocketId === room.hostId) {
+    const tokenCheck = tokenManager.validateTokenDetailed(hostToken, hostSocketId);
+    if (tokenCheck.valid) return true;
+  }
+
+  if (allowLoopback && isLoopbackAddress(getRequestIp(req))) {
+    return true;
+  }
+
+  return false;
+}
+
 //  Socket connections 
 
 io.on('connection', (socket) => {
@@ -81,6 +118,10 @@ io.on('connection', (socket) => {
 //  API endpoints
 
 app.post('/api/upload', express.raw({ type: 'image/webp', limit: '10mb' }), (req, res) => {
+  if (!isAuthorizedHostHttpRequest(req, { allowLoopback: true })) {
+    return res.status(403).json({ error: 'Unauthorized upload request.' });
+  }
+
   if (!req.body || !Buffer.isBuffer(req.body)) {
     return res.status(400).json({ error: 'No valid image buffer received' });
   }
@@ -109,11 +150,7 @@ app.get('/api/decks', (req, res) => {
     .map(f => {
       try {
         const data = JSON.parse(fs.readFileSync(path.join(decksDir, f), 'utf8'));
-        return {
-          name: f.replace('.json', ''),
-          file: f,
-          count: Array.isArray(data.questions) ? data.questions.length : 0
-        };
+        return buildDeckSummary(f, data);
       } catch (e) {
         console.error(`[Deck] Error reading ${f}:`, e.message);
         return null;
@@ -140,16 +177,13 @@ app.get('/api/decks/:file', (req, res) => {
 
   try {
     const data = JSON.parse(fs.readFileSync(deckPath, 'utf8'));
-    if (!Array.isArray(data.questions)) {
+    const detail = buildDeckDetail(requested, data);
+
+    if (!detail) {
       return res.status(422).json({ error: 'Deck format invalid.' });
     }
 
-    return res.json({
-      name: requested.replace('.json', ''),
-      file: requested,
-      count: data.questions.length,
-      questions: data.questions,
-    });
+    return res.json(detail);
   } catch (error) {
     console.error(`[Deck] Error reading ${requested}:`, error.message);
     return res.status(500).json({ error: 'Failed to read deck file.' });
@@ -159,11 +193,14 @@ app.get('/api/decks/:file', (req, res) => {
 //  Log downloading endpoint
 
 app.get('/logs/chat', (req, res) => {
-  const hostSocketId = req.query.hostId; // host must pass socket id for verification
+  const { hostSocketId } = readHostAuth(req);
   if (!hostSocketId) return res.status(400).send('hostId required');
-  const room = require('./core/roomStore').getRoom();
+  const room = getRoom();
   if (!room) return res.status(404).send('room not found');
   if (room.hostId !== hostSocketId) return res.status(403).send('only host');
+  if (!isAuthorizedHostHttpRequest(req, { allowLoopback: false })) {
+    return res.status(403).send('unauthorized');
+  }
   const logPath = path.resolve(process.cwd(), 'logs', 'chat.log');
   if (!fs.existsSync(logPath)) return res.status(404).send('no logs');
   res.download(logPath, 'chat.log');

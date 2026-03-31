@@ -1,5 +1,5 @@
 import { Sparkles, X } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 const OPEN_TDB_CATEGORIES = [
   { id: '', label: 'Any Category' },
@@ -62,6 +62,26 @@ const clampProgress = (value) => {
   return Math.max(0, Math.min(100, Math.round(numeric)));
 };
 
+const getStoredRememberFlag = () => {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.localStorage.getItem(TMDB_API_KEY_REMEMBER_KEY) === '1';
+  } catch {
+    return false;
+  }
+};
+
+const getStoredTmdbApiKey = () => {
+  if (typeof window === 'undefined') return '';
+  try {
+    const shouldRemember = window.localStorage.getItem(TMDB_API_KEY_REMEMBER_KEY) === '1';
+    if (!shouldRemember) return '';
+    return String(window.localStorage.getItem(TMDB_API_KEY_STORAGE_KEY) || '');
+  } catch {
+    return '';
+  }
+};
+
 export default function MagicGenerateModal({
   open,
   onClose,
@@ -77,27 +97,11 @@ export default function MagicGenerateModal({
   const [categoryId, setCategoryId] = useState('');
   const [categoryQuery, setCategoryQuery] = useState('');
   const [questionCount, setQuestionCount] = useState(10);
-  const [tmdbApiKey, setTmdbApiKey] = useState('');
-  const [rememberTmdbApiKey, setRememberTmdbApiKey] = useState(false);
+  const [tmdbApiKey, setTmdbApiKey] = useState(() => getStoredTmdbApiKey());
+  const [rememberTmdbApiKey, setRememberTmdbApiKey] = useState(() => getStoredRememberFlag());
   const [tmdbQuestionCount, setTmdbQuestionCount] = useState(10);
   const [tmdbGenreId, setTmdbGenreId] = useState('');
   const [tmdbGenreQuery, setTmdbGenreQuery] = useState('');
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-
-    try {
-      const shouldRemember = window.localStorage.getItem(TMDB_API_KEY_REMEMBER_KEY) === '1';
-      const savedKey = window.localStorage.getItem(TMDB_API_KEY_STORAGE_KEY) || '';
-
-      setRememberTmdbApiKey(shouldRemember);
-      if (shouldRemember && savedKey.trim()) {
-        setTmdbApiKey(savedKey);
-      }
-    } catch {
-      // Ignore local storage read errors.
-    }
-  }, []);
 
   const tabs = useMemo(
     () => [

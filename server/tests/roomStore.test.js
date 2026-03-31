@@ -3,7 +3,7 @@
  *
  * Unit tests for server/core/roomStore.js (single LAN room model)
  *
- * Each test clears the rooms map before running to ensure isolation.
+ * Each test clears the room before running to ensure isolation.
  */
 
 'use strict';
@@ -12,7 +12,7 @@ const store = require('../core/roomStore');
 
 // Reset the rooms store before every test
 beforeEach(() => {
-  delete store.rooms[store.LAN_ROOM_ID];
+  store.deleteRoom();
 });
 
 // ── initLanRoom ──────────────────────────────────────────────────────────────
@@ -92,7 +92,7 @@ describe('addPlayer()', () => {
   });
 
   test('returns false if no room exists', () => {
-    delete store.rooms[store.LAN_ROOM_ID];
+    store.deleteRoom();
     expect(store.addPlayer({ id: 'p1', name: 'X' })).toBe(false);
   });
 });
@@ -118,7 +118,7 @@ describe('removePlayer()', () => {
   });
 
   test('returns false if no room exists', () => {
-    delete store.rooms[store.LAN_ROOM_ID];
+    store.deleteRoom();
     expect(store.removePlayer('p1')).toBe(false);
   });
 });

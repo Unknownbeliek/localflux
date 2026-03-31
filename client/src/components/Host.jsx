@@ -214,7 +214,7 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [timeTotal, setTimeTotal] = useState(0);
   const [questionEndsAt, setQuestionEndsAt] = useState(0);
   const [autoAdvanceIn, setAutoAdvanceIn] = useState(0);
-  const [isStartConfirmArmed, setIsStartConfirmArmed] = useState(false);
+  const [_isStartConfirmArmed, setIsStartConfirmArmed] = useState(false);
   const [isStartingGame, setIsStartingGame] = useState(false);
   const [isReadyMode, setIsReadyMode] = useState(false);
   const [countdownSeconds, setCountdownSeconds] = useState(0);
@@ -893,7 +893,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     }
   };
 
-  const handleSetupDeckSelect = (value) => {
+  const handleSetupDeckSelect = useCallback((value) => {
     setSelectedDeckKey(value);
 
     if (String(value).startsWith('magic:')) {
@@ -938,7 +938,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     setSelectedDeckSource('none');
     setSelectedDeckCount(null);
     setDeckLabel('No deck selected');
-  };
+  }, [magicGeneratedDeck, studioQuestions, availableDecks, studioDecks]);
 
   useEffect(() => {
     if (phase !== 'setup') return;
@@ -952,7 +952,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     setSelectedDeckKey(routeRequestedDeckKey);
     handleSetupDeckSelect(routeRequestedDeckKey);
     setDropNotice('Deck pre-selected from library. Launch Lobby to host it.');
-  }, [phase, routeRequestedDeckKey, createRoomDeckOptions]);
+  }, [phase, routeRequestedDeckKey, createRoomDeckOptions, handleSetupDeckSelect]);
 
   const handleLoadMoreCloudDecks = async () => {
     if (cloudStatus === 'loading' || !isOnline) return;
@@ -1349,8 +1349,6 @@ export default function Host({ onBack, studioQuestions = null }) {
     setIsCountdownActive(true);
     setCountdownSeconds(5);
     let elapsed = 0;
-    let hasSpokenGetSet = false;
-
     // Speak the initial message at 0-2 seconds
     speakCountdown('Get set, quiz coming in');
     playGameSfx('round_start');
@@ -1538,6 +1536,20 @@ export default function Host({ onBack, studioQuestions = null }) {
         if (ack.difficulty) setGameDifficulty(ack.difficulty);
       }
     );
+  };
+
+  // Backward-compatible aliases used by HostQuestionView scoring controls.
+  const gameMode =
+    gameDifficulty === 'Easy'
+      ? 'casual'
+      : gameDifficulty === 'Hard'
+        ? 'pro'
+        : 'moderate';
+
+  const syncGameMode = (mode) => {
+    const difficulty =
+      mode === 'casual' ? 'Easy' : mode === 'pro' ? 'Hard' : 'Normal';
+    syncDifficulty(difficulty);
   };
 
   const syncMaxPlayers = (value, options = {}) => {

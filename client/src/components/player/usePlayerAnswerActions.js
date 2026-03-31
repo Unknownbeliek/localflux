@@ -9,7 +9,6 @@ export function usePlayerAnswerActions({
   setSelected,
   setAnsweredCorrect,
   setGuessFeedback,
-  setChatDrawerOpen,
   setPhase,
   streakCount,
   setStreakCount,
@@ -33,7 +32,6 @@ export function usePlayerAnswerActions({
     setSelected(opt);
     setAnsweredCorrect(null);
     setGuessFeedback('');
-    setChatDrawerOpen(false);
     setPhase('answered');
 
     socket.emit('submit_answer', { answer: opt }, (res) => {
@@ -48,6 +46,16 @@ export function usePlayerAnswerActions({
           setStreakCount(0);
           playGameSfx('wrong', { intensity: 0.8 });
         }
+      } else {
+        // Roll back optimistic UI when backend rejects the answer.
+        setSelected(null);
+        setAnsweredCorrect(null);
+        setPhase('question');
+        if (res?.error === 'Already answered.') {
+          setGuessFeedback('You already answered this round.');
+        } else {
+          setGuessFeedback(res?.error || 'Answer was not accepted. Please try again.');
+        }
       }
       setIsSubmitting(false);
     });
@@ -59,7 +67,6 @@ export function usePlayerAnswerActions({
     setSelected,
     setAnsweredCorrect,
     setGuessFeedback,
-    setChatDrawerOpen,
     setPhase,
     streakCount,
     setStreakCount,
@@ -94,7 +101,6 @@ export function usePlayerAnswerActions({
         setSelected(payload);
         setAnsweredCorrect(true);
         setGuessText('');
-        setChatDrawerOpen(false);
         setPhase('answered');
         const points = res.scoreAwarded || 100;
         setGuessFeedback(`That is correct! +${points} pts`);
@@ -123,7 +129,6 @@ export function usePlayerAnswerActions({
     setSelected,
     setAnsweredCorrect,
     setGuessText,
-    setChatDrawerOpen,
     setPhase,
     chatMode,
     setPrivateGuessHistory,
