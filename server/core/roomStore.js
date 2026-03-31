@@ -133,7 +133,6 @@ function getHostId() {
 
 module.exports = {
   LAN_ROOM_ID,
-  rooms, // exported for testing; treat as read-only outside this module
   initLanRoom,
   getRoom,
   deleteRoom,

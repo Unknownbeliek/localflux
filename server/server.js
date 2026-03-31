@@ -22,6 +22,7 @@ const crypto = require('crypto');
 
 const { loadDeck, DEFAULT_DECK_PATH } = require('./core/deckLoader');
 const { fetchOpenTDBDeck, fetchTMDBMovieDeck } = require('./core/apiAdapters');
+const { buildDeckSummary, buildDeckDetail } = require('./core/deckApiShape');
 const { registerHandlers } = require('./network/handlers');
 const { HostTokenManager } = require('./core/hostTokenManager');
 
@@ -109,11 +110,7 @@ app.get('/api/decks', (req, res) => {
     .map(f => {
       try {
         const data = JSON.parse(fs.readFileSync(path.join(decksDir, f), 'utf8'));
-        return {
-          name: f.replace('.json', ''),
-          file: f,
-          count: Array.isArray(data.questions) ? data.questions.length : 0
-        };
+        return buildDeckSummary(f, data);
       } catch (e) {
         console.error(`[Deck] Error reading ${f}:`, e.message);
         return null;
@@ -140,16 +137,13 @@ app.get('/api/decks/:file', (req, res) => {
 
   try {
     const data = JSON.parse(fs.readFileSync(deckPath, 'utf8'));
-    if (!Array.isArray(data.questions)) {
+    const detail = buildDeckDetail(requested, data);
+
+    if (!detail) {
       return res.status(422).json({ error: 'Deck format invalid.' });
     }
 
-    return res.json({
-      name: requested.replace('.json', ''),
-      file: requested,
-      count: data.questions.length,
-      questions: data.questions,
-    });
+    return res.json(detail);
   } catch (error) {
     console.error(`[Deck] Error reading ${requested}:`, error.message);
     return res.status(500).json({ error: 'Failed to read deck file.' });

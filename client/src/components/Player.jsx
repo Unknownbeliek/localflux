@@ -417,7 +417,6 @@ export default function Player({ onBack }) {
     setSelected,
     setAnsweredCorrect,
     setGuessFeedback,
-    setChatDrawerOpen,
     setPhase,
     streakCount,
     setStreakCount,

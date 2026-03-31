@@ -9,7 +9,6 @@ export function usePlayerAnswerActions({
   setSelected,
   setAnsweredCorrect,
   setGuessFeedback,
-  setChatDrawerOpen,
   setPhase,
   streakCount,
   setStreakCount,
@@ -33,7 +32,6 @@ export function usePlayerAnswerActions({
     setSelected(opt);
     setAnsweredCorrect(null);
     setGuessFeedback('');
-    setChatDrawerOpen(false);
     setPhase('answered');
 
     socket.emit('submit_answer', { answer: opt }, (res) => {
@@ -59,7 +57,6 @@ export function usePlayerAnswerActions({
     setSelected,
     setAnsweredCorrect,
     setGuessFeedback,
-    setChatDrawerOpen,
     setPhase,
     streakCount,
     setStreakCount,
@@ -94,7 +91,6 @@ export function usePlayerAnswerActions({
         setSelected(payload);
         setAnsweredCorrect(true);
         setGuessText('');
-        setChatDrawerOpen(false);
         setPhase('answered');
         const points = res.scoreAwarded || 100;
         setGuessFeedback(`That is correct! +${points} pts`);
@@ -123,7 +119,6 @@ export function usePlayerAnswerActions({
     setSelected,
     setAnsweredCorrect,
     setGuessText,
-    setChatDrawerOpen,
     setPhase,
     chatMode,
     setPrivateGuessHistory,

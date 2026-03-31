@@ -1540,6 +1540,20 @@ export default function Host({ onBack, studioQuestions = null }) {
     );
   };
 
+  // Backward-compatible aliases used by HostQuestionView scoring controls.
+  const gameMode =
+    gameDifficulty === 'Easy'
+      ? 'casual'
+      : gameDifficulty === 'Hard'
+        ? 'pro'
+        : 'moderate';
+
+  const syncGameMode = (mode) => {
+    const difficulty =
+      mode === 'casual' ? 'Easy' : mode === 'pro' ? 'Hard' : 'Normal';
+    syncDifficulty(difficulty);
+  };
+
   const syncMaxPlayers = (value, options = {}) => {
     const { forceEmit = false } = options;
     const numeric = Number(value);
