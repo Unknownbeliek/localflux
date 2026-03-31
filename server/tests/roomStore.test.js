@@ -33,6 +33,13 @@ describe('initLanRoom()', () => {
     expect(room.status).toBe('lobby');
     expect(room.currentQ).toBe(-1);
     expect(room.answersIn).toEqual({});
+    expect(room.maxPlayers).toBe(20);
+  });
+
+  test('accepts custom maxPlayers value when creating room', () => {
+    store.initLanRoom('Trivia Night', 'host-1', 'session-1', 125);
+    const room = store.getRoom();
+    expect(room.maxPlayers).toBe(125);
   });
 
   test('resets an existing room', () => {

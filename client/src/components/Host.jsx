@@ -172,6 +172,8 @@ export default function Host({ onBack, studioQuestions = null }) {
   const [answerMode, setAnswerMode] = useState('multiple_choice');
   const [questionTimer, setQuestionTimer] = useState(15);
   const [gameDifficulty, setGameDifficulty] = useState('Normal');
+  const [maxPlayers, setMaxPlayers] = useState(20);
+  const [effectiveMaxPlayers, setEffectiveMaxPlayers] = useState(20);
   const [allowedList, setAllowedList] = useState([]);
   const [newAllowedText, setNewAllowedText] = useState('');
   const [copied, setCopied] = useState(false);
@@ -274,7 +276,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     return text.includes('unauthorized') && text.includes('token');
   }, []);
 
-  const createRoomWithAuthRetry = useCallback((nextRoomName, onSuccess) => {
+  const createRoomWithAuthRetry = useCallback((nextRoomName, nextMaxPlayers, onSuccess) => {
     if (!socketRef.current?.connected) {
       setError('Not connected.');
       return;
@@ -283,7 +285,12 @@ export default function Host({ onBack, studioQuestions = null }) {
     const attemptCreate = (tokenToUse, hasRetried) => {
       socketRef.current.emit(
         'create_room',
-        { roomName: nextRoomName, hostSessionId: hostSessionIdRef.current, hostToken: tokenToUse },
+        {
+          roomName: nextRoomName,
+          hostSessionId: hostSessionIdRef.current,
+          hostToken: tokenToUse,
+          maxPlayers: Number(nextMaxPlayers),
+        },
         async (res) => {
           if (res?.success) {
             onSuccess?.(res);
@@ -390,6 +397,12 @@ export default function Host({ onBack, studioQuestions = null }) {
           setPlayers(Array.isArray(res.players) ? res.players : []);
           setIsDeckReady(Boolean(res.deckSelected));
           setAnswerMode(String(res.answerMode || 'auto'));
+          if (Number.isFinite(Number(res.maxPlayers))) {
+            setMaxPlayers(Number(res.maxPlayers));
+          }
+          if (Number.isFinite(Number(res.effectiveMaxPlayers))) {
+            setEffectiveMaxPlayers(Number(res.effectiveMaxPlayers));
+          }
           if (res.deckMeta?.name) setDeckLabel(res.deckMeta.name);
           if (typeof res.deckMeta?.count === 'number') setSelectedDeckCount(res.deckMeta.count);
           if (res.deckMeta?.source) setSelectedDeckSource(res.deckMeta.source);
@@ -504,6 +517,10 @@ export default function Host({ onBack, studioQuestions = null }) {
     socket.on('room:answer_mode', ({ mode }) => {
       if (!mode) return;
       setAnswerMode(String(mode));
+    });
+    socket.on('room:max_players', ({ maxPlayers: nextMaxPlayers, effectiveMaxPlayers: nextEffective }) => {
+      if (Number.isFinite(Number(nextMaxPlayers))) setMaxPlayers(Number(nextMaxPlayers));
+      if (Number.isFinite(Number(nextEffective))) setEffectiveMaxPlayers(Number(nextEffective));
     });
     socket.on('host_reconnecting', ({ message }) => {
       if (message) setError(message);
@@ -1036,11 +1053,13 @@ export default function Host({ onBack, studioQuestions = null }) {
     if (!hostToken) return setError('Host token invalid. Restart the application.');
     setError('');
 
-    createRoomWithAuthRetry(roomName, (res) => {
+    createRoomWithAuthRetry(roomName, maxPlayers, (res) => {
       if (res.success) {
         setRoomId(LAN_ROOM);
         setPhase('lobby');
         setAnswerMode((current) => current || String(res.answerMode || 'auto'));
+        if (Number.isFinite(Number(res.maxPlayers))) setMaxPlayers(Number(res.maxPlayers));
+        if (Number.isFinite(Number(res.effectiveMaxPlayers))) setEffectiveMaxPlayers(Number(res.effectiveMaxPlayers));
 
         handleDeckSelection({ target: { value: selectedDeckKey } });
         syncAnswerMode(answerMode, { requireLobby: false, forceEmit: true });
@@ -1515,6 +1534,28 @@ export default function Host({ onBack, studioQuestions = null }) {
     );
   };
 
+  const syncMaxPlayers = (value, options = {}) => {
+    const { forceEmit = false } = options;
+    const numeric = Number(value);
+    const sanitized = Number.isFinite(numeric) ? Math.max(2, Math.min(250, Math.round(numeric))) : 20;
+    setMaxPlayers(sanitized);
+    if (!socketRef.current?.connected) return;
+    if (!forceEmit && !roomId) return;
+
+    socketRef.current.emit(
+      'host:set_max_players',
+      { maxPlayers: sanitized, hostToken, hostSessionId: hostSessionIdRef.current },
+      (ack) => {
+        if (!ack?.ok) {
+          setError(ack?.reason || 'Failed to set max players.');
+          return;
+        }
+        if (Number.isFinite(Number(ack.maxPlayers))) setMaxPlayers(Number(ack.maxPlayers));
+        if (Number.isFinite(Number(ack.effectiveMaxPlayers))) setEffectiveMaxPlayers(Number(ack.effectiveMaxPlayers));
+      }
+    );
+  };
+
   const addAllowedMessage = () => {
     const text = newAllowedText.trim();
     if (!text) return;
@@ -1624,6 +1665,8 @@ export default function Host({ onBack, studioQuestions = null }) {
     setSelectedDeckSource('none');
     setSelectedDeckCount(null);
     setAnswerMode('auto');
+    setMaxPlayers(20);
+    setEffectiveMaxPlayers(20);
     setError('');
     setPhase('setup');
   };
@@ -1646,7 +1689,7 @@ export default function Host({ onBack, studioQuestions = null }) {
     const nextRoomName = roomName.trim() || 'LocalFlux Game';
     setError('');
 
-    createRoomWithAuthRetry(nextRoomName, async (res) => {
+    createRoomWithAuthRetry(nextRoomName, maxPlayers, async (res) => {
       if (!res?.success) {
         setError(res?.error || 'Failed to create room.');
         return;
@@ -1663,10 +1706,13 @@ export default function Host({ onBack, studioQuestions = null }) {
       setAnswerCount(0);
       setIsDeckReady(false);
       setError('');
+      if (Number.isFinite(Number(res.maxPlayers))) setMaxPlayers(Number(res.maxPlayers));
+      if (Number.isFinite(Number(res.effectiveMaxPlayers))) setEffectiveMaxPlayers(Number(res.effectiveMaxPlayers));
 
       syncAnswerMode(answerMode, { requireLobby: false, forceEmit: true });
       syncTimer(questionTimer, { forceEmit: true });
       syncDifficulty(gameDifficulty, { forceEmit: true });
+      syncMaxPlayers(maxPlayers, { forceEmit: true });
 
       if (chatMode) {
         const modePayload = { mode: chatMode, hostToken };
@@ -1916,7 +1962,10 @@ export default function Host({ onBack, studioQuestions = null }) {
         socket={hostSocket}
         roomId={LAN_ROOM}
         roomName={roomName}
+        maxPlayers={maxPlayers}
+        effectiveMaxPlayers={effectiveMaxPlayers}
         onHostAnnouncement={sendHostAnnouncement}
+        syncMaxPlayers={syncMaxPlayers}
       />
     );
   }
@@ -1938,6 +1987,9 @@ export default function Host({ onBack, studioQuestions = null }) {
       setQuestionTimer={setQuestionTimer}
       answerMode={answerMode}
       setAnswerMode={setAnswerMode}
+      maxPlayers={maxPlayers}
+      setMaxPlayers={setMaxPlayers}
+      effectiveMaxPlayers={effectiveMaxPlayers}
       onLaunchLobby={handleCreate}
       onGenerateOpenTrivia={handleGenerateOpenTrivia}
       onGenerateTMDB={handleGenerateTMDB}

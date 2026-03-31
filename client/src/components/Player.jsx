@@ -10,6 +10,7 @@ import BgmControl from './BgmControl';
 import { useBgm } from '../context/BgmProvider';
 import { triggerHaptic } from '../utils/haptics';
 import { playGameSfx } from '../utils/gameFeel';
+import { normalizeAvatarObject, resolvePresetPath } from '../utils/avatarObject';
 
 const LAN_ROOM = 'local_flux_main';
 const PLAYER_SESSION_KEY = 'lf_player_session_id';
@@ -56,23 +57,10 @@ function mergeChatHistory(existing, incoming) {
   return merged.slice(-MAX_CHAT_HISTORY);
 }
 
-function normalizeAvatarObject(input) {
-  if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
-  const value = String(input.value || '').trim();
-  if (input.type !== 'preset' || !value) return { type: 'preset', value: '1.jpg' };
-  return { type: 'preset', value };
-}
-
 function isSameAvatarObject(a, b) {
   const left = normalizeAvatarObject(a);
   const right = normalizeAvatarObject(b);
   return left.type === right.type && left.value === right.value;
-}
-
-function resolvePresetPath(value) {
-  const trimmed = String(value || '').trim();
-  if (!trimmed) return '/avatars/1.png';
-  return trimmed.includes('.') ? `/avatars/${trimmed}` : `/avatars/${trimmed}.png`;
 }
 
 function resolveImageUrl(image) {
@@ -140,6 +128,20 @@ function displayRoomName(name) {
   return normalized;
 }
 
+function formatJoinFailure(res) {
+  const reason = String(res?.reason || '').toLowerCase();
+  if (reason === 'room_full') {
+    const current = Number(res?.currentPlayers);
+    const effective = Number(res?.effectiveMaxPlayers);
+    if (Number.isFinite(current) && Number.isFinite(effective)) {
+      return `Room is full (${current}/${effective}). Ask host to increase lobby size.`;
+    }
+    return 'Room is full. Ask host to increase lobby size.';
+  }
+
+  return res?.error || 'Could not join game.';
+}
+
 export default function Player({ onBack }) {
   const { setMusicPhase } = useBgm();
   const savedPlayerState = readPlayerState();
@@ -201,6 +203,8 @@ export default function Player({ onBack }) {
   const mobileGuessInputRef = useRef(null);
   const prevTimeLeftRef = useRef(0);
   const fireIgniteTimerRef = useRef(null);
+  const attemptEntryRef = useRef(() => {});
+  const applyNextQuestionRef = useRef(() => {});
 
   const celebrateCorrect = ({ wasStreak = false } = {}) => {
     setCorrectBurstTick((value) => value + 1);
@@ -389,7 +393,7 @@ export default function Player({ onBack }) {
         setError('Host is setting up a fresh room. We will auto-join you soon.');
         setPhase('waiting');
       },
-      onFailure: (res) => setError(res?.error || 'Could not join game.'),
+      onFailure: (res) => setError(formatJoinFailure(res)),
     });
   };
 
@@ -427,6 +431,14 @@ export default function Player({ onBack }) {
   };
 
   useEffect(() => {
+    attemptEntryRef.current = attemptEntry;
+  }, [attemptEntry]);
+
+  useEffect(() => {
+    applyNextQuestionRef.current = applyNextQuestion;
+  }, [applyNextQuestion]);
+
+  useEffect(() => {
     latestNameRef.current = name;
   }, [name]);
 
@@ -459,7 +471,7 @@ export default function Player({ onBack }) {
     socket.on('connect', () => {
       setConnected(true);
       setSelfPlayerId(socket.id || '');
-      attemptEntry();
+      attemptEntryRef.current();
     });
     socket.on('disconnect', () => {
       setConnected(false);
@@ -542,12 +554,12 @@ export default function Player({ onBack }) {
           const nextPayload = pendingQuestionRef.current;
           pendingQuestionRef.current = null;
           startSplashTimerRef.current = null;
-          applyNextQuestion(nextPayload);
+          applyNextQuestionRef.current(nextPayload);
         }, remainingSplashMs);
         return;
       }
 
-      applyNextQuestion(payload);
+      applyNextQuestionRef.current(payload);
     });
     socket.on('question_result', (data) => {
       setResultData(data);
@@ -589,7 +601,6 @@ export default function Player({ onBack }) {
       setChatSocket(null);
       socket.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -597,14 +608,14 @@ export default function Player({ onBack }) {
 
     let remaining = 3;
     const kickoffTimer = window.setTimeout(() => {
-      attemptEntry();
+      attemptEntryRef.current();
       setJoinRetryIn(remaining);
     }, 0);
 
     const retryTimer = window.setInterval(() => {
       remaining -= 1;
       if (remaining <= 0) {
-        attemptEntry();
+        attemptEntryRef.current();
         remaining = 3;
       }
       setJoinRetryIn(remaining);
@@ -614,7 +625,6 @@ export default function Player({ onBack }) {
       window.clearTimeout(kickoffTimer);
       window.clearInterval(retryTimer);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, connected]);
 
   useEffect(() => {
@@ -629,7 +639,7 @@ export default function Player({ onBack }) {
           setPhase('waiting');
         },
         onFailure: (res) => {
-          setError(res?.error || 'Could not join lobby.');
+          setError(formatJoinFailure(res));
         },
       });
       setJoinRetryIn(remaining);
@@ -645,7 +655,7 @@ export default function Player({ onBack }) {
             setPhase('waiting');
           },
           onFailure: (res) => {
-            setError(res?.error || 'Could not join lobby.');
+            setError(formatJoinFailure(res));
           },
         });
         remaining = 3;
@@ -802,7 +812,7 @@ export default function Player({ onBack }) {
         setPhase('waiting');
       },
       onFailure: (res) => {
-        setError(res?.error || 'Could not rejoin lobby.');
+        setError(formatJoinFailure(res));
       },
     });
   };

@@ -33,13 +33,19 @@ const rooms = {};
  * @param {string} roomName - Display name for the room
  * @param {string} hostId - socket.id of the host
  * @param {string|null} [hostSessionId] - stable browser session id for host recovery
+ * @param {number} [maxPlayers=20] - requested room capacity for this lobby
  * @returns {string} The room id (always LAN_ROOM_ID)
  */
-function initLanRoom(roomName, hostId, hostSessionId = null) {
+function initLanRoom(roomName, hostId, hostSessionId = null, maxPlayers = 20) {
+  const normalizedMaxPlayers = Number.isInteger(Number(maxPlayers)) && Number(maxPlayers) > 0
+    ? Number(maxPlayers)
+    : 20;
+
   rooms[LAN_ROOM_ID] = {
     roomName: roomName || 'LocalFlux Game',
     hostId,
     hostSessionId,
+    maxPlayers: normalizedMaxPlayers,
     players: [],
     status: 'lobby',
     currentQ: -1,

@@ -7,19 +7,7 @@ import VolumeKnob from '../VolumeKnob';
 import { QRCodeSVG } from 'qrcode.react';
 import AnimatedBackground from '../AnimatedBackground';
 import ConfirmActionModal from '../ConfirmActionModal';
-
-function normalizeAvatarObject(input) {
-  if (!input || typeof input !== 'object') return { type: 'preset', value: '1.jpg' };
-  const value = String(input.value || '').trim();
-  if (input.type !== 'preset' || !value) return { type: 'preset', value: '1.jpg' };
-  return { type: 'preset', value };
-}
-
-function presetPath(value) {
-  const cleaned = String(value || '').trim();
-  if (!cleaned) return '/avatars/1.png';
-  return cleaned.includes('.') ? `/avatars/${cleaned}` : `/avatars/${cleaned}.png`;
-}
+import { normalizeAvatarObject, resolvePresetPath } from '../../utils/avatarObject';
 
 // Styled Glass Button Component
 const GlassStartButton = styled.button`
@@ -224,6 +212,9 @@ export default function HostLobbyView({
   syncTimer,
   gameDifficulty,
   syncDifficulty,
+  maxPlayers,
+  effectiveMaxPlayers,
+  syncMaxPlayers,
   modeOptions,
   syncChatMode,
   chatMode,
@@ -246,6 +237,7 @@ export default function HostLobbyView({
   const [pendingDeckKey, setPendingDeckKey] = useState('');
   const [pendingTimer, setPendingTimer] = useState(30);
   const [pendingDifficulty, setPendingDifficulty] = useState('Normal');
+  const [pendingMaxPlayers, setPendingMaxPlayers] = useState(20);
   const playerListEndRef = useRef(null);
 
   const answerModeSettingOptions = answerModeOptions.filter((mode) => mode === 'auto' || mode === 'type_guess');
@@ -270,7 +262,7 @@ export default function HostLobbyView({
     return (
       <div className="relative flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-600/60 bg-linear-to-br from-slate-800 to-slate-700 p-0.5 shadow-md shadow-black/30">
         <img
-          src={presetPath(avatarObject.value)}
+          src={resolvePresetPath(avatarObject.value)}
           alt={`${player?.name || 'Player'} avatar`}
           onError={(event) => {
             event.currentTarget.style.display = 'none';
@@ -315,6 +307,7 @@ export default function HostLobbyView({
     setPendingDeckKey(selectedDeckKey || deckOptions[0]?.value || '');
     setPendingTimer(questionTimer || 30);
     setPendingDifficulty(gameDifficulty || 'Normal');
+    setPendingMaxPlayers(Number(maxPlayers) || 20);
     setIsRoomSettingsOpen(true);
   };
 
@@ -324,6 +317,7 @@ export default function HostLobbyView({
     }
     syncTimer(pendingTimer);
     syncDifficulty(pendingDifficulty);
+    syncMaxPlayers(pendingMaxPlayers);
     setIsRoomSettingsOpen(false);
   };
 
@@ -351,6 +345,9 @@ export default function HostLobbyView({
             </div>
             <div className="rounded-2xl border border-emerald-500/30 bg-linear-to-br from-emerald-500/15 to-emerald-500/5 px-3 py-1.5 backdrop-blur-sm shadow-lg shadow-emerald-500/10">
               <span className="text-[11px] font-bold text-emerald-300 font-outfit tracking-wide">Live Lobby</span>
+            </div>
+            <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-[11px] font-bold text-cyan-200">
+              Capacity {players.length}/{effectiveMaxPlayers}
             </div>
             <button
               onClick={handleOpenRoomSettings}
@@ -697,6 +694,25 @@ export default function HostLobbyView({
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Max Players</p>
+                  <span className="text-xs font-bold text-cyan-300">{pendingMaxPlayers}</span>
+                </div>
+                <input
+                  type="range"
+                  min={10}
+                  max={250}
+                  step={5}
+                  value={pendingMaxPlayers}
+                  onChange={(event) => setPendingMaxPlayers(Number(event.target.value))}
+                  className="w-full accent-cyan-400"
+                />
+                <p className="mt-2 text-xs text-slate-400">
+                  Effective on this network now: <span className="font-semibold text-slate-200">{effectiveMaxPlayers}</span>
+                </p>
               </div>
             </div>
 

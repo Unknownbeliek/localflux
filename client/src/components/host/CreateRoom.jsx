@@ -18,6 +18,9 @@ export default function CreateRoom({
   setQuestionTimer,
   answerMode,
   setAnswerMode,
+  maxPlayers,
+  setMaxPlayers,
+  effectiveMaxPlayers,
   onLaunchLobby,
   onGenerateOpenTrivia,
   onGenerateTMDB,
@@ -109,6 +112,29 @@ export default function CreateRoom({
               <span>5s</span>
               <span>60s</span>
             </div>
+          </section>
+
+          <section className="rounded-2xl border border-slate-800 bg-[#0D1117] p-4 md:col-span-2">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Lobby Capacity</p>
+              <span className="text-sm font-black text-cyan-300">{maxPlayers} players</span>
+            </div>
+            <input
+              type="range"
+              min={10}
+              max={250}
+              step={5}
+              value={maxPlayers}
+              onChange={(event) => setMaxPlayers(Number(event.target.value))}
+              className="w-full accent-cyan-400"
+            />
+            <div className="mt-2 flex justify-between text-[11px] text-slate-500">
+              <span>10</span>
+              <span>250</span>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Effective on this network may be lower (hotspot safety cap). Current effective preview: <span className="font-semibold text-slate-200">{effectiveMaxPlayers}</span>
+            </p>
           </section>
         </div>
 

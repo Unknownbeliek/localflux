@@ -12,6 +12,7 @@
 'use strict';
 
 const { sanitizeQuestion } = require('./deckLoader');
+const { calculateScore } = require('./scoringEngine');
 
 function normalizeText(value) {
   return String(value || '').trim().toLowerCase();
@@ -46,13 +47,6 @@ function isTypingCorrect(slide, answer) {
   if (!submitted) return false;
 
   return accepted.some((item) => normalizeText(item) === submitted);
-}
-
-function calculateScoreForCorrect(slide) {
-  const raw = Number(slide?.timeLimit);
-  const safe = Number.isFinite(raw) && raw > 0 ? raw : 20000;
-  const derived = Math.round(safe / 200); // 20s => 100
-  return Math.max(50, Math.min(300, derived));
 }
 
 /**
@@ -105,6 +99,13 @@ function submitAnswer(room, slides, socketId, answer) {
 
   const slide = slides[room.currentQ];
   const type = String(slide?.type || 'mcq').trim().toLowerCase();
+  const totalTimeMsRaw = Number(slide?.timeLimit);
+  const totalTimeMs = Number.isFinite(totalTimeMsRaw) && totalTimeMsRaw > 0 ? totalTimeMsRaw : 20000;
+  const endsAtRaw = Number(room.currentQEndsAt);
+  const timeRemainingMs = Number.isFinite(endsAtRaw)
+    ? Math.max(0, endsAtRaw - Date.now())
+    : totalTimeMs;
+  const gameMode = room.gameMode || 'arcade';
 
   let correct = false;
   if (type === 'typing') {
@@ -113,9 +114,22 @@ function submitAnswer(room, slides, socketId, answer) {
     correct = isMcqCorrect(slide, answer);
   }
 
-  if (correct) {
-    const player = room.players.find((p) => p.id === socketId);
-    if (player) player.score += calculateScoreForCorrect(slide);
+  const player = room.players.find((p) => p.id === socketId);
+  if (player) {
+    const currentStreak = Number(player.streak || 0);
+    const scoreResult = calculateScore(
+      correct,
+      slide?.difficulty,
+      gameMode,
+      timeRemainingMs,
+      totalTimeMs,
+      currentStreak,
+    );
+
+    player.streak = scoreResult.newStreak;
+    if (scoreResult.points !== 0) {
+      player.score = Math.max(0, Number(player.score || 0) + Number(scoreResult.points || 0));
+    }
   }
 
   room.answersIn[socketId] = answer;
