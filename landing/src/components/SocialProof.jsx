@@ -15,14 +15,14 @@ export function SocialProof() {
       icon: Zap,
       value: "0ms",
       label: "Latency",
-      gradient: "from-emerald-400 via-green-500 to-teal-600",
+      gradient: "from-emerald-500 via-green-500 to-teal-600 dark:from-emerald-400",
       glowColor: "rgba(16, 185, 129, 0.5)",
     },
     {
       icon: Shield,
       value: "100%",
       label: "Offline",
-      gradient: "from-cyan-400 via-blue-500 to-indigo-600",
+      gradient: "from-cyan-500 via-blue-500 to-indigo-600 dark:from-cyan-400",
       glowColor: "rgba(6, 182, 212, 0.5)",
     },
   ];
@@ -45,13 +45,13 @@ export function SocialProof() {
           transition={{ duration: 0.8 }}
           className="text-center mb-20"
         >
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 drop-shadow-[0_0_20px_rgba(16,185,129,0.2)]">
+          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 drop-shadow-[0_0_20px_rgba(16,185,129,0.2)] text-slate-900 dark:text-white transition-colors duration-300">
             Trusted by{" "}
-            <span className="bg-gradient-to-r from-emerald-400 via-cyan-400 to-emerald-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
+            <span className="bg-gradient-to-r from-emerald-500 via-cyan-500 to-emerald-500 dark:from-emerald-400 dark:via-cyan-400 dark:to-emerald-400 bg-clip-text text-transparent drop-shadow-[0_0_15px_rgba(6,182,212,0.3)]">
               Developers
             </span>
           </h2>
-          <p className="text-xl md:text-2xl text-gray-300">
+          <p className="text-xl md:text-2xl text-slate-600 dark:text-gray-300 transition-colors duration-300">
             Join the growing community of offline-first game hosts
           </p>
         </motion.div>
@@ -84,7 +84,7 @@ export function SocialProof() {
                 className="relative group"
               >
                 {/* Main card */}
-                <div className="interactive-border relative p-10 text-center rounded-3xl bg-white/[0.03] border border-white/10 backdrop-blur-xl transition-all duration-300 overflow-hidden" style={{
+                <div className="interactive-border relative p-10 text-center rounded-3xl bg-white/80 dark:bg-white/[0.03] border border-slate-300 dark:border-white/10 backdrop-blur-xl transition-all duration-300 overflow-hidden" style={{
                   boxShadow: '0 10px 30px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05)'
                 }}>
                   {/* Content - relative to stay on top */}
@@ -110,7 +110,7 @@ export function SocialProof() {
                     </div>
 
                     {/* Label */}
-                    <div className="text-gray-300 text-lg group-hover:text-gray-100/90 transition-colors duration-300">{stat.label}</div>
+                    <div className="text-slate-600 dark:text-gray-300 text-lg group-hover:text-slate-700 dark:group-hover:text-gray-100/90 transition-colors duration-300">{stat.label}</div>
                   </div>
                 </div>
               </motion.div>
@@ -130,7 +130,7 @@ export function SocialProof() {
               whileHover={{ y: -2 }}
               className="group relative"
             >
-              <div className="relative px-6 py-3 rounded-2xl text-gray-300 bg-white/[0.03] border border-white/10 group-hover:border-white/20 backdrop-blur-md transition-all duration-300 group-hover:text-emerald-400">
+              <div className="relative px-6 py-3 rounded-2xl text-slate-600 dark:text-gray-300 bg-white/80 dark:bg-white/[0.03] border border-slate-300 dark:border-white/10 group-hover:border-slate-400 dark:group-hover:border-white/20 backdrop-blur-md transition-all duration-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
                 {badge}
               </div>
             </motion.div>
