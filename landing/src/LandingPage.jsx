@@ -6,7 +6,7 @@ import HowItWorks from "./components/HowItWorks";
 import Footer from "./components/Footer";
 import { DynamicBackground } from "./components/DynamicBackground";
 import { LightBackground } from "./components/LightBackground";
-import LightModeBackground from "./components/ui/LightModeBackground";
+import FallingPattern from "./components/ui/FallingPattern";
 import Contributors from "./components/Contributors";
 import { useTheme } from "./hooks/useTheme";
 
@@ -749,8 +749,7 @@ export default function LocalFluxSections() {
         isMobile ? <LightBackground darkMode={isDark} /> : <DynamicBackground />
       ) : (
         <>
-          <div className="absolute inset-0 z-0 bg-gradient-to-b from-white via-slate-50 to-slate-100" />
-          <LightModeBackground />
+          <FallingPattern className="absolute inset-0 z-0" />
         </>
       )}
 
