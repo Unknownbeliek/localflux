@@ -32,7 +32,8 @@ describe('initLanRoom()', () => {
     expect(room.players).toEqual([]);
     expect(room.status).toBe('lobby');
     expect(room.currentQ).toBe(-1);
-    expect(room.answersIn).toEqual({});
+    expect(Object.keys(room.answersIn)).toHaveLength(0);
+    expect(Object.getPrototypeOf(room.answersIn)).toBeNull();
     expect(room.maxPlayers).toBe(20);
   });
 
@@ -76,7 +77,7 @@ describe('addPlayer()', () => {
     store.addPlayer({ id: 'p1', name: 'Alice' });
     const room = store.getRoom();
     expect(room.players).toHaveLength(1);
-    expect(room.players[0]).toMatchObject({ id: 'p1', name: 'Alice', score: 0 });
+    expect(room.players[0]).toMatchObject({ id: 'p1', name: 'Alice', score: 0, streak: 0 });
   });
 
   test('returns true when a new player is added', () => {

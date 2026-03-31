@@ -1,11 +1,25 @@
 import React from 'react';
 import styled from 'styled-components';
+import { useBgm } from '../context/BgmProvider';
 
-const Input = () => {
+const VolumeKnob = () => {
+  const { supported, enabled, toggleEnabled, volume, setVolume } = useBgm();
+
+  if (!supported) return null;
+
   return (
     <StyledWrapper>
       <label className="slider">
-        <input type="range" className="level" />
+        <input
+          type="range"
+          className="level"
+          min="0"
+          max="1"
+          step="0.01"
+          value={volume}
+          onChange={(event) => setVolume(Number(event.target.value))}
+          aria-label="Background music volume"
+        />
         <svg className="volume" xmlns="http://www.w3.org/2000/svg" version="1.1" xmlnsXlink="http://www.w3.org/1999/xlink" width={512} height={512} x={0} y={0} viewBox="0 0 24 24" style={{enableBackground: 'new 0 0 512 512'}} xmlSpace="preserve">
           <g>
             <path d="M18.36 19.36a1 1 0 0 1-.705-1.71C19.167 16.148 20 14.142 20 12s-.833-4.148-2.345-5.65a1 1 0 1 1 1.41-1.419C20.958 6.812 22 9.322 22 12s-1.042 5.188-2.935 7.069a.997.997 0 0 1-.705.291z" fill="currentColor" data-original="#000000" />
@@ -13,6 +27,16 @@ const Input = () => {
           </g>
         </svg>
       </label>
+      <button
+        type="button"
+        className="muteToggle"
+        onClick={() => {
+          void toggleEnabled();
+        }}
+        aria-label={enabled ? 'Mute background music' : 'Unmute background music'}
+      >
+        {enabled ? 'BGM ON' : 'BGM OFF'}
+      </button>
     </StyledWrapper>
   );
 }
@@ -83,6 +107,26 @@ const StyledWrapper = styled.div`
 
   .slider:hover .level {
     height: calc(var(--slider-height) * 2);
-  }`;
+  }
 
-export default Input;
+  .muteToggle {
+    border: 1px solid rgba(148, 163, 184, 0.5);
+    background: rgba(15, 23, 42, 0.75);
+    color: #cbd5e1;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    padding: 4px 8px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .muteToggle:hover {
+    border-color: rgba(34, 211, 238, 0.55);
+    color: #e2e8f0;
+    background: rgba(30, 41, 59, 0.9);
+  }
+`;
+
+export default VolumeKnob;

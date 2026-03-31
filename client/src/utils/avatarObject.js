@@ -1,4 +1,4 @@
-const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: '1.jpg' }
+const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: 'avatar01.jpg' }
 
 export function normalizeAvatarObject(input) {
   if (!input || typeof input !== 'object') return { ...DEFAULT_AVATAR_OBJECT }

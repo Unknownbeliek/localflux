@@ -31,22 +31,22 @@ const { normalizeAvatarObject } = require('./handlerUtils');
 
 let chatInstance = null;
 const MAX_CHAT_HISTORY = 300;
-const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: '1.jpg' };
+const DEFAULT_AVATAR_OBJECT = { type: 'preset', value: 'avatar01.jpg' };
 const PRESET_AVATAR_POOL = [
-  '1.jpg',
-  '2.jpg',
-  '4.jpg',
-  '5.jpg',
-  '11.jpg',
-  '15.jpg',
-  '16.jpg',
-  '18.jpg',
-  '19.jpg',
-  '21.jpg',
-  '22.jpg',
-  '23.jpg',
-  '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
-  'e55afb4aea57bced165fb55ad92addf5.jpg',
+  'avatar01.jpg',
+  'avatar02.jpg',
+  'avatar03.jpg',
+  'avatar04.jpg',
+  'avatar05.jpg',
+  'avatar06.jpg',
+  'avatar07.jpg',
+  'avatar08.jpg',
+  'avatar09.jpg',
+  'avatar10.jpg',
+  'avatar11.jpg',
+  'avatar12.jpg',
+  'avatar13.avf',
+  'avatar14.jpg',
 ];
 const NAME_PREFIXES = ['Neo', 'Turbo', 'Solar', 'Nova', 'Glitch', 'Echo', 'Pixel', 'Drift', 'Axel', 'Flux'];
 const NAME_SUFFIXES = ['Rider', 'Nomad', 'Spark', 'Cipher', 'Pilot', 'Comet', 'Vector', 'Pulse', 'Ghost', 'Runner'];

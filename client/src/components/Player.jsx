@@ -1,61 +1,35 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Chat from './Chat';
 import AnimatedBackground from './AnimatedBackground';
-import { createGameSocket, getBackendUrl } from '../backendUrl';
-import PingIndicator from './PingIndicator';
 import LeaderboardResultsCard from './leaderboard/LeaderboardResultsCard';
 import { resolveQuestionTiming } from '../utils/questionTiming';
 import ConfirmActionModal from './ConfirmActionModal';
-import BgmControl from './BgmControl';
 import { useBgm } from '../context/BgmProvider';
 import { triggerHaptic } from '../utils/haptics';
 import { playGameSfx } from '../utils/gameFeel';
 import { normalizeAvatarObject, resolvePresetPath } from '../utils/avatarObject';
-
-const LAN_ROOM = 'local_flux_main';
-const PLAYER_SESSION_KEY = 'lf_player_session_id';
-const PLAYER_STATE_KEY = 'lf_player_state';
-const START_SPLASH_MIN_MS = 0;
-const END_SPLASH_MIN_MS = 1400;
-const PRESET_AVATARS = [
-  '1.jpg',
-  '2.jpg',
-  '4.jpg',
-  '5.jpg',
-  '11.jpg',
-  '15.jpg',
-  '16.jpg',
-  '18.jpg',
-  '19.jpg',
-  '21.jpg',
-  '22.jpg',
-  '23.jpg',
-  '7dcc3f3eebc2fccd2f9dd3146c61c914.avf',
-  'e55afb4aea57bced165fb55ad92addf5.jpg',
-];
-const MAX_CHAT_HISTORY = 300;
-
-function messageKey(message = {}) {
-  return `${message.id || ''}|${message.ts || ''}|${message.from || ''}|${message.name || ''}|${message.text || ''}|${message.event || ''}|${message.cannedId || ''}|${message.isCorrectGuess ? '1' : '0'}`;
-}
-
-function mergeChatHistory(existing, incoming) {
-  const base = Array.isArray(existing) ? existing : [];
-  const extra = Array.isArray(incoming) ? incoming : [];
-  if (extra.length === 0) return base.slice(-MAX_CHAT_HISTORY);
-
-  const merged = [...base];
-  const seen = new Set(base.map((item) => messageKey(item)));
-
-  extra.forEach((item) => {
-    const key = messageKey(item);
-    if (seen.has(key)) return;
-    seen.add(key);
-    merged.push(item);
-  });
-
-  return merged.slice(-MAX_CHAT_HISTORY);
-}
+import {
+  LAN_ROOM,
+  START_SPLASH_MIN_MS,
+  END_SPLASH_MIN_MS,
+  PRESET_AVATARS,
+  MAX_CHAT_HISTORY,
+  mergeChatHistory,
+  resolveImageUrl,
+  getOrCreatePlayerSessionId,
+  readPlayerState,
+  persistPlayerState,
+  clearPlayerState,
+  displayRoomName,
+  formatJoinFailure,
+  isRoomUnavailableError,
+} from './player/playerUtils';
+import { usePlayerPhaseEffects } from './player/usePlayerPhaseEffects';
+import { usePlayerJoinFlow } from './player/usePlayerJoinFlow';
+import { usePlayerSocketLifecycle } from './player/usePlayerSocketLifecycle';
+import { usePlayerAnswerActions } from './player/usePlayerAnswerActions';
+import { usePlayerProfile } from './player/usePlayerProfile';
+import { AvatarBadge, StreakBadge, PlayerTopBar } from './player/PlayerChrome';
 
 function isSameAvatarObject(a, b) {
   const left = normalizeAvatarObject(a);
@@ -63,84 +37,6 @@ function isSameAvatarObject(a, b) {
   return left.type === right.type && left.value === right.value;
 }
 
-function resolveImageUrl(image) {
-  if (!image) return null;
-  const trimmed = String(image).trim();
-  if (!trimmed) return null;
-  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return trimmed;
-  if (trimmed.startsWith('/uploads/')) return `${getBackendUrl()}${trimmed}`;
-  if (trimmed.includes('/')) return trimmed.startsWith('/') ? trimmed : `/${trimmed}`;
-  return `/deck-images/${trimmed}`;
-}
-
-function getOrCreatePlayerSessionId() {
-  if (typeof window === 'undefined') return '';
-  try {
-    const fromStateRaw = window.localStorage.getItem(PLAYER_STATE_KEY);
-    if (fromStateRaw) {
-      const parsed = JSON.parse(fromStateRaw);
-      const stateSession = String(parsed?.playerSessionId || '').trim();
-      if (stateSession) {
-        window.sessionStorage.setItem(PLAYER_SESSION_KEY, stateSession);
-        return stateSession;
-      }
-    }
-  } catch {
-    // ignore state parsing errors and continue with fallback key path
-  }
-
-  const existing = window.sessionStorage.getItem(PLAYER_SESSION_KEY);
-  if (existing) return existing;
-  const next =
-    typeof crypto !== 'undefined' && crypto.randomUUID
-      ? crypto.randomUUID()
-      : `ps_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-  window.sessionStorage.setItem(PLAYER_SESSION_KEY, next);
-  return next;
-}
-
-function readPlayerState() {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = window.localStorage.getItem(PLAYER_STATE_KEY);
-    return raw ? JSON.parse(raw) : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistPlayerState(next) {
-  if (typeof window === 'undefined') return;
-  window.localStorage.setItem(PLAYER_STATE_KEY, JSON.stringify(next));
-}
-
-function clearPlayerState() {
-  if (typeof window === 'undefined') return;
-  window.localStorage.removeItem(PLAYER_STATE_KEY);
-  window.sessionStorage.removeItem(PLAYER_STATE_KEY);
-}
-
-function displayRoomName(name) {
-  const normalized = String(name || '').trim();
-  if (!normalized || normalized.toLowerCase() === LAN_ROOM) {
-    return 'LocalFlux Room';
-  }
-  return normalized;
-}
-
-function formatJoinFailure(res) {
-  const reason = String(res?.reason || '').toLowerCase();
-  if (reason === 'room_full') {
-    const current = Number(res?.currentPlayers);
-    const effective = Number(res?.effectiveMaxPlayers);
-    if (Number.isFinite(current) && Number.isFinite(effective)) {
-      return `Room is full (${current}/${effective}). Ask host to increase lobby size.`;
-    }
-    return 'Room is full. Ask host to increase lobby size.';
-  }
-
-  return res?.error || 'Could not join game.';
-}
 
 export default function Player({ onBack }) {
   const { setMusicPhase } = useBgm();
@@ -303,17 +199,6 @@ export default function Player({ onBack }) {
     setPhase('waiting');
   };
 
-  const isRoomUnavailableError = (message) => {
-    const text = String(message || '').toLowerCase();
-    return (
-      text.includes('room is not created yet') ||
-      text.includes('room has ended') ||
-      text.includes('wait for the host to create a room') ||
-      text.includes('wait for the host to create a new room') ||
-      text.includes('room closed because the host disconnected')
-    );
-  };
-
   const processJoinSuccess = (res) => {
     setError('');
     setJoinRetryIn(0);
@@ -345,94 +230,25 @@ export default function Player({ onBack }) {
     setPhase('waiting');
   };
 
-  const emitJoin = ({
-    onSuccess,
-    onUnavailable,
-    onFailure,
-  } = {}) => {
-    const socket = socketRef.current;
-    if (!socket?.connected) {
-      setError('Connecting to server...');
-      return;
-    }
-
-    socket.emit(
-      'join',
-      {
-        playerName: latestNameRef.current || 'Guest',
-        playerSessionId: playerSessionIdRef.current,
-      },
-      (res) => {
-        if (!res?.success) {
-          if (isRoomUnavailableError(res?.error)) {
-            onUnavailable?.(res);
-            return;
-          }
-          onFailure?.(res);
-          return;
-        }
-
-        onSuccess?.(res);
-      }
-    );
-  };
-
-  const attemptJoinRoom = () => {
-    const socket = socketRef.current;
-    if (!socket?.connected) {
-      setError('Connecting to server...');
-      return;
-    }
-
-    emitJoin({
-      onSuccess: processJoinSuccess,
-      onUnavailable: () => {
-        setRoomName('LocalFlux Room');
-        setAwaitingRoomCreation(true);
-        setJoinRetryIn(3);
-        setError('Host is setting up a fresh room. We will auto-join you soon.');
-        setPhase('waiting');
-      },
-      onFailure: (res) => setError(formatJoinFailure(res)),
-    });
-  };
-
-  const attemptResumeRoom = () => {
-    const socket = socketRef.current;
-    if (!socket?.connected) {
-      setError('Connecting to server...');
-      return;
-    }
-
-    const sessionId = String(playerSessionIdRef.current || '').trim();
-    if (!sessionId) {
-      shouldTryResumeRef.current = false;
-      attemptJoinRoom();
-      return;
-    }
-
-    socket.emit('player:resume', { sessionId }, (res) => {
-      if (!res?.success) {
-        shouldTryResumeRef.current = false;
-        attemptJoinRoom();
-        return;
-      }
-
-      applyResumePayload(res);
-    });
-  };
-
-  const attemptEntry = () => {
-    if (shouldTryResumeRef.current) {
-      attemptResumeRoom();
-      return;
-    }
-    attemptJoinRoom();
-  };
-
-  useEffect(() => {
-    attemptEntryRef.current = attemptEntry;
-  }, [attemptEntry]);
+  const { emitJoin, attemptEntry } = usePlayerJoinFlow({
+    socketRef,
+    latestNameRef,
+    playerSessionIdRef,
+    shouldTryResumeRef,
+    attemptEntryRef,
+    connected,
+    phase,
+    awaitingRoomCreation,
+    setError,
+    setRoomName,
+    setAwaitingRoomCreation,
+    setJoinRetryIn,
+    setPhase,
+    formatJoinFailure,
+    isRoomUnavailableError,
+    processJoinSuccess,
+    applyResumePayload,
+  });
 
   useEffect(() => {
     applyNextQuestionRef.current = applyNextQuestion;
@@ -462,288 +278,62 @@ export default function Player({ onBack }) {
     });
   }, [name, avatarObject, roomName, hasEditedProfile]);
 
-  useEffect(() => {
-    const socket = createGameSocket();
-    socketRef.current = socket;
-    const chatSocketTimer = window.setTimeout(() => {
-      setChatSocket(socket);
-    }, 0);
-    socket.on('connect', () => {
-      setConnected(true);
-      setSelfPlayerId(socket.id || '');
-      attemptEntryRef.current();
-    });
-    socket.on('disconnect', () => {
-      setConnected(false);
-      setJoinRetryIn(0);
-      setAwaitingRoomCreation(false);
-    });
-    socket.on('player:profileUpdated', ({ player }) => {
-      if (!player || player.id !== socket.id) return;
-      const incomingName = String(player.name || '').trim();
-      const incomingAvatar = normalizeAvatarObject(player.avatarObject);
-      const localName = String(latestNameRef.current || '').trim();
-      const localAvatar = normalizeAvatarObject(latestAvatarRef.current);
+  usePlayerSocketLifecycle({
+    socketRef,
+    attemptEntryRef,
+    applyNextQuestionRef,
+    latestNameRef,
+    latestAvatarRef,
+    hasEditedProfileRef,
+    startSplashUntilRef,
+    pendingQuestionRef,
+    startSplashTimerRef,
+    pendingFinalScoresRef,
+    endSplashTimerRef,
+    clearPlayerState,
+    normalizeAvatarObject,
+    mergeChatHistory,
+    setChatSocket,
+    setConnected,
+    setSelfPlayerId,
+    setJoinRetryIn,
+    setAwaitingRoomCreation,
+    setName,
+    setAvatarObject,
+    setChatMode,
+    setChatAllowed,
+    setChatHistory,
+    setIsLobbyDeckReady,
+    setError,
+    setPhase,
+    setRoomName,
+    setStreakCount,
+    setResultData,
+    setMyScore,
+    setNextQuestionIn,
+    setFinalScores,
+  });
 
-      if (hasEditedProfileRef.current) {
-        if (incomingName === localName && isSameAvatarObject(incomingAvatar, localAvatar)) {
-          if (incomingName) setName(incomingName);
-          setAvatarObject(incomingAvatar);
-        }
-        return;
-      }
-
-      if (incomingName) setName(incomingName);
-      setAvatarObject(incomingAvatar);
-    });
-    socket.on('chat:mode', ({ mode, allowed }) => {
-      if (mode) setChatMode(mode);
-      if (Array.isArray(allowed)) setChatAllowed(allowed);
-    });
-    socket.on('chat:history', ({ messages }) => {
-      if (!Array.isArray(messages)) return;
-      setChatHistory((current) => mergeChatHistory(current, messages));
-    });
-    socket.on('chat:message', (message) => {
-      if (!message || typeof message !== 'object') return;
-      setChatHistory((current) => mergeChatHistory(current, [message]));
-    });
-    socket.on('room:deck_updated', ({ selected }) => {
-      if (typeof selected === 'boolean') {
-        setIsLobbyDeckReady(selected);
-        return;
-      }
-      setIsLobbyDeckReady(true);
-    });
-    socket.on('room_closed', ({ message }) => {
-      setError('Host is setting up a fresh room. We will auto-join you soon.');
-      setAwaitingRoomCreation(true);
-      setJoinRetryIn(3);
-      setPhase('waiting');
-      setRoomName('');
-      setChatHistory([]);
-      setStreakCount(0);
-      pendingFinalScoresRef.current = null;
-      if (endSplashTimerRef.current) {
-        window.clearTimeout(endSplashTimerRef.current);
-        endSplashTimerRef.current = null;
-      }
-      clearPlayerState();
-    });
-    socket.on('game_started', () => {
-      playGameSfx('round_start', { intensity: 0.9 });
-      triggerHaptic('medium');
-      setStreakCount(0);
-      setPhase('starting');
-      startSplashUntilRef.current = Date.now() + START_SPLASH_MIN_MS;
-      pendingQuestionRef.current = null;
-      if (startSplashTimerRef.current) {
-        window.clearTimeout(startSplashTimerRef.current);
-        startSplashTimerRef.current = null;
-      }
-    });
-    socket.on('next_question', (payload) => {
-      const remainingSplashMs = startSplashUntilRef.current - Date.now();
-      if (remainingSplashMs > 0) {
-        pendingQuestionRef.current = payload;
-        if (startSplashTimerRef.current) {
-          window.clearTimeout(startSplashTimerRef.current);
-        }
-        startSplashTimerRef.current = window.setTimeout(() => {
-          if (!pendingQuestionRef.current) return;
-          const nextPayload = pendingQuestionRef.current;
-          pendingQuestionRef.current = null;
-          startSplashTimerRef.current = null;
-          applyNextQuestionRef.current(nextPayload);
-        }, remainingSplashMs);
-        return;
-      }
-
-      applyNextQuestionRef.current(payload);
-    });
-    socket.on('question_result', (data) => {
-      setResultData(data);
-      const me = data.scores.find(p => p.id === socket.id);
-      if (me) setMyScore(me.score);
-      setPhase('result');
-    });
-    socket.on('round:transition', ({ nextInMs }) => {
-      const seconds = Math.max(0, Math.ceil(Number(nextInMs || 0) / 1000));
-      setNextQuestionIn(seconds);
-    });
-    socket.on('game_over', ({ scores }) => {
-      setNextQuestionIn(0);
-      setPhase('ending');
-      pendingFinalScoresRef.current = Array.isArray(scores) ? scores : [];
-      if (endSplashTimerRef.current) {
-        window.clearTimeout(endSplashTimerRef.current);
-      }
-      endSplashTimerRef.current = window.setTimeout(() => {
-        setFinalScores(Array.isArray(pendingFinalScoresRef.current) ? pendingFinalScoresRef.current : []);
-        pendingFinalScoresRef.current = null;
-        endSplashTimerRef.current = null;
-        setPhase('gameover');
-      }, END_SPLASH_MIN_MS);
-    });
-    return () => {
-      window.clearTimeout(chatSocketTimer);
-      if (startSplashTimerRef.current) {
-        window.clearTimeout(startSplashTimerRef.current);
-        startSplashTimerRef.current = null;
-      }
-      if (endSplashTimerRef.current) {
-        window.clearTimeout(endSplashTimerRef.current);
-        endSplashTimerRef.current = null;
-      }
-      socket.off('chat:mode');
-      socket.off('chat:history');
-      socket.off('chat:message');
-      setChatSocket(null);
-      socket.disconnect();
-    };
+  const handleTimerWarning = useCallback((current) => {
+    playGameSfx('timer_warning', { intensity: current <= 2 ? 1 : 0.7 });
+    triggerHaptic(current <= 2 ? 'medium' : 'light');
   }, []);
 
-  useEffect(() => {
-    if (phase !== 'joining' || !connected) return undefined;
-
-    let remaining = 3;
-    const kickoffTimer = window.setTimeout(() => {
-      attemptEntryRef.current();
-      setJoinRetryIn(remaining);
-    }, 0);
-
-    const retryTimer = window.setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        attemptEntryRef.current();
-        remaining = 3;
-      }
-      setJoinRetryIn(remaining);
-    }, 1000);
-
-    return () => {
-      window.clearTimeout(kickoffTimer);
-      window.clearInterval(retryTimer);
-    };
-  }, [phase, connected]);
-
-  useEffect(() => {
-    if (!awaitingRoomCreation || !connected) return undefined;
-
-    let remaining = 3;
-    const kickoffTimer = window.setTimeout(() => {
-      emitJoin({
-        onSuccess: processJoinSuccess,
-        onUnavailable: () => {
-          setError('Host is setting up a fresh room. We will auto-join you soon.');
-          setPhase('waiting');
-        },
-        onFailure: (res) => {
-          setError(formatJoinFailure(res));
-        },
-      });
-      setJoinRetryIn(remaining);
-    }, 0);
-
-    const retryTimer = window.setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        emitJoin({
-          onSuccess: processJoinSuccess,
-          onUnavailable: () => {
-            setError('Host is setting up a fresh room. We will auto-join you soon.');
-            setPhase('waiting');
-          },
-          onFailure: (res) => {
-            setError(formatJoinFailure(res));
-          },
-        });
-        remaining = 3;
-      }
-      setJoinRetryIn(remaining);
-    }, 1000);
-
-    return () => {
-      window.clearTimeout(kickoffTimer);
-      window.clearInterval(retryTimer);
-    };
-  }, [awaitingRoomCreation, connected]);
-
-  useEffect(() => {
-    if (!(phase === 'question' || phase === 'answered') || !questionEndsAt) return undefined;
-    const timer = window.setInterval(() => {
-      const remaining = Math.max(0, Math.ceil((questionEndsAt - Date.now()) / 1000));
-      setTimeLeft(remaining);
-      if (remaining <= 0) window.clearInterval(timer);
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [phase, questionEndsAt]);
-
-  useEffect(() => {
-    if (!(phase === 'question' || phase === 'answered')) {
-      setTimerDangerActive(false);
-      return;
-    }
-
-    const prev = Number(prevTimeLeftRef.current || 0);
-    const current = Number(timeLeft || 0);
-
-    setTimerDangerActive(current > 0 && current <= 5);
-
-    if (current > 0 && current <= 5 && current !== prev) {
-      playGameSfx('timer_warning', { intensity: current <= 2 ? 1 : 0.7 });
-      triggerHaptic(current <= 2 ? 'medium' : 'light');
-    }
-
-    prevTimeLeftRef.current = current;
-  }, [phase, timeLeft]);
-
-  useEffect(() => {
-    if (phase !== 'result' || nextQuestionIn <= 0) return undefined;
-    const timer = window.setInterval(() => {
-      setNextQuestionIn((prev) => {
-        if (prev <= 1) {
-          window.clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [phase, nextQuestionIn]);
-
-  useEffect(() => {
-    const phaseToMusic = {
-      joining: 'lobby',
-      waiting: 'lobby',
-      starting: 'gameplay',
-      question: 'gameplay',
-      answered: 'gameplay',
-      result: 'gameplay',
-      ending: 'podium',
-      gameover: 'podium',
-    };
-
-    setMusicPhase(phaseToMusic[phase] || 'lobby');
-  }, [phase, setMusicPhase]);
-
-  useEffect(() => {
-    if (streakCount >= 3) return;
-    setShowFireIgnite(false);
-    if (fireIgniteTimerRef.current) {
-      window.clearTimeout(fireIgniteTimerRef.current);
-      fireIgniteTimerRef.current = null;
-    }
-  }, [streakCount]);
-
-  useEffect(() => {
-    return () => {
-      if (fireIgniteTimerRef.current) {
-        window.clearTimeout(fireIgniteTimerRef.current);
-        fireIgniteTimerRef.current = null;
-      }
-    };
-  }, []);
+  usePlayerPhaseEffects({
+    phase,
+    questionEndsAt,
+    setTimeLeft,
+    timeLeft,
+    setTimerDangerActive,
+    prevTimeLeftRef,
+    onTimerWarning: handleTimerWarning,
+    nextQuestionIn,
+    setNextQuestionIn,
+    setMusicPhase,
+    streakCount,
+    setShowFireIgnite,
+    fireIgniteTimerRef,
+  });
 
   const handleBack = () => {
     clearPlayerState();
@@ -817,142 +407,47 @@ export default function Player({ onBack }) {
     });
   };
 
-  const handleAnswer = (opt) => {
-    if (selected || isSubmitting) return;
-    setIsSubmitting(true);
-    setSelected(opt);
-    setAnsweredCorrect(null);
-    setGuessFeedback('');
-    setChatDrawerOpen(false);
-    setPhase('answered');
-    socketRef.current.emit('submit_answer', { answer: opt }, (res) => {
-      if (res?.success && typeof res.correct === 'boolean') {
-        setAnsweredCorrect(res.correct);
-        if (res.correct) {
-          const nextStreak = streakCount + 1;
-          setStreakCount(nextStreak);
-          celebrateCorrect({ wasStreak: nextStreak >= 3 });
-          if (nextStreak === 3) triggerFireIgnite();
-        } else {
-          setStreakCount(0);
-          playGameSfx('wrong', { intensity: 0.8 });
-        }
-      }
-      setIsSubmitting(false);
-    });
-  };
+  const {
+    handleAnswer,
+    handleGuessSubmit,
+    handleReusePrivateGuess,
+  } = usePlayerAnswerActions({
+    socketRef,
+    selected,
+    isSubmitting,
+    setIsSubmitting,
+    setSelected,
+    setAnsweredCorrect,
+    setGuessFeedback,
+    setChatDrawerOpen,
+    setPhase,
+    streakCount,
+    setStreakCount,
+    celebrateCorrect,
+    triggerFireIgnite,
+    guessText,
+    setGuessText,
+    chatMode,
+    setPrivateGuessHistory,
+    answeredCorrect,
+    desktopGuessInputRef,
+    mobileGuessInputRef,
+  });
 
-  const handleGuessSubmit = () => {
-    const payload = String(guessText || '').trim();
-    if (!payload || !socketRef.current || isSubmitting) return;
-
-    setIsSubmitting(true);
-    setGuessFeedback('');
-    socketRef.current.emit('player:chat_guess', { text: payload }, (res) => {
-      setIsSubmitting(false);
-      if (!res?.ok) {
-        if (res?.reason === 'already_answered') {
-          setGuessFeedback('You already submitted your answer this round.');
-          return;
-        }
-        setGuessFeedback('Could not submit guess. Try again.');
-        return;
-      }
-
-      if (res.matched) {
-        const nextStreak = streakCount + 1;
-        setStreakCount(nextStreak);
-        celebrateCorrect({ wasStreak: nextStreak >= 3 });
-        if (nextStreak === 3) triggerFireIgnite();
-        setSelected(payload);
-        setAnsweredCorrect(true);
-        setGuessText('');
-        setChatDrawerOpen(false);
-        setPhase('answered');
-        const points = res.scoreAwarded || 100;
-        setGuessFeedback(`That is correct! +${points} pts`);
-        return;
-      }
-
-      setStreakCount(0);
-      playGameSfx('wrong', { intensity: 0.7 });
-      setAnsweredCorrect(null);
-      setGuessText('');
-      setGuessFeedback('');
-      if (chatMode !== 'FREE') {
-        setPrivateGuessHistory((prev) => [payload, ...prev].slice(0, 6));
-      }
-    });
-  };
-
-  const handleReusePrivateGuess = (entry) => {
-    const value = String(entry || '').trim();
-    if (!value || answeredCorrect === true) return;
-
-    setGuessText(value);
-
-    const isMobileViewport =
-      typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches;
-    const inputEl = isMobileViewport ? mobileGuessInputRef.current : desktopGuessInputRef.current;
-    inputEl?.focus();
-    inputEl?.setSelectionRange(value.length, value.length);
-  };
-
-  const handleSaveProfile = () => {
-    const newName = name.trim();
-    if (!newName) return setError('Display name cannot be empty.');
-
-    const markProfileSaved = () => {
-      setName(newName);
-      setHasEditedProfile(true);
-      setProfileSaved(true);
-      setIsEditingName(false);
-      window.setTimeout(() => setProfileSaved(false), 1800);
-    };
-
-    const canSyncToServer = socketRef.current?.connected && !awaitingRoomCreation && phase !== 'joining';
-    if (!canSyncToServer) {
-      setError('');
-      markProfileSaved();
-      return;
-    }
-
-    setError('');
-    socketRef.current.emit('player:updateProfile', { newName, avatarObject }, (res) => {
-      if (!res?.success) {
-        const reason = String(res?.error || '').toLowerCase();
-        const shouldFallbackToLocal =
-          reason.includes('not in an active room') ||
-          reason.includes('player not found');
-
-        if (shouldFallbackToLocal) {
-          setError('');
-          markProfileSaved();
-          return;
-        }
-
-        setError(res?.error || 'Could not save profile.');
-        return;
-      }
-      setAvatarObject(normalizeAvatarObject(res.player?.avatarObject || avatarObject));
-      markProfileSaved();
-    });
-  };
-
-  const renderAvatarBadge = (sizeClass = 'h-12 w-12') => {
-    return (
-      <div
-        className={`${sizeClass} rounded-full border border-slate-600 p-1 shadow-inner`}
-        style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}
-      >
-        <img
-          src={resolvePresetPath(avatarObject.value)}
-          alt="Selected avatar"
-          className="h-full w-full rounded-full object-contain drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]"
-        />
-      </div>
-    );
-  };
+  const { handleSaveProfile } = usePlayerProfile({
+    socketRef,
+    name,
+    avatarObject,
+    awaitingRoomCreation,
+    phase,
+    normalizeAvatarObject,
+    setError,
+    setName,
+    setHasEditedProfile,
+    setProfileSaved,
+    setIsEditingName,
+    setAvatarObject,
+  });
 
   const timerTone =
     timeTotal > 0 && timeLeft <= Math.ceil(timeTotal * 0.25)
@@ -960,44 +455,6 @@ export default function Player({ onBack }) {
       : timeTotal > 0 && timeLeft <= Math.ceil(timeTotal * 0.5)
         ? 'text-amber-300'
         : 'text-emerald-300';
-
-  const renderStreakBadge = () => {
-    if (streakCount < 2) return null;
-    const isOnFire = streakCount >= 3;
-
-    return (
-      <div className="ml-2 flex items-center gap-2">
-        {showFireIgnite && isOnFire && (
-          <span key={fireIgniteTick} className="animate-fire-ignite rounded-full border border-orange-300/60 bg-orange-500/20 px-2 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-orange-100">
-            Fire Mode
-          </span>
-        )}
-        <div className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] ${isOnFire ? 'animate-on-fire-badge border-orange-300/65 bg-orange-500/20 text-orange-50' : 'border-amber-400/60 bg-amber-500/15 text-amber-100'}`}>
-          <span>{isOnFire ? 'On Fire' : 'Streak'}</span>
-          <span className="font-mono tabular-nums">x{streakCount}</span>
-        </div>
-      </div>
-    );
-  };
-
-  const renderTopBar = ({ showLeaveButton = false } = {}) => {
-    return (
-      <div className="mb-3 flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2">
-          {showLeaveButton && (
-            <button
-              onClick={openLeaveGameModal}
-              className="rounded-xl border border-rose-500/40 bg-rose-500/10 px-3 py-1.5 text-[11px] font-black tracking-[0.12em] text-rose-200 transition-all hover:-translate-y-0.5 hover:bg-rose-500/20"
-            >
-              LEAVE GAME
-            </button>
-          )}
-          <PingIndicator socket={chatSocket} />
-        </div>
-        <BgmControl />
-      </div>
-    );
-  };
 
   if (phase === 'gameover') {
     const myEntry = finalScores.find(p => p.id === selfPlayerId);
@@ -1008,7 +465,7 @@ export default function Player({ onBack }) {
         <AnimatedBackground />
         <div className="relative z-10 flex h-full w-full flex-col items-center justify-center p-4 md:p-8">
           <div className="relative w-full max-w-3xl">
-            {renderTopBar({ showLeaveButton: true })}
+            <PlayerTopBar showLeaveButton onLeaveGame={openLeaveGameModal} socket={chatSocket} />
             <LeaderboardResultsCard
               finalScores={finalScores}
               highlightPlayerId={selfPlayerId}
@@ -1084,12 +541,12 @@ export default function Player({ onBack }) {
 
         <div className="relative z-10 flex min-h-0 flex-1 flex-col">
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
-            {renderTopBar({ showLeaveButton: true })}
+            <PlayerTopBar showLeaveButton onLeaveGame={openLeaveGameModal} socket={chatSocket} />
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.24em] text-slate-500">{roomDisplayName}</p>
-                  {renderStreakBadge()}
+                  <StreakBadge streakCount={streakCount} showFireIgnite={showFireIgnite} fireIgniteTick={fireIgniteTick} />
                 </div>
               </div>
               <div className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-right">
@@ -1205,12 +662,12 @@ export default function Player({ onBack }) {
         <AnimatedBackground />
 
         <div className="relative z-10 flex w-full flex-1 flex-col p-4 md:p-8">
-          {renderTopBar({ showLeaveButton: true })}
+          <PlayerTopBar showLeaveButton onLeaveGame={openLeaveGameModal} socket={chatSocket} />
           <div className="mb-3 flex items-start justify-between gap-3">
             <div>
                 <div className="flex items-center">
                   <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
-                  {renderStreakBadge()}
+                  <StreakBadge streakCount={streakCount} showFireIgnite={showFireIgnite} fireIgniteTick={fireIgniteTick} />
                 </div>
             </div>
             <div
@@ -1347,12 +804,12 @@ export default function Player({ onBack }) {
 
         <div className="relative z-10 flex flex-1 flex-col">
           <div className="shrink-0 px-4 pt-4 md:px-8 md:pt-6">
-            {renderTopBar({ showLeaveButton: true })}
+            <PlayerTopBar showLeaveButton onLeaveGame={openLeaveGameModal} socket={chatSocket} />
             <div className="flex items-start justify-between gap-3">
               <div>
                 <div className="flex items-center">
                   <p className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50">{roomDisplayName}</p>
-                  {renderStreakBadge()}
+                  <StreakBadge streakCount={streakCount} showFireIgnite={showFireIgnite} fireIgniteTick={fireIgniteTick} />
                 </div>
               </div>
               <div
@@ -1519,7 +976,7 @@ export default function Player({ onBack }) {
       <div className="relative min-h-[100dvh] overflow-hidden bg-slate-950 text-white flex flex-col items-center justify-start gap-4 p-5 pt-8 animate-phase-in z-0">
         <AnimatedBackground />
         <div className="relative z-10 w-full max-w-5xl">
-          {renderTopBar({ showLeaveButton: true })}
+          <PlayerTopBar showLeaveButton onLeaveGame={openLeaveGameModal} socket={chatSocket} />
         </div>
         <p className="text-3xl md:text-4xl font-black tracking-tight drop-shadow-md">{roomDisplayName}</p>
         <p className="text-white/50 text-sm font-medium">
@@ -1537,11 +994,11 @@ export default function Player({ onBack }) {
         </p>
 
         <section className="w-full max-w-md rounded-3xl border border-white/10 bg-black/30 backdrop-blur-2xl p-5 shadow-[0_0_40px_rgba(0,0,0,0.5)]">
-          <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Player ID Card</p>
+          <p className="text-[11px] font-black uppercase tracking-[0.3em] text-emerald-400/80">Player Profile</p>
           <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Username</p>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Display Name</p>
                   <p className="text-lg font-black text-emerald-200 drop-shadow-sm">{name || 'Player'}</p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1550,9 +1007,9 @@ export default function Player({ onBack }) {
                     onClick={() => setIsEditingName((v) => !v)}
                     className="rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-black uppercase tracking-[0.12em] text-white/80 transition-all hover:bg-white/10 hover:text-white"
                   >
-                    {isEditingName ? 'Close' : 'Edit'}
+                    {isEditingName ? 'Done' : 'Edit Profile'}
                   </button>
-                  {renderAvatarBadge()}
+                  <AvatarBadge avatarValue={avatarObject.value} />
                 </div>
               </div>
 
@@ -1608,7 +1065,7 @@ export default function Player({ onBack }) {
                   </button>
                 </>
               ) : (
-                <p className="mt-3 text-xs text-white/40">Click Edit to change your name or profile picture.</p>
+                <p className="mt-3 text-xs text-white/40">Select Edit Profile to update your display name and avatar.</p>
               )}
             {profileSaved && (
               <p className="mt-3 text-center text-xs font-bold text-emerald-300">Profile saved.</p>
