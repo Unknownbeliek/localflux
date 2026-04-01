@@ -27,7 +27,7 @@ const { registerHandlers } = require('./network/handlers');
 const { HostTokenManager } = require('./core/hostTokenManager');
 const { getRoom } = require('./core/roomStore');
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 1267);
 const CLIENT_PORT = Number(process.env.CLIENT_PORT || 5173);
 
 function getPrimaryLanIp() {
