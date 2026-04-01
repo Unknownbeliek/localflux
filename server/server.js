@@ -28,7 +28,7 @@ const { HostTokenManager } = require('./core/hostTokenManager');
 const { getRoom } = require('./core/roomStore');
 
 const PORT = Number(process.env.PORT || 1267);
-const CLIENT_PORT = Number(process.env.CLIENT_PORT || 5173);
+const CLIENT_PORT = Number(process.env.CLIENT_PORT || 7619);
 
 function getPrimaryLanIp() {
   const networkInterfaces = os.networkInterfaces();
