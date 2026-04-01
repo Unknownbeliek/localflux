@@ -1,6 +1,6 @@
 import { io } from 'socket.io-client';
 
-const FALLBACK_PORT = '3000';
+const FALLBACK_PORT = '7218';
 
 function trimTrailingSlash(url) {
   return url.replace(/\/$/, '');

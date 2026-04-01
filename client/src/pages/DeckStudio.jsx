@@ -247,7 +247,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
   const currentImageUrl = String(activeSlide?.imageUrl || '').trim();
   const imagePreviewUrl =
     currentImageUrl && currentImageUrl.startsWith('/uploads')
-      ? `http://${hostName || 'localhost'}:3000${currentImageUrl}`
+      ? `${getBackendUrl()}${currentImageUrl}`
       : resolveImagePreviewUrl(currentImageUrl);
 
   const validCount = useMemo(
@@ -457,7 +457,7 @@ export default function DeckStudio({ onBack, onHostDeck }) {
             const slideImageUrlRaw = String(slide?.imageUrl || '').trim();
             const slideImagePreviewUrl =
               slideImageUrlRaw && slideImageUrlRaw.startsWith('/uploads')
-                ? `http://${hostName || 'localhost'}:3000${slideImageUrlRaw}`
+                ? `${getBackendUrl()}${slideImageUrlRaw}`
                 : resolveImagePreviewUrl(slideImageUrlRaw);
             return (
               <button
