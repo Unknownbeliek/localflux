@@ -102,7 +102,7 @@ export default function Contributors() {
         {/* button */}
         <div className="flex justify-center">
           <a
-            href="https://github.com/Unknownbeliek/localflux"
+            href="https://github.com/Unknownbeliek/localflux/graphs/contributors"
             target="_blank"
             rel="noopener noreferrer"
             className="group relative px-6 py-3 rounded-lg border border-emerald-500/30 hover:border-emerald-500/60 dark:border-emerald-400/30 dark:hover:border-emerald-400/60 text-emerald-600 dark:text-emerald-400 overflow-hidden transition-[transform,border-color,background-color,opacity,color] duration-300 ease-out hover:-translate-y-1"

@@ -539,7 +539,7 @@ const BentoGrid = () => {
   };
 
   return (
-    <section className="font-geist w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+    <section id="engine-architecture" className="font-geist w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
       {/* Section header */}
       <div className="mb-12 flex flex-col gap-3">
         <div className="flex items-center gap-3">

@@ -102,26 +102,30 @@ export default function Hero() {
           {/* Buttons */}
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             {/* Primary Button */}
-            <motion.button
+            <motion.a
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.5 }}
+              href="https://github.com/Unknownbeliek/localflux"
+              target="_blank"
+              rel="noopener noreferrer"
               className="px-6 py-3 rounded-full text-black font-semibold flex items-center gap-2 relative bg-gradient-to-r from-emerald-400 to-cyan-400 transition-transform duration-[250ms] ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
             >
               <Download className="w-5 h-5" />
               <span>Download Core Engine</span>
-            </motion.button>
+            </motion.a>
 
             {/* Secondary Button */}
-            <motion.button
+            <motion.a
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.6 }}
+              href="http://localhost:5175/docs"
               className="px-6 py-3 rounded-full text-slate-900 dark:text-white font-semibold flex items-center gap-2 relative border border-slate-300 dark:border-white/10 bg-white/80 dark:bg-white/[0.03] transition-[color,border-color,background-color,transform,filter] duration-[250ms] ease-out hover:-translate-y-0.5 hover:scale-[1.03] hover:brightness-110 active:translate-y-0 active:scale-[0.98]"
             >
               <Code2 className="w-5 h-5" />
               <span>Run via CLI</span>
-            </motion.button>
+            </motion.a>
           </div>
 
           <div className="mb-8 text-center flex flex-col gap-2 mt-12">
