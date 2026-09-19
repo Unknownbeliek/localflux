@@ -1,36 +1,28 @@
-import React from 'react'
-import { Navigate, Outlet } from 'react-router-dom'
+import React from 'react';
+import { Outlet } from 'react-router-dom';
+import { useHostAuth } from '../context/HostAuthProvider';
+import { HostLoginModal } from './HostLoginModal';
 
 /**
- * Validates if the current hostname is a local machine
- */
-const isLocalhost = () => {
-  const hostname = window.location.hostname
-  return (
-    hostname === 'localhost' ||
-    hostname === '127.0.0.1' ||
-    hostname === '[::1]' ||
-    // Also include IPv6 loopback without brackets if browser formats it that way
-    hostname === '::1'
-  )
-}
-
-/**
- * LocalhostBouncer Component
+ * LocalhostBouncer Component v2.0.0
  * 
- * Route barrier that completely locks down admin/host routes.
- * Checks if the user is accessing the app via localhost IP. 
- * If accessing via network IP (e.g., 192.168.x.x), silently redirects to /play.
- * 
- * Can be used as a Wrapper: <LocalhostBouncer><ProtectedComponent /></LocalhostBouncer>
- * Or as a Layout Route: <Route element={<LocalhostBouncer />}> <Route ... /> </Route>
+ * Auto-grants host access when running on localhost / 127.0.0.1 (offline LAN mode).
+ * Renders HostLoginModal when accessing from a remote domain (online mode) until authenticated.
  */
 export function LocalhostBouncer({ children }) {
-  if (!isLocalhost()) {
-    console.warn('[LocalhostBouncer] Access from network IP blocked, redirecting to /play')
-    return <Navigate to="/play" replace />
+  const { isLocalhost, isAuthenticated, isLoading } = useHostAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-white flex items-center justify-center">
+        <div className="animate-pulse text-sm text-slate-400">Verifying session...</div>
+      </div>
+    );
   }
 
-  // Support both component wrapping AND React Router Outlet (Layout routes)
-  return children ? children : <Outlet />
+  if (isLocalhost || isAuthenticated) {
+    return children ? children : <Outlet />;
+  }
+
+  return <HostLoginModal />;
 }

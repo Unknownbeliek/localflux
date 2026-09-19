@@ -5,6 +5,7 @@ import open from 'open';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { existsSync } from 'fs';
+import { fork } from 'child_process';
 
 const nodeProcess = globalThis.process;
 
@@ -12,6 +13,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distDir = path.join(__dirname, '..', 'dist');
 const indexPath = path.join(distDir, 'index.html');
+
+// Locate localflux server entry point
+const serverScriptCandidate = path.join(__dirname, '..', '..', 'server', 'server.js');
+const serverScript = existsSync(serverScriptCandidate) ? serverScriptCandidate : null;
+
+let serverProcess = null;
+if (serverScript) {
+	console.log('[localflux] Starting game backend server...');
+	serverProcess = fork(serverScript, [], {
+		env: { ...nodeProcess.env, PORT: nodeProcess.env.SERVER_PORT || '3000' },
+		stdio: 'inherit',
+	});
+} else {
+	console.log('[localflux] Game backend server script not bundled locally. Connecting to configured VITE_BACKEND_URL.');
+}
 
 if (!existsSync(indexPath)) {
 	console.error('[localflux] Missing build output at dist/index.html');
@@ -33,7 +49,7 @@ app.get('*', (req, res) => {
 
 const server = app.listen(port, async () => {
 	const url = `http://localhost:${port}`;
-	console.log(`[localflux] Serving dist at ${url}`);
+	console.log(`[localflux] Client static server running at ${url}`);
 
 	if (!nodeProcess.argv.includes('--no-open')) {
 		try {
@@ -45,6 +61,13 @@ const server = app.listen(port, async () => {
 });
 
 const shutdown = () => {
+	if (serverProcess) {
+		try {
+			serverProcess.kill('SIGTERM');
+		} catch {
+			// Ignore process kill errors on exit
+		}
+	}
 	server.close(() => {
 		nodeProcess.exit(0);
 	});

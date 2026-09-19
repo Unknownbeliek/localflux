@@ -46,16 +46,21 @@ function getPrimaryLanIp() {
 
 //  HTTP + Socket.IO setup 
 
+const { getImageStorage, getRoomStorage } = require('./adapters/adapterFactory');
+
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '*';
+const HOST_PASSWORD = process.env.HOST_PASSWORD || '';
+
 const app = express();
 const server = http.createServer(app);
 
 const io = new Server(server, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: { origin: ALLOWED_ORIGIN, methods: ['GET', 'POST'] },
   pingTimeout: 60000,
   pingInterval: 25000,
 });
 
-app.use(cors());
+app.use(cors({ origin: ALLOWED_ORIGIN }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -88,7 +93,8 @@ function getRequestIp(req) {
 
 function readHostAuth(req) {
   const hostSocketId = String(req.headers['x-host-socket-id'] || req.query.hostId || '').trim();
-  const hostToken = String(req.headers['x-host-token'] || req.query.hostToken || '').trim();
+  const authHeader = String(req.headers['authorization'] || '').replace(/^Bearer\s+/i, '').trim();
+  const hostToken = String(req.headers['x-host-token'] || req.query.hostToken || authHeader).trim();
   return { hostSocketId, hostToken };
 }
 
@@ -101,12 +107,55 @@ function isAuthorizedHostHttpRequest(req, { allowLoopback = false } = {}) {
     if (tokenCheck.valid) return true;
   }
 
+  if (hostToken) {
+    const tokenCheck = tokenManager.validateTokenDetailed(hostToken);
+    if (tokenCheck.valid) return true;
+  }
+
   if (allowLoopback && isLoopbackAddress(getRequestIp(req))) {
     return true;
   }
 
   return false;
 }
+
+//  Auth Endpoints
+
+app.post('/api/auth/login', (req, res) => {
+  const { password } = req.body || {};
+  const reqIp = getRequestIp(req);
+
+  // Auto-grant on loopback if HOST_PASSWORD is not set
+  if (isLoopbackAddress(reqIp) && !HOST_PASSWORD) {
+    const token = tokenManager.issueToken('host_session');
+    return res.json({ ok: true, token });
+  }
+
+  if (HOST_PASSWORD && String(password) === HOST_PASSWORD) {
+    const token = tokenManager.issueToken('host_session');
+    return res.json({ ok: true, token });
+  }
+
+  return res.status(401).json({ ok: false, error: 'Invalid password' });
+});
+
+app.get('/api/auth/verify', (req, res) => {
+  const { hostToken } = readHostAuth(req);
+  const reqIp = getRequestIp(req);
+
+  if (isLoopbackAddress(reqIp)) {
+    return res.json({ ok: true, message: 'Localhost auto-authorized' });
+  }
+
+  if (hostToken) {
+    const tokenCheck = tokenManager.validateTokenDetailed(hostToken);
+    if (tokenCheck.valid) {
+      return res.json({ ok: true, message: 'Token verified' });
+    }
+  }
+
+  return res.status(401).json({ ok: false, error: 'Invalid or expired host token' });
+});
 
 //  Socket connections 
 
@@ -117,7 +166,7 @@ io.on('connection', (socket) => {
 
 //  API endpoints
 
-app.post('/api/upload', express.raw({ type: 'image/webp', limit: '10mb' }), (req, res) => {
+app.post('/api/upload', express.raw({ type: 'image/webp', limit: '10mb' }), async (req, res) => {
   if (!isAuthorizedHostHttpRequest(req, { allowLoopback: true })) {
     return res.status(403).json({ error: 'Unauthorized upload request.' });
   }
@@ -126,14 +175,9 @@ app.post('/api/upload', express.raw({ type: 'image/webp', limit: '10mb' }), (req
     return res.status(400).json({ error: 'No valid image buffer received' });
   }
   try {
-    const publicDir = path.resolve(__dirname, 'public', 'uploads');
-    if (!fs.existsSync(publicDir)) {
-      fs.mkdirSync(publicDir, { recursive: true });
-    }
-    const filename = `img_${crypto.randomUUID()}.webp`;
-    const filepath = path.join(publicDir, filename);
-    fs.writeFileSync(filepath, req.body);
-    res.json({ url: `/uploads/${filename}` });
+    const imageStorage = getImageStorage();
+    const url = await imageStorage.saveImage(req.body, '.webp', 'uploads');
+    res.json({ url });
   } catch (err) {
     console.error('[Upload] Error saving image:', err);
     res.status(500).json({ error: 'Failed to save image' });
